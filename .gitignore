@@ -1,0 +1,94 @@
+# Build Artifacts
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+
+# NuGet & Package Management
+.vs/
+.vscode/
+*.csproj.user
+*.sln.user
+packages.config.lock.json
+.nuget/
+
+# Test Coverage
+coverage/
+*.coverage
+TestResults/
+
+# IDE & Editor
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local Configuration & Secrets
+.env
+.env.local
+*.local.json
+appsettings.Development.json
+appsettings.Development.local.json
+user-secrets/
+# appsettings.Development.json under content/ is template source (no real secrets), not a local override.
+!content/**/appsettings.Development.json
+
+# Tailwind CLI (downloaded standalone binary) and its build output
+.tailwindcss/
+content/src/Web/wwwroot/app.css
+content/src/Web/Styles/palette.css
+
+# Logs & Artifacts
+logs/
+*.log
+*.txt
+.mongo/
+mongodb-data/
+
+# Aspire & Local Development
+.aspire/
+*.manifest.json
+aspire-debug/
+
+# Node (if used for tooling/build scripts)
+node_modules/
+dist/
+.next/
+out/
+
+# OS-Specific
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Build Outputs
+publish/
+bin/
+obj/
+artifacts/
+
+# Test Runner
+.trx
+OpenCover/
+
+# Rider
+.idea/
+*.sln.iml
+*.sln.DotSettings.user
+
+# Version Control Merge Files
+*.orig
+*.rej
+
+# Miscellaneous
+temp/
+tmp/
+*.tmp
+.directory
+.squad/
+
+.fake
