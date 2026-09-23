@@ -1,0 +1,80 @@
+# For most projects, this workflow file will not need changing; you simply need
+# to commit it to your repository.
+#
+# You may wish to alter this file to override the set of languages analyzed,
+# or to provide custom queries or build logic.
+#
+# ******** NOTE ********
+# We have attempted to detect the languages in your repository. Please check
+# the `language` matrix defined below to confirm you have the correct set of
+# supported CodeQL languages.
+#
+---
+name: "CodeQL"
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - "**.cs"
+      - "**.csproj"
+
+  pull_request:
+    branches:
+      - "**"
+
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "The reason for running the workflow"
+        required: true
+        default: "Manual run"
+
+  schedule:
+    - cron: "31 0 * * 5"
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["csharp"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Skip analysis while the repo has no C# projects yet (autobuild fails
+      # with "Could not auto-detect a suitable build method").
+      - name: Detect C# sources
+        id: detect
+        run: |
+          if [ -n "$(git ls-files '*.csproj')" ]; then
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_code=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No C# projects found — skipping CodeQL analysis."
+          fi
+
+      # Initializes the CodeQL tools for scanning.
+      - name: Initialize CodeQL
+        if: steps.detect.outputs.has_code == 'true'
+        uses: github/codeql-action/init@v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        if: steps.detect.outputs.has_code == 'true'
+        uses: github/codeql-action/autobuild@v4.38.0
+
+      - name: Perform CodeQL Analysis
+        if: steps.detect.outputs.has_code == 'true'
+        uses: github/codeql-action/analyze@v4.38.0
