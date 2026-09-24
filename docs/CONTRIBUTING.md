@@ -58,7 +58,10 @@ src/                                    -- Source code
   Core/                                 -- Class library: feature slices and shared types
     Features/                           -- One folder per feature (Vertical Slice Architecture)
       <Feature>/                        -- Requests, handlers, validators for one use case
-    Shared/                             -- Cross-cutting types (e.g. Result, Result<T>)
+    Shared/                             -- Cross-cutting infrastructure (e.g. auth, theming)
+  Domain/                               -- Shared Kernel: Result, Result<T>, ApplicationConstants
+    Abstractions/                       -- Operation outcomes (Result, Result<T>, ResultErrorCode)
+    Constants/                          -- Names the Template relies on (policy, role, cookies)
   ServiceDefaults/                      -- Aspire service defaults (telemetry, health checks)
   UI/                                   -- Blazor Web App (server-rendered)
     Components/                         -- App-wide components
@@ -76,6 +79,7 @@ src/                                    -- Source code
 tests/                                  -- Test projects (<Project>.Tests.<Kind>)
   Architecture.Tests/                   -- Architecture and slice-boundary rules
   Core.Tests.Unit/                      -- Core handler and validator unit tests
+  Domain.Tests.Unit/                    -- Shared Kernel unit tests
   UI.Tests.Unit/                        -- UI component tests (bUnit)
   UI.Tests.Integration/                 -- UI integration tests (WebApplicationFactory)
   UI.Tests.E2E/                         -- End-to-end tests (Playwright)
