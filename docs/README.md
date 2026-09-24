@@ -40,6 +40,8 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.30](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.30) | 2026-09-24 | docs(readme): Add root README with badges and auto-maintained Releases table | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-16-docs-readme-add-root-readme-with-badges-and-auto-maintained-releases-table.md) |
+| [v0.0.27](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.27) | 2026-09-24 | fix(release): Release-notes PR is never created, and the failure is hidden | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-15-fix-release-release-notes-pr-is-never-created-and-the-failure-is-hidden.md) |
 | [v0.0.25](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.25) | 2026-09-24 | fix(sandcastle): Publish work already on an issue branch | — |
 | [v0.0.23](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.23) | 2026-09-24 | chore(skills): Add code-review skill for Copilot code review | — |
 | [v0.0.21](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.21) | 2026-09-24 | feat(Domain): Add Domain project as the Template's Shared Kernel | — |
@@ -48,8 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.15](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.15) | 2026-09-24 | chore(workflows): Remove squad workflows | — |
 | [v0.0.13](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.13) | 2026-09-24 | chore(hooks): Use feature/ and hotfix/ branch naming convention | — |
 | [v0.0.11](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.11) | 2026-09-24 | chore(build): Add coding standards, CPM, and shared build props | — |
-| [v0.0.9](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.9) | 2026-09-23 | chore: add Sandcastle agent setup | — |
-| [v0.0.7](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.7) | 2026-09-23 | Bump github/codeql-action from 4.38.0 to 4.38.1 in the all-actions group | — |
 
 <!-- RELEASES_END -->
 
