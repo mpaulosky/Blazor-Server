@@ -18,6 +18,11 @@ permissions:
   pull-requests: write
   actions: write
 
+env:
+  # Model for the AI Summary in release blog posts (used only when the
+  # ANTHROPIC_API_KEY secret is set).
+  ANTHROPIC_MODEL: claude-sonnet-5
+
 concurrency:
   group: release-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: false
@@ -54,10 +59,8 @@ jobs:
           INPUT_PR_NUMBER: ${{ inputs.pr_number }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_TITLE: ${{ github.event.pull_request.title }}
-          EVENT_BODY: ${{ github.event.pull_request.body }}
           EVENT_URL: ${{ github.event.pull_request.html_url }}
           EVENT_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          EVENT_MERGED_AT: ${{ github.event.pull_request.merged_at }}
           EVENT_LABELS_CSV: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -68,10 +71,8 @@ jobs:
               --jq '{
                 number: .number,
                 title: .title,
-                body: (.body // ""),
                 html_url: .html_url,
                 merged: .merged,
-                merged_at: (.merged_at // ""),
                 merge_commit_sha: (.merge_commit_sha // ""),
                 labels: [.labels[].name]
               }')
@@ -84,18 +85,14 @@ jobs:
             fi
 
             TITLE=$(echo "$PR_JSON" | jq -r '.title')
-            BODY=$(echo "$PR_JSON" | jq -r '.body')
             URL=$(echo "$PR_JSON" | jq -r '.html_url')
             MERGE_SHA=$(echo "$PR_JSON" | jq -r '.merge_commit_sha')
-            MERGED_AT=$(echo "$PR_JSON" | jq -r '.merged_at')
             LABELS=$(echo "$PR_JSON" | jq -c '.labels')
           else
             PR_NUMBER="$EVENT_PR_NUMBER"
             TITLE="$EVENT_TITLE"
-            BODY="$EVENT_BODY"
             URL="$EVENT_URL"
             MERGE_SHA="$EVENT_MERGE_SHA"
-            MERGED_AT="$EVENT_MERGED_AT"
             LABELS=$(printf '%s' "$EVENT_LABELS_CSV" | jq -Rc 'if length == 0 then [] else split(",") end')
           fi
 
@@ -106,22 +103,14 @@ jobs:
 
           LABELS=$(echo "${LABELS:-[]}" | jq -c '.' 2>/dev/null || echo '[]')
 
-          MERGED_DATE=$(date -d "${MERGED_AT:-now}" '+%Y-%m-%d' 2>/dev/null || date '+%Y-%m-%d')
-          TITLE_SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
-
           {
             echo "skip=false"
             echo "number=$PR_NUMBER"
             echo "title<<EOF"
             echo "$TITLE"
             echo "EOF"
-            echo "body<<EOF"
-            echo "$BODY"
-            echo "EOF"
             echo "url=$URL"
             echo "merge_sha=$MERGE_SHA"
-            echo "merged_date=$MERGED_DATE"
-            echo "title_slug=$TITLE_SLUG"
             echo "labels=$LABELS"
           } >> "$GITHUB_OUTPUT"
 
@@ -227,287 +216,14 @@ jobs:
         id: docs
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
-          PR_TITLE: ${{ steps.pr.outputs.title }}
-          PR_BODY: ${{ steps.pr.outputs.body }}
-          PR_URL: ${{ steps.pr.outputs.url }}
-          MERGED_DATE: ${{ steps.pr.outputs.merged_date }}
-          TITLE_SLUG: ${{ steps.pr.outputs.title_slug }}
           TAG: ${{ steps.version.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
+          # Optional: without it (or when the API fails) the post is written
+          # without the AI Summary section and the release carries on.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          python3 - <<'PYEOF'
-          import html
-          import json
-          import os
-          import re
-          import subprocess
-          from pathlib import Path
-
-          pr_number = os.environ["PR_NUMBER"].strip()
-          pr_title = (os.environ.get("PR_TITLE") or "").strip()
-          pr_body = (os.environ.get("PR_BODY") or "").strip()
-          pr_url = (os.environ.get("PR_URL") or "").strip()
-          merged_date = (os.environ.get("MERGED_DATE") or "").strip()
-          title_slug = (os.environ.get("TITLE_SLUG") or "pr-update").strip()
-          tag = (os.environ.get("TAG") or "v0.0.0").strip()
-
-          title_slug = re.sub(r"[^a-z0-9-]", "", title_slug)
-          title_slug = re.sub(r"-+", "-", title_slug).strip("-") or "pr-update"
-
-          blog_dir = Path("docs/blogs")
-          blog_dir.mkdir(parents=True, exist_ok=True)
-          blog_file = blog_dir / f"{merged_date}-pr-{pr_number}-{title_slug}.md"
-
-          title_line = pr_title if pr_title else f"PR #{pr_number}"
-          safe_title = title_line.replace('"', '\\"')
-          front_matter = "\n".join(
-              [
-                  "---",
-                  f'post_title: "{safe_title}"',
-                  "author1: mpaulosky",
-                  f'post_slug: "{tag.lower()}-pr-{pr_number}"',
-                  "microsoft_alias: n/a",
-                  'featured_image: ""',
-                  "categories:",
-                  "  - engineering",
-                  "tags:",
-                  f"  - release:{tag.lower()}",
-                  "  - automation",
-                  "ai_note: \"Generated by release automation using PR title/body\"",
-                  f'summary: "Release notes seed for {tag} from PR #{pr_number}."',
-                  f'post_date: "{merged_date}"',
-                  "---",
-                  "",
-              ]
-          )
-
-          body = (
-              f"## {title_line}\n\n"
-              f"- **Release tag:** `{tag}`\n"
-              f"- **Source PR:** [#{pr_number}]({pr_url})\n\n"
-              "### PR description\n\n"
-              f"{pr_body.strip() or 'No PR description was provided.'}\n"
-          )
-
-          blog_file.write_text(front_matter + body + "\n", encoding="utf-8")
-
-          blog_index = blog_dir / "README.md"
-          existing = blog_index.read_text(encoding="utf-8") if blog_index.exists() else ""
-
-          rows = []
-          for line in existing.splitlines():
-            line = line.strip()
-            if line.startswith("|") and line.endswith("|") and "---" not in line and "Date" not in line:
-              rows.append(line)
-
-          row_title = title_line.replace("|", "\\|")
-          new_row = f"| {merged_date} | [{row_title}]({blog_file.name}) | release,automation |"
-          rows = [r for r in rows if f"({blog_file.name})" not in r]
-          rows.insert(0, new_row)
-
-          def row_date(row: str) -> str:
-            parts = [p.strip() for p in row.strip("|").split("|")]
-            return parts[0] if parts else "0000-00-00"
-
-          rows = sorted(rows, key=row_date, reverse=True)
-
-          index_text = "\n".join(
-              [
-                  "## Release review posts",
-                  "",
-                  "This directory contains concise release-review posts for merged PR releases.",
-                  "",
-                  "| Date | Title | Tags |",
-                  "|------|-------|------|",
-                  *rows,
-                  "",
-              ]
-          )
-          blog_index.write_text(index_text, encoding="utf-8")
-
-          # The README Releases table comes from the GitHub Releases API, not the
-          # blog index, so releases without a blog post are listed too.
-          repository = os.environ["REPOSITORY"].strip()
-          release_tag = (os.environ.get("TAG") or "").strip()
-
-          def gh_api(path: str, jq: str) -> str:
-            return subprocess.run(
-                ["gh", "api", path, "--paginate", "--jq", jq],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout
-
-          releases = [
-              json.loads(line)
-              for line in gh_api(
-                  f"repos/{repository}/releases?per_page=100",
-                  ".[] | select(.draft | not) | @json",
-              ).splitlines()
-              if line.strip()
-          ]
-          releases.sort(key=lambda r: r.get("published_at") or "", reverse=True)
-
-          entries = []
-          if release_tag:
-            # This step runs before "Create tag and release", so the release
-            # being created now isn't in the API response yet.
-            entries.append(
-                {"tag": release_tag, "date": merged_date, "pr": pr_number, "title": title_line}
-            )
-          for release in releases:
-            if release["tag_name"] == release_tag:
-              continue
-            source_pr = re.search(r"Source PR: #(\d+)", release.get("body") or "")
-            entries.append(
-                {
-                    "tag": release["tag_name"],
-                    "date": (release.get("published_at") or "")[:10],
-                    "pr": source_pr.group(1) if source_pr else "",
-                    "title": "",
-                    "name": release.get("name") or release["tag_name"],
-                }
-            )
-          # Sort before slicing: a workflow_dispatch re-run for an older PR
-          # must not pin its in-flight row above newer releases.
-          def entry_sort_key(entry):
-            version = re.match(r"v?(\d+)\.(\d+)\.(\d+)", entry["tag"])
-            return (entry["date"], tuple(int(p) for p in version.groups()) if version else (0, 0, 0))
-
-          entries.sort(key=entry_sort_key, reverse=True)
-          entries = entries[:10]
-
-          release_rows = []
-          for entry in entries:
-            entry_title = entry["title"]
-            if not entry_title and entry["pr"]:
-              try:
-                entry_title = gh_api(f"repos/{repository}/pulls/{entry['pr']}", ".title").strip()
-              except subprocess.CalledProcessError:
-                entry_title = ""
-            entry_title = (entry_title or entry.get("name") or entry["tag"]).replace("|", "\\|")
-
-            blog_cell = "—"
-            if entry["pr"]:
-              blog_posts = sorted(blog_dir.glob(f"*-pr-{entry['pr']}-*.md"))
-              if blog_posts:
-                blog_cell = f"[Post](https://github.com/{repository}/blob/main/docs/blogs/{blog_posts[-1].name})"
-
-            release_url = f"https://github.com/{repository}/releases/tag/{entry['tag']}"
-            release_rows.append(f"| [{entry['tag']}]({release_url}) | {entry['date']} | {entry_title} | {blog_cell} |")
-
-          releases_block = "\n".join(
-              [
-                  "<!-- RELEASES_START -->",
-                  "",
-                  "| Version | Date | Title | Blog post |",
-                  "|---------|------|-------|-----------|",
-                  *release_rows,
-                  "",
-                  "<!-- RELEASES_END -->",
-              ]
-          )
-
-          readme_path = Path("README.md")
-          readme = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
-
-          # Migrate READMEs written by the previous workflow: drop the legacy
-          # Dev Blog section and its BLOG_START/BLOG_END block.
-          readme = re.sub(
-              r"(?:^## Dev Blog[^\n]*\n\s*)?<!-- BLOG_START -->.*?<!-- BLOG_END -->\n?",
-              "",
-              readme,
-              flags=re.DOTALL | re.MULTILINE,
-          )
-          readme = re.sub(r"\n{3,}", "\n\n", readme).strip("\n") + "\n" if readme.strip() else ""
-
-          if "<!-- RELEASES_START -->" in readme and "<!-- RELEASES_END -->" in readme:
-            readme = re.sub(
-                r"<!-- RELEASES_START -->.*?<!-- RELEASES_END -->",
-                lambda _match: releases_block,
-                readme,
-                flags=re.DOTALL,
-            )
-          else:
-            releases_section = (
-                "## Releases\n\n"
-                + releases_block
-                + f"\n\n[All releases →](https://github.com/{repository}/releases)\n"
-            )
-            about = re.search(r"^## About[^\n]*\n", readme, flags=re.MULTILINE)
-            next_heading = re.search(r"^## ", readme[about.end():], flags=re.MULTILINE) if about else None
-            if next_heading:
-              insert_at = about.end() + next_heading.start()
-              readme = readme[:insert_at] + releases_section + "\n" + readme[insert_at:]
-            else:
-              suffix = "" if readme.endswith("\n") or not readme else "\n"
-              separator = "\n" if readme else ""
-              readme = readme + suffix + separator + releases_section
-
-          readme_path.write_text(readme, encoding="utf-8")
-          docs_readme_path = Path("docs/README.md")
-          docs_readme_path.parent.mkdir(parents=True, exist_ok=True)
-          docs_readme_path.write_text(readme, encoding="utf-8")
-
-          docs_index_path = Path("docs/index.html")
-          if docs_index_path.exists():
-            docs_index = docs_index_path.read_text(encoding="utf-8")
-            html_items = []
-            for row in rows[:5]:
-              parts = [p.strip() for p in row.strip("|").split("|")]
-              if len(parts) < 3:
-                continue
-              row_date = html.escape(parts[0])
-              title_cell = parts[1]
-              link_match = re.search(r"\[([^\]]+)\]\(([^)]+)\)", title_cell)
-              if link_match:
-                row_title = html.escape(link_match.group(1))
-                row_href = html.escape(f"blogs/{link_match.group(2)}")
-              else:
-                row_title = html.escape(title_cell)
-                row_href = "blogs/README.md"
-              html_items.append(
-                  "  <li>\n"
-                  f'    <span class="mini-meta">{row_date}</span>\n'
-                  f'    <a href="{row_href}">{row_title}</a>\n'
-                  "  </li>"
-              )
-
-            if not html_items:
-              html_items = [
-                  '  <li><a href="blogs/README.md">Blog index</a></li>'
-              ]
-
-            blog_html_block = "\n".join(
-                [
-                    "<!-- BLOG_HTML_START -->",
-                    '<ul class="blog-list">',
-                    *html_items,
-                    "</ul>",
-                    "<!-- BLOG_HTML_END -->",
-                ]
-            )
-
-            if "<!-- BLOG_HTML_START -->" in docs_index and "<!-- BLOG_HTML_END -->" in docs_index:
-              docs_index = re.sub(
-                  r"<!-- BLOG_HTML_START -->.*?<!-- BLOG_HTML_END -->",
-                  lambda _match: blog_html_block,
-                  docs_index,
-                  flags=re.DOTALL,
-              )
-            else:
-              blog_html_indented = blog_html_block.replace("\n", "\n          ")
-              docs_index = re.sub(
-                  r'(<section[^>]*id="blogs"[^>]*>\s*<h2>[^<]*</h2>)',
-                  lambda match: match.group(1) + "\n          " + blog_html_indented,
-                  docs_index,
-                  count=1,
-                  flags=re.DOTALL,
-              )
-
-            docs_index_path.write_text(docs_index, encoding="utf-8")
-          PYEOF
+          python3 .github/scripts/release_post.py --pr "$PR_NUMBER" --tag "$TAG"
 
           # git status (not git diff) so brand-new, still-untracked files count.
           if [ -z "$(git status --porcelain -- docs/blogs README.md docs/README.md docs/index.html)" ]; then
@@ -534,7 +250,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # Stage only paths that exist; git add fails on a missing pathspec
-          # (e.g. docs/index.html, which this repo doesn't have).
+          # (e.g. docs/index.html in a repo that has removed it).
           for path in docs/blogs README.md docs/README.md docs/index.html; do
             if [ -e "$path" ]; then
               git add -- "$path"
