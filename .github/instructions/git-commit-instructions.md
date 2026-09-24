@@ -28,7 +28,7 @@ All commit messages **must** follow this structure:
 
 ### Scope
 
-The scope should be the name of the affected project, folder, or feature (e.g., `Web`, `Mongo`, `ServiceDefaults`,
+The scope should be the name of the affected project, folder, or feature (e.g., `UI`, `Core`, `ServiceDefaults`,
 `docs`).
 
 ### Short Summary
@@ -47,7 +47,7 @@ The scope should be the name of the affected project, folder, or feature (e.g., 
 ## Examples
 
 ```text
-feat(Web): add user authentication with Auth0
+feat(UI): Add user authentication with Auth0
 
 Implements login and logout functionality using Auth0.
 Updates navigation bar to show user info when authenticated.
@@ -55,13 +55,14 @@ Fixes #42
 ```
 
 ```text
-fix(Mongo): handle null reference in BlogRepository
+fix(Core): Handle missing Palette cookie in PaletteHandler
 
-Adds null checks to prevent exceptions when querying missing documents.
+Falls back to the default Palette instead of throwing when the cookie is
+absent or holds an unknown value.
 ```
 
 ```text
-docs(CONTRIBUTING): update testing section for Playwright
+docs(CONTRIBUTING): Update testing section for Playwright
 
 Adds Playwright usage instructions and links to documentation.
 ```

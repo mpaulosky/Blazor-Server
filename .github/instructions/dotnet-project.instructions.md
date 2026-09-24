@@ -22,7 +22,7 @@ applyTo: "**"
 ## Style
 
 - **Use .editorconfig:** `true`
-- **Use Tailwind CSS (UI files only):** `true` (v4, CSS-first config — see `src/Web/Styles/app.tailwind.css`)
+- **Use Tailwind CSS (UI files only):** `true` (v4, CSS-first config — see `src/UI/Styles/app.tailwind.css`)
 
 ## Testing
 

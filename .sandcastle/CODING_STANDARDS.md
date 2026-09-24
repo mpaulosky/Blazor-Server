@@ -116,7 +116,7 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 
 ### Conventions
 
-- Put test projects under `tests/`, named `<Project>.Tests.<Kind>` (`Web.Tests.Unit`, `Web.Tests.Integration`, `Web.Tests.E2E`) or `Architecture.Tests`, as in `docs/CONTRIBUTING.md`. `Directory.Build.props` applies test-only settings to any project whose name contains `.Tests`. Mirror the namespaces and folder layout of the production code they cover.
+- Put test projects under `tests/`, named `<Project>.Tests.<Kind>` (`UI.Tests.Unit`, `UI.Tests.Integration`, `UI.Tests.E2E`) or `Architecture.Tests`, as in `docs/CONTRIBUTING.md`. `Directory.Build.props` applies test-only settings to any project whose name contains `.Tests`. Mirror the namespaces and folder layout of the production code they cover.
 - Name test methods `MethodUnderTest_Scenario_ExpectedResult`. `.editorconfig` suppresses CA1707 in tests to allow the underscores.
 - Structure every test as Arrange/Act/Assert, marked with `// Arrange`, `// Act`, and `// Assert` comments. All three comments are required, even when a section is empty.
 - Test one behavior per test. Use `[Theory]` with `[InlineData]` or `[MemberData]` instead of copy-pasting near-identical `[Fact]`s.

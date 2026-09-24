@@ -65,27 +65,27 @@ src/                                    -- Source code
   Shared/                               -- Domain models, interfaces, and shared code
     bin/                                -- Build output
     obj/                                -- Build objects
-  Web/                                  -- UI project
+  UI/                                   -- UI project
     Components/                         -- Blazor components
       Layout/                           -- Layout components
       Pages/                            -- Page components
       _Imports.razor                    -- Razor imports
       App.razor                         -- App root component
       Routes.razor                      -- Route definitions
-    Properties/                         -- Web project properties
+    Properties/                         -- UI project properties
     wwwroot/                            -- Static web assets (CSS, JS, etc.)
     bin/                                -- Build output
     obj/                                -- Build objects
-    appsettings.json                    -- Web configuration
-    appsettings.Development.json        -- Web development config
+    appsettings.json                    -- UI configuration
+    appsettings.Development.json        -- UI development config
 
 tests/                                  -- Unit and Integration tests
   Api.Tests.Integration/                -- API integration tests
   Api.Tests.Unit/                       -- API unit tests
   Architecture.Tests/                   -- Architecture and design rules tests
   Shared.Tests.Unit/                    -- Shared library unit tests
-  Web.Tests.Integration/                -- Web integration tests
-  Web.Tests.Unit/                       -- Web/UI unit tests
+  UI.Tests.Integration/                 -- UI integration tests
+  UI.Tests.Unit/                        -- UI unit tests
 
  [SolutionName].slnx                    -- Solution file
 codecov.yml                             -- Code coverage configuration
@@ -153,11 +153,11 @@ include appropriate tests.
 
 #### Running the E2E tests locally
 
-`tests/Web.Tests.E2E` uses Playwright to drive a real browser against `Web`, hosted on a real Kestrel port. Before
+`tests/UI.Tests.E2E` uses Playwright to drive a real browser against `UI`, hosted on a real Kestrel port. Before
 running it locally (or after a fresh `dotnet build`), install the Playwright browser binaries once:
 
 ```bash
-pwsh tests/Web.Tests.E2E/bin/Release/net10.0/playwright.ps1 install chromium
+pwsh tests/UI.Tests.E2E/bin/Release/net10.0/playwright.ps1 install chromium
 ```
 
 (On a machine without PowerShell, install it first, or run the equivalent `playwright install chromium` via the

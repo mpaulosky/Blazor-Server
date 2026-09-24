@@ -67,7 +67,7 @@ env:
   Parameters__auth0MgmtClientSecret: >-
     ${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET }}
 
-  # Role test-user credentials for Web.Tests.E2E's authenticated Playwright fixtures
+  # Role test-user credentials for UI.Tests.E2E's authenticated Playwright fixtures
   Auth0__E2E__Admin__Username: ${{ secrets.AUTH0_ADMIN_USERNAME }}
   Auth0__E2E__Admin__Password: ${{ secrets.AUTH0_ADMIN_PASSWORD }}
   Auth0__E2E__User__Username: ${{ secrets.AUTH0_USER_USERNAME }}
