@@ -40,6 +40,8 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.34](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.34) | 2026-09-24 | fix(hooks): Pre-push gate checks the checked-out branch instead of the pushed refs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-31-fix-hooks-pre-push-gate-checks-the-checked-out-branch-instead-of-the-pushed-refs.md) |
+| [v0.0.33](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.33) | 2026-09-24 | docs(blogs): Backfill missing release blog posts and link them from the README | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-26-docs-blogs-backfill-missing-release-blog-posts-and-link-them-from-the-readme.md) |
 | [v0.0.32](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.32) | 2026-09-24 | feat(sandcastle): Hold back issues whose blockers haven't landed | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-28-feat-sandcastle-hold-back-issues-whose-blockers-haven-t-landed.md) |
 | [v0.0.31](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.31) | 2026-09-24 | fix(release): Bump the release version once instead of twice | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-25-fix-release-bump-the-release-version-once-instead-of-twice.md) |
 | [v0.0.30](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.30) | 2026-09-24 | docs(readme): Add root README with badges and auto-maintained Releases table | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-16-docs-readme-add-root-readme-with-badges-and-auto-maintained-releases-table.md) |
@@ -48,8 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.23](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.23) | 2026-09-24 | chore(skills): Add code-review skill for Copilot code review | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-11-chore-skills-add-code-review-skill-for-copilot-code-review.md) |
 | [v0.0.21](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.21) | 2026-09-24 | feat(Domain): Add Domain project as the Template's Shared Kernel | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-10-feat-domain-add-domain-project-as-the-template-s-shared-kernel.md) |
 | [v0.0.19](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.19) | 2026-09-24 | chore(hooks): Fix pre-push test command, npm package name, and review prompt | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-9-chore-hooks-fix-pre-push-test-command-npm-package-name-and-review-prompt.md) |
-| [v0.0.17](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.17) | 2026-09-24 | chore(sandcastle): Adapt Sandcastle for .NET and pull-request delivery | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-8-chore-sandcastle-adapt-sandcastle-for-net-and-pull-request-delivery.md) |
-| [v0.0.15](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.15) | 2026-09-24 | chore(workflows): Remove squad workflows | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-7-chore-workflows-remove-squad-workflows.md) |
 
 <!-- RELEASES_END -->
 

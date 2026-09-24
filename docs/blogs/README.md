@@ -4,6 +4,8 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-24 | [fix(hooks): Pre-push gate checks the checked-out branch instead of the pushed refs](2026-09-24-pr-31-fix-hooks-pre-push-gate-checks-the-checked-out-branch-instead-of-the-pushed-refs.md) | release,automation |
+| 2026-09-24 | [docs(blogs): Backfill missing release blog posts and link them from the README](2026-09-24-pr-26-docs-blogs-backfill-missing-release-blog-posts-and-link-them-from-the-readme.md) | release,automation |
 | 2026-09-24 | [feat(sandcastle): Hold back issues whose blockers haven't landed](2026-09-24-pr-28-feat-sandcastle-hold-back-issues-whose-blockers-haven-t-landed.md) | release,automation |
 | 2026-09-24 | [fix(release): Bump the release version once instead of twice](2026-09-24-pr-25-fix-release-bump-the-release-version-once-instead-of-twice.md) | release,automation |
 | 2026-09-24 | [docs(readme): Add root README with badges and auto-maintained Releases table](2026-09-24-pr-16-docs-readme-add-root-readme-with-badges-and-auto-maintained-releases-table.md) | release,automation |
