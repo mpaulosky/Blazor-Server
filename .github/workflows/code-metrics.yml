@@ -21,11 +21,11 @@ name: ".NET code metrics"
         required: true
         default: "Manual run"
 
-# The repository's default GITHUB_TOKEN is read-only, so the metrics PR
-# step needs these granted explicitly.
+# Read-only on purpose: pull_request runs execute the unpinned metrics action
+# and must not get a write-capable token. The main-only PR step below pushes
+# and opens the PR with RELEASE_PR_PAT instead.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   build:
@@ -60,7 +60,7 @@ jobs:
           body: "${{ steps.dotnet-code-metrics.outputs.summary-details }}"
           commit-message: ".NET code metrics, automated pull request."
           branch: chore/code-metrics
-          # Same PAT-with-fallback as release.yml: a PR opened with
-          # GITHUB_TOKEN doesn't trigger pull_request workflows, so main's
-          # required checks would never report and the PR could never merge.
-          token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
+          # A PAT, not GITHUB_TOKEN: the workflow token is read-only, Actions
+          # may not create PRs in this repository, and a PR opened with
+          # GITHUB_TOKEN wouldn't trigger the checks main requires.
+          token: ${{ secrets.RELEASE_PR_PAT }}
