@@ -22,11 +22,13 @@
 - Don't use `var`. Write the explicit type.
 - Don't qualify members with `this.`.
 - Use keyword types (`int`, `string`) rather than BCL names (`Int32`, `String`).
-- Declare accessibility modifiers on every non-interface member, in this order: `public private protected internal file static extern new virtual abstract sealed override readonly unsafe required volatile async`.
+- Declare accessibility modifiers on every non-interface member, in this order:
+  `public private protected internal file static extern new virtual abstract sealed override readonly unsafe required volatile async`.
 - Add parentheses to arithmetic, relational, and other binary expressions when they make precedence clearer.
 - Mark fields `readonly` when they're never reassigned, and mark local functions `static` when they don't capture state. The build enforces both, so a reviewer doesn't need to look for them.
 - Use expression bodies for properties, accessors, indexers, and lambdas. Use block bodies for methods, constructors, operators, and local functions.
-- Prefer modern expressions: pattern matching (`is null`, `is not`, `is T x`), switch expressions, `?.`, `??`, compound assignment, throw expressions, object and collection initializers, index and range operators, deconstruction, and `using` declarations instead of `using` blocks.
+- Prefer modern expressions: pattern matching (`is null`, `is not`, `is T x`), switch expressions, `?.`, `??`, compound assignment, throw expressions, object and collection initializers, index and
+  range operators, deconstruction, and `using` declarations instead of `using` blocks.
 - Use `_` to discard unused values.
 
 ### Naming
@@ -48,17 +50,21 @@
 - Every public type and member outside test projects needs an XML doc comment (`/// <summary>`). The build enforces this (CS1591). Review the comments for accuracy, not presence.
 - Comments explain *why*, not *what*. Flag comments that just restate the code.
 
-## .NET and C#
+## C# and .NET
 
 - Target .NET 10 and C# 14. `global.json` pins the SDK. When documentation and repository configuration disagree, the configuration wins.
 - Use current language features where they make code clearer: primary constructors, collection expressions (`[]`), records for immutable data, file-scoped namespaces, and `required` members.
 - Keep nullable reference types enabled. Don't silence them with `!` unless a comment explains why the value can't be null.
-- Use `async`/`await` all the way down. Never call `.Result`, `.Wait()`, or `GetAwaiter().GetResult()` on a task, and never write `async void` except for event handlers. Async methods end in `Async` and accept a `CancellationToken` when the work can be cancelled.
+- Use `async`/`await` all the way down.
+  Never call `.Result`, `.Wait()`, or `GetAwaiter().GetResult()` on a task, and never write `async void` except for event handlers.
+  Async methods end in `Async` and accept a `CancellationToken` when the work can be cancelled.
 - Never use `Thread.Sleep` in production code.
 - Get dependencies through constructor injection (or `[Inject]` in components). Don't `new` up services or use a service locator.
 - Never hardcode secrets, connection strings, or Auth0 credentials. Read them from `IConfiguration`, environment variables, or user secrets.
 - No empty `catch` blocks. At minimum, log the exception and rethrow. Catch specific exception types rather than `Exception` unless you're at a top-level boundary.
-- Validate requests with FluentValidation: one `AbstractValidator<T>` per request, kept in the feature's folder and registered in DI. Handlers validate again on the server and return validation failures as a failed `Result`. Don't mix in DataAnnotations for request validation.
+- Validate requests with FluentValidation: one `AbstractValidator<T>` per request, kept in the feature's folder and registered in DI.
+  Handlers validate again on the server and return validation failures as a failed `Result`.
+  Don't mix in DataAnnotations for request validation.
 - Validate and sanitize all user input. Flag any place where user input reaches output, queries, or redirects unchecked.
 - Log through `ILogger<T>` with structured message templates (`"Loaded {Count} items"`), not string interpolation.
 - Keep NuGet additions minimal, and justify each new package in the PR description.
@@ -85,11 +91,15 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - Scoped services live for the user's whole connection (circuit), not for one request. Don't keep per-request data in them, and never keep per-user state in singletons.
 - Don't use `HttpContext` in interactive components. Read the signed-in user through `AuthenticationStateProvider` or a cascading `Task<AuthenticationState>`.
 - Declare render modes explicitly where the component defines them (`@rendermode InteractiveServer`). Keep pages that don't need interactivity statically rendered.
-- Use the domain terms from `CONTEXT.md` in code and UI. For example, **Theme** means light/dark mode and **Palette** means accent color. Don't use either word for the other, or swap in synonyms like "color scheme".
+- Use the domain terms from `CONTEXT.md` in code and UI.
+  For example, **Theme** means light/dark mode and **Palette** means accent color.
+  Don't use either word for the other, or swap in synonyms like "color scheme".
 
 ### Authentication and authorization (Auth0)
 
-- Sign-in uses `Auth0.AspNetCore.Authentication` with cookie sessions. Access and refresh tokens stay on the server. Never send them to the browser, write them to logs, or store them in `localStorage`.
+- Sign-in uses `Auth0.AspNetCore.Authentication` with cookie sessions.
+  Access and refresh tokens stay on the server.
+  Never send them to the browser, write them to logs, or store them in `localStorage`.
 - Bind `Auth0:Domain`, `Auth0:ClientId`, and `Auth0:ClientSecret` from configuration (`Auth0__Domain` and so on in environment variables). Never commit them.
 - Map the Auth0 role claim to `ClaimTypes.Role` in one place at startup, so `[Authorize(Roles = "Admin")]` and `<AuthorizeView Roles="Admin">` work everywhere.
 - Protect pages with `[Authorize]` or named policies. Use `<AuthorizeView>` only to show or hide UI. It isn't a security boundary, so the page or handler must still enforce access.
@@ -98,10 +108,13 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 ### Error handling and configuration
 
 - Handlers return a `Result` or `Result<T>` (defined once in the Domain project) for expected failures such as validation errors, not-found, and forbidden. Don't use exceptions for control flow.
-- Throw exceptions only for truly unexpected failures, such as bugs, infrastructure outages, and violated invariants. Let them reach the global error handler or an `<ErrorBoundary>` rather than catching them to return a failed `Result`.
+- Throw exceptions only for truly unexpected failures, such as bugs, infrastructure outages, and violated invariants.
+  Let them reach the global error handler or an `<ErrorBoundary>` rather than catching them to return a failed `Result`.
 - Callers must check a `Result` before using its value. Components show `Result` errors to the user, and endpoints map them to `ProblemDetails` with the matching status code.
 - Carry a stable error code (for example `"Palette.Unknown"`) and a human-readable message on each error, so tests can assert on the code.
-- Bind settings with the options pattern: `services.AddOptions<TOptions>().BindConfiguration("Section").ValidateDataAnnotations().ValidateOnStart()`. Inject `IOptions<T>` (or `IOptionsMonitor<T>`), not `IConfiguration`, into feature code.
+- Bind settings with the options pattern:
+  `services.AddOptions<TOptions>().BindConfiguration("Section").ValidateDataAnnotations().ValidateOnStart()`.
+  Inject `IOptions<T>` (or `IOptionsMonitor<T>`), not `IConfiguration`, into feature code.
 
 ## Testing
 
@@ -112,11 +125,17 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - **NSubstitute** for test doubles. Only substitute interfaces, never concrete classes.
 - **bUnit** for Blazor component tests.
 - **`Microsoft.AspNetCore.Mvc.Testing`** (`WebApplicationFactory<Program>`) for integration tests of endpoints, middleware, authorization policies, and DI wiring.
-- **Playwright** for end-to-end tests. Keep Playwright tests in `*.Tests.E2E` projects. CI builds any project that references `Microsoft.Playwright` and installs its browsers, and supplies Auth0 settings and a test user for each role through environment variables. E2E tests start the app through the Aspire AppHost. Read credentials from configuration, and never hardcode them.
+- **Playwright** for end-to-end tests.
+  Keep Playwright tests in `*.Tests.E2E` projects.
+  CI builds any project that references `Microsoft.Playwright` and installs its browsers, and supplies Auth0 settings and a test user for each role through environment variables.
+  E2E tests start the app through the Aspire AppHost.
+  Read credentials from configuration, and never hardcode them.
 
 ### Conventions
 
-- Put test projects under `tests/`, named `<Project>.Tests.<Kind>` (`UI.Tests.Unit`, `UI.Tests.Integration`, `UI.Tests.E2E`) or `Architecture.Tests`, as in `docs/CONTRIBUTING.md`. `Directory.Build.props` applies test-only settings to any project whose name contains `.Tests`. Mirror the namespaces and folder layout of the production code they cover.
+- Put test projects under `tests/`, named `<Project>.Tests.<Kind>` (`UI.Tests.Unit`, `UI.Tests.Integration`, `UI.Tests.E2E`) or `Architecture.Tests`, as in `docs/CONTRIBUTING.md`.
+  `Directory.Build.props` applies test-only settings to any project whose name contains `.Tests`.
+  Mirror the namespaces and folder layout of the production code they cover.
 - Name test methods `MethodUnderTest_Scenario_ExpectedResult`. `.editorconfig` suppresses CA1707 in tests to allow the underscores.
 - Structure every test as Arrange/Act/Assert, marked with `// Arrange`, `// Act`, and `// Assert` comments. All three comments are required, even when a section is empty.
 - Test one behavior per test. Use `[Theory]` with `[InlineData]` or `[MemberData]` instead of copy-pasting near-identical `[Fact]`s.
@@ -125,7 +144,8 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - Write tests first (TDD) for new features and bug fixes. Every behavior a change adds or modifies needs a test.
 - Tests must be deterministic: no `Thread.Sleep`, no dependency on the wall clock (inject `TimeProvider`), and no dependency on test order.
 - Test behavior through public APIs. Don't assert on private state or reach in with reflection.
-- In integration tests, replace external services (Auth0, HTTP APIs) through `WebApplicationFactory.WithWebHostBuilder` and `ConfigureTestServices`. Use a test authentication handler instead of calling Auth0.
+- In integration tests, replace external services (Auth0, HTTP APIs) through `WebApplicationFactory.WithWebHostBuilder` and `ConfigureTestServices`.
+  Use a test authentication handler instead of calling Auth0.
 - Test both paths of every `Result`-returning handler: the success value and each expected error code.
 - CI reports coverage and warns below 80%, but doesn't fail the build. Treat untested new behavior as a review finding, rather than the coverage percentage.
 
@@ -179,7 +199,8 @@ public class ThemeServiceTests
 
 Code is organized by feature, not by technical layer. Each slice holds everything one use case needs, from the UI down to data access.
 
-- Each feature lives in its own folder under `Features/`, for example `Features/Theme/` or `Features/Profile/`. Its folder holds the feature's components, request and response types, handler, validator, and endpoints.
+- Each feature lives in its own folder under `Features/`, for example `Features/Theme/` or `Features/Profile/`.
+  Its folder holds the feature's components, request and response types, handler, validator, and endpoints.
 - Don't add top-level `Services/`, `Repositories/`, `Models/`, or `Controllers/` folders that collect code from many features.
 - Slices don't reference each other's internals. When two slices need the same logic, move it to `Shared/`, but only once a second slice actually needs it.
 - Keep `Shared/` small: cross-cutting concerns only, such as auth, layout, and theming infrastructure. Feature logic never goes there.
@@ -192,5 +213,6 @@ Code is organized by feature, not by technical layer. Each slice holds everythin
 ### General
 
 - Keep each class focused on one responsibility. Prefer composition over inheritance.
-- Depend on interfaces at boundaries such as cookies, Auth0, HTTP, and the clock, so tests can substitute them. Don't add an interface for a class that has only one implementation and doesn't sit at a boundary.
+- Depend on interfaces at boundaries such as cookies, Auth0, HTTP, and the clock, so tests can substitute them.
+  Don't add an interface for a class that has only one implementation and doesn't sit at a boundary.
 - Protect pages with authorization attributes and policies (`[Authorize]`, `[Authorize(Roles = ...)]`) rather than checking claims by hand in markup.

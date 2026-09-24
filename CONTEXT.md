@@ -13,11 +13,17 @@ The Blazor Web App created by using the Template via GitHub's "Use this template
 _Avoid_: Instance, output, the app (when the distinction from Template matters)
 
 **Palette**:
-The accent-color scale applied across the Generated App's UI (buttons, links, highlights), chosen by the visitor at runtime from a dropdown in the Generated App's menu. Offers a curated set of Tailwind CSS hue scales (e.g. Rose, Blue, Violet — the full set minus the gray-family scales, which are visually redundant for this purpose). Persisted in a cookie, the same mechanism as Theme. Defaults to a single fixed hue until the visitor picks one; there is no OS-level signal to default from. Orthogonal to Theme — Palette governs accent color only, while grays/background stay governed by Theme.
+The accent-color scale applied across the Generated App's UI (buttons, links, highlights), chosen by the visitor at runtime from a dropdown in the Generated App's menu.
+Offers a curated set of Tailwind CSS hue scales (e.g. Rose, Blue, Violet — the full set minus the gray-family scales, which are visually redundant for this purpose).
+Persisted in a cookie, the same mechanism as Theme.
+Defaults to a single fixed hue until the visitor picks one; there is no OS-level signal to default from.
+Orthogonal to Theme — Palette governs accent color only, while grays/background stay governed by Theme.
 _Avoid_: Theme, color scheme, skin
 
 **Theme**:
-The light/dark rendering mode. Chosen by the visitor at runtime via a toggle in the Generated App, persisted in a cookie (read during server-side prerender to avoid a flash of the wrong theme on first paint), and defaulting to the OS `prefers-color-scheme` on first visit.
+The light/dark rendering mode.
+Chosen by the visitor at runtime via a toggle in the Generated App, persisted in a cookie (read during server-side prerender to avoid a flash of the wrong theme on first paint), and defaulting to the
+OS `prefers-color-scheme` on first visit.
 _Avoid_: Palette, mode, color scheme
 
 **Visitor**:
