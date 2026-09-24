@@ -22,14 +22,23 @@ An issue B is **blocked by** issue A if:
 
 An issue is **unblocked** if it has zero blocking dependencies on other open issues.
 
-For each unblocked issue, assign a branch name using the exact format `sandcastle/issue-{id}` (no slug or other suffix). This must be deterministic so that re-planning the same issue always produces the same branch name and accumulated progress is preserved.
+For each unblocked issue, assign a branch name that follows the repository convention, which the pre-push hook enforces:
+
+- `hotfix/{id}-{slug}` when the issue has the `bug` label
+- `feature/{id}-{slug}` for every other issue
+
+`{slug}` is the issue title in kebab-case: lowercase, ASCII letters and digits only, words joined by single hyphens, with any leading conventional-commit prefix such as `feat(Domain):` dropped, and cut to at most five words.
+
+The branch name must be deterministic so that re-planning the same issue always produces the same branch and accumulated progress is preserved. Before deriving a new name, check the existing branches below. If one already starts with `feature/{id}-` or `hotfix/{id}-`, reuse that exact name, even if the title has changed since.
+
+!`git branch -a --format='%(refname:short)' --list 'feature/*' 'hotfix/*' 'origin/feature/*' 'origin/hotfix/*' | sed 's|^origin/||' | sort -u`
 
 # OUTPUT
 
 Output your plan as a JSON object wrapped in `<plan>` tags:
 
 <plan>
-{"issues": [{"id": "42", "title": "Fix auth bug", "branch": "sandcastle/issue-42"}]}
+{"issues": [{"id": "42", "title": "Fix auth bug", "branch": "hotfix/42-fix-auth-bug"}]}
 </plan>
 
 Include only unblocked issues. If every issue is blocked, include the single highest-priority candidate (the one with the fewest or weakest dependencies).
