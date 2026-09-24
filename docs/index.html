@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Blazor Server Template</title>
+    <meta name="description" content="A GitHub template for a server-rendered Blazor Web App: recent Releases and their release blog posts.">
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #1f2328;
+        --muted: #59636e;
+        --border: #d1d9e0;
+        --stripe: #f6f8fa;
+        --link: #0969da;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d1117;
+          --fg: #e6edf3;
+          --muted: #9198a1;
+          --border: #3d444d;
+          --stripe: #151b23;
+          --link: #4493f8;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+      }
+
+      main {
+        max-width: 60rem;
+        margin: 0 auto;
+        padding: 2rem 1rem 3rem;
+      }
+
+      a {
+        color: var(--link);
+      }
+
+      header {
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+      }
+
+      h1 {
+        margin: 0 0 0.25rem;
+        font-size: 2rem;
+      }
+
+      header p {
+        margin: 0 0 0.75rem;
+        color: var(--muted);
+      }
+
+      nav a {
+        margin-right: 1rem;
+      }
+
+      h2 {
+        margin: 2rem 0 0.75rem;
+        font-size: 1.4rem;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+
+      th,
+      td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th,
+      td:nth-child(1),
+      td:nth-child(2) {
+        white-space: nowrap;
+      }
+
+      #blogs td:nth-child(2) {
+        white-space: normal;
+        min-width: 16rem;
+      }
+
+      #releases td:nth-child(3) {
+        min-width: 16rem;
+      }
+
+      tbody tr:nth-child(even) {
+        background: var(--stripe);
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Blazor Server Template</h1>
+        <p>A GitHub template repository that scaffolds a server-rendered Blazor Web App with Tailwind CSS theming and Auth0 authentication.</p>
+        <nav>
+          <a href="https://github.com/mpaulosky/Blazor-Server">Repository</a>
+          <a href="https://github.com/mpaulosky/Blazor-Server/releases">Releases</a>
+          <a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/README.md">Blog index</a>
+        </nav>
+      </header>
+
+      <section id="releases">
+        <h2>Releases</h2>
+        <!-- RELEASES_HTML_START -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Blog post</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.33">v0.0.33</a></td>
+                <td>2026-09-24</td>
+                <td>docs(blogs): Backfill missing release blog posts and link them from the README</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.32">v0.0.32</a></td>
+                <td>2026-09-24</td>
+                <td>feat(sandcastle): Hold back issues whose blockers haven&#x27;t landed</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-28-feat-sandcastle-hold-back-issues-whose-blockers-haven-t-landed.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.31">v0.0.31</a></td>
+                <td>2026-09-24</td>
+                <td>fix(release): Bump the release version once instead of twice</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-25-fix-release-bump-the-release-version-once-instead-of-twice.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.30">v0.0.30</a></td>
+                <td>2026-09-24</td>
+                <td>docs(readme): Add root README with badges and auto-maintained Releases table</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-16-docs-readme-add-root-readme-with-badges-and-auto-maintained-releases-table.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.27">v0.0.27</a></td>
+                <td>2026-09-24</td>
+                <td>fix(release): Release-notes PR is never created, and the failure is hidden</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-15-fix-release-release-notes-pr-is-never-created-and-the-failure-is-hidden.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.25">v0.0.25</a></td>
+                <td>2026-09-24</td>
+                <td>fix(sandcastle): Publish work already on an issue branch</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-12-fix-sandcastle-publish-work-already-on-an-issue-branch.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.23">v0.0.23</a></td>
+                <td>2026-09-24</td>
+                <td>chore(skills): Add code-review skill for Copilot code review</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-11-chore-skills-add-code-review-skill-for-copilot-code-review.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.21">v0.0.21</a></td>
+                <td>2026-09-24</td>
+                <td>feat(Domain): Add Domain project as the Template&#x27;s Shared Kernel</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-10-feat-domain-add-domain-project-as-the-template-s-shared-kernel.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.19">v0.0.19</a></td>
+                <td>2026-09-24</td>
+                <td>chore(hooks): Fix pre-push test command, npm package name, and review prompt</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-9-chore-hooks-fix-pre-push-test-command-npm-package-name-and-review-prompt.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.17">v0.0.17</a></td>
+                <td>2026-09-24</td>
+                <td>chore(sandcastle): Adapt Sandcastle for .NET and pull-request delivery</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-8-chore-sandcastle-adapt-sandcastle-for-net-and-pull-request-delivery.md">Post</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- RELEASES_HTML_END -->
+      </section>
+
+      <section id="blogs">
+        <h2>Blog posts</h2>
+        <!-- BLOGS_HTML_START -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Release</th>
+                <th>Source PR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-28-feat-sandcastle-hold-back-issues-whose-blockers-haven-t-landed.md">feat(sandcastle): Hold back issues whose blockers haven&#x27;t landed</a></td>
+                <td>v0.0.32</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/28">#28</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-25-fix-release-bump-the-release-version-once-instead-of-twice.md">fix(release): Bump the release version once instead of twice</a></td>
+                <td>v0.0.31</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/25">#25</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-16-docs-readme-add-root-readme-with-badges-and-auto-maintained-releases-table.md">docs(readme): Add root README with badges and auto-maintained Releases table</a></td>
+                <td>v0.0.30</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/16">#16</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-15-fix-release-release-notes-pr-is-never-created-and-the-failure-is-hidden.md">fix(release): Release-notes PR is never created, and the failure is hidden</a></td>
+                <td>v0.0.27</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/15">#15</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-12-fix-sandcastle-publish-work-already-on-an-issue-branch.md">fix(sandcastle): Publish work already on an issue branch</a></td>
+                <td>v0.0.25</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/12">#12</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-11-chore-skills-add-code-review-skill-for-copilot-code-review.md">chore(skills): Add code-review skill for Copilot code review</a></td>
+                <td>v0.0.23</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/11">#11</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-10-feat-domain-add-domain-project-as-the-template-s-shared-kernel.md">feat(Domain): Add Domain project as the Template&#x27;s Shared Kernel</a></td>
+                <td>v0.0.21</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/10">#10</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-9-chore-hooks-fix-pre-push-test-command-npm-package-name-and-review-prompt.md">chore(hooks): Fix pre-push test command, npm package name, and review prompt</a></td>
+                <td>v0.0.19</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/9">#9</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-8-chore-sandcastle-adapt-sandcastle-for-net-and-pull-request-delivery.md">chore(sandcastle): Adapt Sandcastle for .NET and pull-request delivery</a></td>
+                <td>v0.0.17</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/8">#8</a></td>
+              </tr>
+              <tr>
+                <td>2026-09-24</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-7-chore-workflows-remove-squad-workflows.md">chore(workflows): Remove squad workflows</a></td>
+                <td>v0.0.15</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/pull/7">#7</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- BLOGS_HTML_END -->
+      </section>
+    </main>
+  </body>
+</html>
