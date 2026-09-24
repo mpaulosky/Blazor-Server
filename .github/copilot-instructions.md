@@ -11,6 +11,7 @@ This repository is a GitHub template for a server-rendered Blazor Web App on .NE
   - `dotnet-project.instructions.md` (all files)
   - `blazor.instructions.md` (Razor components)
   - `markdown.instructions.md` (Markdown)
+  - `blog.instructions.md` (blog posts under `docs/blogs/`)
   - `git-commit-instructions.md` (commit messages)
 
 ## Project layout

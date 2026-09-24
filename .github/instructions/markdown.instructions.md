@@ -21,18 +21,4 @@ applyTo: '**/*.md'
 - **Tables:** Use tables for tabular data, with a header row.
 - **Line length:** Keep lines at or under 200 characters. Prefer one sentence or clause per line in long paragraphs.
 
-## Blog posts
-
-Only for posts under `docs/blogs/`: start the file with YAML front matter containing:
-
-- `post_title`: the post's title.
-- `author1`: the primary author.
-- `post_slug`: the URL slug.
-- `featured_image`: the URL of the featured image.
-- `categories`: the post's categories.
-- `tags`: the post's tags.
-- `ai_note`: whether AI was used to write the post.
-- `summary`: a short summary of the post.
-- `post_date`: the publication date.
-
-Other Markdown files (README, CONTRIBUTING, instructions, standards) have no front matter, apart from the `applyTo` header that instruction files need.
+Blog posts under `docs/blogs/` have extra front-matter rules in `blog.instructions.md`. Other Markdown files have no front matter, apart from the `applyTo` header that instruction files need.
