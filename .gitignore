@@ -38,8 +38,8 @@ user-secrets/
 
 # Tailwind CLI (downloaded standalone binary) and its build output
 .tailwindcss/
-content/src/Web/wwwroot/app.css
-content/src/Web/Styles/palette.css
+content/src/UI/wwwroot/app.css
+content/src/UI/Styles/palette.css
 
 # Logs & Artifacts
 logs/

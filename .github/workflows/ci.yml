@@ -67,11 +67,9 @@ env:
   Parameters__auth0MgmtClientSecret: >-
     ${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET }}
 
-  # Role test-user credentials for Web.E2E.Tests' authenticated Playwright fixtures
+  # Role test-user credentials for UI.Tests.E2E's authenticated Playwright fixtures
   Auth0__E2E__Admin__Username: ${{ secrets.AUTH0_ADMIN_USERNAME }}
   Auth0__E2E__Admin__Password: ${{ secrets.AUTH0_ADMIN_PASSWORD }}
-  Auth0__E2E__Author__Username: ${{ secrets.AUTH0_AUTHOR_USERNAME }}
-  Auth0__E2E__Author__Password: ${{ secrets.AUTH0_AUTHOR_PASSWORD }}
   Auth0__E2E__User__Username: ${{ secrets.AUTH0_USER_USERNAME }}
   Auth0__E2E__User__Password: ${{ secrets.AUTH0_USER_PASSWORD }}
 
@@ -167,13 +165,15 @@ jobs:
               is_e2e = "e2e" in lowered
               csproj_text = csproj.read_text()
               uses_playwright = "Microsoft.Playwright" in csproj_text
+              # Playwright projects must be built before browsers can be installed.
+              prebuild = is_e2e or uses_playwright
               projects.append(
                   {
                       "project_path": csproj.as_posix(),
                       "test_name": folder,
                       "test_id": test_id,
-                      "build_before_test": is_e2e,
-                      "no_build": is_e2e,
+                      "build_before_test": prebuild,
+                      "no_build": prebuild,
                       "requires_playwright": uses_playwright,
                       "verbosity": "normal" if is_e2e else "minimal",
                   }

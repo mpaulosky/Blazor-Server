@@ -1,0 +1,29 @@
+<Project>
+	<PropertyGroup Label="Language">
+		<TargetFramework>net10.0</TargetFramework>
+		<LangVersion>14.0</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Analysis">
+		<AnalysisMode>All</AnalysisMode>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Build">
+		<Deterministic>true</Deterministic>
+		<ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+
+	<!-- Test projects (UI.Tests.Unit, UI.Tests.E2E, Architecture.Tests, ...): XML docs aren't required,
+	     and xUnit v3 runs on Microsoft.Testing.Platform (see global.json). -->
+	<PropertyGroup Label="Tests" Condition="$(MSBuildProjectName.Contains('.Tests'))">
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+		<OutputType>Exe</OutputType>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+	</PropertyGroup>
+</Project>
