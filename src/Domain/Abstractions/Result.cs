@@ -302,7 +302,7 @@ public sealed class Result<T> : Result
 	}
 
 	/// <summary>
-	///     Converts a value to a successful result.
+	///     Converts a value to a successful result, or to a failed result when the value is null.
 	/// </summary>
 	/// <param name="value">The value to wrap.</param>
 	[SuppressMessage("Usage", "CA2225:Operator overloads have named alternates",
@@ -310,6 +310,6 @@ public sealed class Result<T> : Result
 			"Result<T> already exposes ToValue()/FromValue() named conversion APIs; the implicit conversions are kept intentionally for application ergonomics.")]
 	public static implicit operator Result<T>(T? value)
 	{
-		return Ok(value);
+		return FromValue(value);
 	}
 }

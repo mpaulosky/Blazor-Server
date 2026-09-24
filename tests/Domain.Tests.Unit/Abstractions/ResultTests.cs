@@ -233,4 +233,18 @@ public class ResultTests
 		result.Success.Should().BeTrue();
 		result.Value.Should().Be(value);
 	}
+
+	[Fact]
+	public void ImplicitConversion_NullValue_ReturnsFailure()
+	{
+		// Arrange
+		string? value = null;
+
+		// Act
+		Result<string> result = value;
+
+		// Assert
+		result.Failure.Should().BeTrue();
+		result.Value.Should().BeNull();
+	}
 }
