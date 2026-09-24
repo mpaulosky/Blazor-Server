@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
   curl \
   jq \
   libicu72 \
+  python3-pytest \
   && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
