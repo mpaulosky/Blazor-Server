@@ -6,15 +6,17 @@
 //                               listing unblocked issues with branch names.
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
 //                               createSandbox(). The implementer runs first
-//                               (100 iterations). If it produces commits, a
-//                               reviewer runs in the same sandbox on the same
-//                               branch (1 iteration). All issue pipelines run
-//                               concurrently via Promise.allSettled().
-//                               The branch is then pushed and gets a pull
-//                               request that closes its issue.
+//                               (100 iterations). If the branch is then ahead
+//                               of main (this run's commits or earlier ones),
+//                               a reviewer runs in the same sandbox (1
+//                               iteration), and the branch is pushed and gets
+//                               a pull request that closes its issue. All
+//                               issue pipelines run concurrently via
+//                               Promise.allSettled().
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
-// issues are picked up after each round; issues with an open PR are skipped.
+// issues are picked up after each round. Issues with an open PR are skipped,
+// and the loop stops early when a round opens no pull request.
 //
 // Usage:
 //   npx tsx .sandcastle/main.mts
@@ -36,6 +38,7 @@ const sh = (cwd: string, cmd: string, ...args: string[]) =>
 function publish(
   issue: { id: string; title: string; branch: string },
   worktreePath: string,
+  reviewed: boolean,
 ): string {
   sh(worktreePath, "git", "push", "--force-with-lease", "-u", "origin", issue.branch);
 
@@ -48,8 +51,17 @@ function publish(
   return sh(
     worktreePath, "gh", "pr", "create", "--base", "main", "--head", issue.branch,
     "--title", issue.title,
-    "--body", `Closes #${issue.id}\n\nImplemented and reviewed by Sandcastle.`,
+    "--body", reviewed
+      ? `Closes #${issue.id}\n\nImplemented and reviewed by Sandcastle.`
+      : `Closes #${issue.id}\n\nImplemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.`,
   );
+}
+
+// Count the commits on the worktree's branch that origin/main doesn't have.
+// origin/main is refreshed once per round, before the pipelines start, because
+// concurrent fetches from each pipeline would contend on the same ref lock.
+function commitsAhead(worktreePath: string): number {
+  return Number(sh(worktreePath, "git", "rev-list", "--count", "origin/main..HEAD"));
 }
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts
@@ -133,12 +145,15 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   //
   // For each issue, create a sandbox via createSandbox() so the implementer
   // and reviewer share the same sandbox instance per branch. The implementer
-  // runs first; if it produces commits, the reviewer runs in the same sandbox,
-  // and then the branch is pushed and gets a pull request that closes its issue.
+  // runs first; if the branch is ahead of main, the reviewer runs in the same
+  // sandbox, and then the branch is pushed and gets a pull request that closes
+  // its issue.
   // Nothing is merged locally: every change reaches main through a reviewed PR.
   //
   // Promise.allSettled means one failing pipeline doesn't cancel the others.
   // -------------------------------------------------------------------------
+
+  sh(process.cwd(), "git", "fetch", "--quiet", "origin", "main");
 
   const settled = await Promise.allSettled(
     issues.map(async (issue) => {
@@ -163,8 +178,16 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           },
         });
 
-        // Only review if the implementer produced commits
-        if (implement.commits.length > 0) {
+        // Review and publish whenever the branch holds work that main doesn't,
+        // not only when this run added commits: a re-run of a finished issue
+        // makes none, and its earlier work still needs a PR.
+        if (commitsAhead(sandbox.worktreePath) === 0) {
+          return { commits: implement.commits, prUrl: undefined };
+        }
+
+        let reviewCommits: typeof implement.commits = [];
+        let reviewed = true;
+        try {
           const review = await sandbox.run({
             name: "reviewer",
             maxIterations: 1,
@@ -174,15 +197,19 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
               BRANCH: issue.branch,
             },
           });
-
-          // Publish while the worktree still exists; close() may remove it.
-          return {
-            commits: [...implement.commits, ...review.commits],
-            prUrl: publish(issue, sandbox.worktreePath),
-          };
+          reviewCommits = review.commits;
+        } catch (error) {
+          // A failed review shouldn't strand finished work: publish anyway and
+          // say so in the PR, which gets a human review regardless.
+          console.error(`  ⚠ ${issue.id}: reviewer failed, publishing unreviewed: ${error}`);
+          reviewed = false;
         }
 
-        return { commits: implement.commits, prUrl: undefined };
+        // Publish while the worktree still exists; close() may remove it.
+        return {
+          commits: [...implement.commits, ...reviewCommits],
+          prUrl: publish(issue, sandbox.worktreePath, reviewed),
+        };
       } finally {
         await sandbox.close();
       }
@@ -207,6 +234,13 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\nExecution complete. ${published.length} pull request(s):`);
   for (const { issue, prUrl } of published) {
     console.log(`  ${issue.id} (${issue.branch}) → ${prUrl}`);
+  }
+
+  if (published.length === 0) {
+    // Nothing reached a PR, so the next plan would pick the same issues and
+    // repeat the same round. Stop and let a human look.
+    console.log("No pull requests opened this round. Stopping.");
+    break;
   }
 }
 

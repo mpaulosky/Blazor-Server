@@ -89,6 +89,8 @@ temp/
 tmp/
 *.tmp
 .directory
-.squad/
 
 .fake
+
+# Pre-push hook test results
+.tmp-test-results/
