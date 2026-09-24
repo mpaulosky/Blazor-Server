@@ -454,10 +454,14 @@ jobs:
           discover_status="${{ needs.discover-tests.result }}"
           test_status="${{ needs.test.result }}"
 
-          if [[ "$build_status" == "failure" \
-            || "$discover_status" == "failure" \
-            || "$test_status" == "failure" ]]; then
+          # This job is the required status check that stands in for the
+          # dynamically named "Tests: …" matrix jobs, so it must fail when
+          # they do. A skipped test matrix (no test projects) still passes.
+          if [[ "$build_status" =~ ^(failure|cancelled)$ \
+            || "$discover_status" =~ ^(failure|cancelled)$ \
+            || "$test_status" =~ ^(failure|cancelled)$ ]]; then
             echo "❌ **Overall Status:** FAILED" >> $GITHUB_STEP_SUMMARY
+            exit 1
           else
             echo "✅ **Overall Status:** PASSED" >> $GITHUB_STEP_SUMMARY
           fi
