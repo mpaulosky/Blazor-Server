@@ -454,6 +454,9 @@ jobs:
 
           echo "docs_changed=true" >> "$GITHUB_OUTPUT"
 
+      # continue-on-error lets the tag and GitHub Release below go out even
+      # when the docs PR can't be delivered. The "Report docs PR failure"
+      # step at the end then fails the run, so the problem isn't hidden.
       - name: Commit and push docs updates
         if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true' && steps.docs.outputs.docs_changed == 'true'
         id: commit
@@ -485,6 +488,9 @@ jobs:
           # The [skip-release] marker keeps this PR's own merge from
           # triggering another run of this workflow.
           BRANCH="docs/release-notes-pr-${PR_NUMBER}"
+          # Return to main even if a later command fails, so the tag step
+          # below never tags the unmerged docs commit.
+          trap 'git checkout --quiet main' EXIT
           git checkout -b "$BRANCH"
           git commit -m "docs: add release blog for PR #${PR_NUMBER} [skip-release]"
           git push origin "$BRANCH"
@@ -555,6 +561,23 @@ jobs:
               --verify-tag
           fi
 
+      - name: Report docs PR failure
+        if: always() && steps.commit.outcome == 'failure'
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          MESSAGE="The release-notes PR for #${PR_NUMBER} (branch docs/release-notes-pr-${PR_NUMBER}) was not delivered. See the \"Commit and push docs updates\" step. If gh pr create was refused, add the RELEASE_PR_PAT secret or allow GitHub Actions to create pull requests in the repository settings."
+          echo "::error title=Release-notes PR not delivered::${MESSAGE}"
+          {
+            echo "### :x: Release-notes PR not delivered"
+            echo ""
+            echo "${MESSAGE}"
+            echo ""
+            echo "The tag and GitHub Release steps for ${TAG:-n/a} still ran; check them separately."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - name: Summary
         if: always()
         run: |
@@ -562,3 +585,4 @@ jobs:
           echo "Eligible: ${{ steps.files.outputs.eligible || 'n/a' }}"
           echo "Already released: ${{ steps.idempotency.outputs.already_released || 'n/a' }}"
           echo "Tag: ${{ steps.version.outputs.tag || 'n/a' }}"
+          echo "Docs PR step: ${{ steps.commit.outcome || 'n/a' }}"
