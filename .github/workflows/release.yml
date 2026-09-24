@@ -257,11 +257,15 @@ jobs:
           MERGED_DATE: ${{ steps.pr.outputs.merged_date }}
           TITLE_SLUG: ${{ steps.pr.outputs.title_slug }}
           TAG: ${{ steps.version.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           python3 - <<'PYEOF'
           import html
+          import json
           import os
           import re
+          import subprocess
           from pathlib import Path
 
           pr_number = os.environ["PR_NUMBER"].strip()
@@ -346,41 +350,109 @@ jobs:
           )
           blog_index.write_text(index_text, encoding="utf-8")
 
+          top_rows = rows[:5]
+
+          # The README Releases table comes from the GitHub Releases API, not the
+          # blog index, so releases without a blog post are listed too.
+          repository = os.environ["REPOSITORY"].strip()
+          release_tag = (os.environ.get("TAG") or "").strip()
+
+          def gh_api(path: str, jq: str) -> str:
+            return subprocess.run(
+                ["gh", "api", path, "--paginate", "--jq", jq],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+
+          releases = [
+              json.loads(line)
+              for line in gh_api(
+                  f"repos/{repository}/releases?per_page=100",
+                  ".[] | select(.draft | not) | @json",
+              ).splitlines()
+              if line.strip()
+          ]
+          releases.sort(key=lambda r: r.get("published_at") or "", reverse=True)
+
+          entries = []
+          if release_tag:
+            # This step runs before "Create tag and release", so the release
+            # being created now isn't in the API response yet.
+            entries.append(
+                {"tag": release_tag, "date": merged_date, "pr": pr_number, "title": title_line}
+            )
+          for release in releases:
+            if any(e["tag"] == release["tag_name"] for e in entries):
+              continue
+            source_pr = re.search(r"Source PR: #(\d+)", release.get("body") or "")
+            entries.append(
+                {
+                    "tag": release["tag_name"],
+                    "date": (release.get("published_at") or "")[:10],
+                    "pr": source_pr.group(1) if source_pr else "",
+                    "title": "",
+                    "name": release.get("name") or release["tag_name"],
+                }
+            )
+          entries = entries[:10]
+
+          release_rows = []
+          for entry in entries:
+            entry_title = entry["title"]
+            if not entry_title and entry["pr"]:
+              try:
+                entry_title = gh_api(f"repos/{repository}/pulls/{entry['pr']}", ".title").strip()
+              except subprocess.CalledProcessError:
+                entry_title = ""
+            entry_title = (entry_title or entry.get("name") or entry["tag"]).replace("|", "\\|")
+
+            blog_cell = "—"
+            if entry["pr"]:
+              blog_posts = sorted(blog_dir.glob(f"*-pr-{entry['pr']}-*.md"))
+              if blog_posts:
+                blog_cell = f"[Post](https://github.com/{repository}/blob/main/docs/blogs/{blog_posts[-1].name})"
+
+            release_url = f"https://github.com/{repository}/releases/tag/{entry['tag']}"
+            release_rows.append(f"| [{entry['tag']}]({release_url}) | {entry['date']} | {entry_title} | {blog_cell} |")
+
+          releases_block = "\n".join(
+              [
+                  "<!-- RELEASES_START -->",
+                  "",
+                  "| Version | Date | Title | Blog post |",
+                  "|---------|------|-------|-----------|",
+                  *release_rows,
+                  "",
+                  "<!-- RELEASES_END -->",
+              ]
+          )
+
           readme_path = Path("README.md")
           readme = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
 
-          top_rows = rows[:5]
-          table = "\n".join([
-              "| Date | Title | Tags |",
-              "|------|-------|------|",
-              *[
-                  re.sub(
-                      r"\]\((?!https?://)([^)]+)\)",
-                      lambda m: f"](docs/blogs/{m.group(1)})",
-                      row,
-                  )
-                  for row in top_rows
-              ],
-          ])
-
-          block = f"<!-- BLOG_START -->\n{table}\n<!-- BLOG_END -->"
-
-          if "<!-- BLOG_START -->" in readme and "<!-- BLOG_END -->" in readme:
+          if "<!-- RELEASES_START -->" in readme and "<!-- RELEASES_END -->" in readme:
             readme = re.sub(
-                r"<!-- BLOG_START -->.*?<!-- BLOG_END -->",
-                lambda _match: block,
+                r"<!-- RELEASES_START -->.*?<!-- RELEASES_END -->",
+                lambda _match: releases_block,
                 readme,
                 flags=re.DOTALL,
             )
           else:
-            suffix = "" if readme.endswith("\n") else "\n"
-            readme = (
-                readme
-                + suffix
-                + "\n## Dev Blog\n\n"
-                + block
-                + "\n"
+            releases_section = (
+                "## Releases\n\n"
+                + releases_block
+                + f"\n\n[All releases →](https://github.com/{repository}/releases)\n"
             )
+            about = re.search(r"^## About[^\n]*\n", readme, flags=re.MULTILINE)
+            next_heading = re.search(r"^## ", readme[about.end():], flags=re.MULTILINE) if about else None
+            if next_heading:
+              insert_at = about.end() + next_heading.start()
+              readme = readme[:insert_at] + releases_section + "\n" + readme[insert_at:]
+            else:
+              suffix = "" if readme.endswith("\n") or not readme else "\n"
+              separator = "\n" if readme else ""
+              readme = readme + suffix + separator + releases_section
 
           readme_path.write_text(readme, encoding="utf-8")
           docs_readme_path = Path("docs/README.md")
