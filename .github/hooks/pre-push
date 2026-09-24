@@ -12,14 +12,6 @@ echo -e "${CYAN}━━━ Pre-Push Gate ━━━━━━━━━━━━━�
 # Read push refs from stdin (provided by git when run as a hook).
 PUSH_REFS="$(cat || true)"
 
-# Allow tag-only pushes.
-if [[ -n "$PUSH_REFS" ]] && echo "$PUSH_REFS" | grep -q "^refs/tags/"; then
-  if ! echo "$PUSH_REFS" | grep -qv "^refs/tags/"; then
-    echo -e "${GREEN}✅ Tag push — skipping branch gates.${RESET}"
-    exit 0
-  fi
-fi
-
 is_protected_branch() {
   [[ "$1" == "main" || "$1" == "preview" || "$1" == "dev" ]]
 }
@@ -42,6 +34,8 @@ check_branch_name() {
 if [[ -n "$PUSH_REFS" ]]; then
   # Gate the refs being pushed, not the checked-out branch: pushing another
   # branch or deleting one from a main checkout is not a push to main.
+  # Classify by remote ref: `git push origin v1.0.0:main` has a tag as its
+  # local ref but still updates main.
   UPDATES_BRANCH=false
   while read -r _local_ref local_sha remote_ref _remote_sha; do
     [[ "$remote_ref" == refs/heads/* ]] || continue

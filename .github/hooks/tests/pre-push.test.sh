@@ -78,8 +78,8 @@ expect() {
     fail "$name" "expected the tests to run"
     return
   fi
-  if [[ "$tests" == "tests-skipped" ]] && grep -qx dotnet "$LOG"; then
-    fail "$name" "expected the tests to be skipped"
+  if [[ "$tests" == "tests-skipped" && -s "$LOG" ]]; then
+    fail "$name" "expected the lint and test gates to be skipped, but ran: $(tr '\n' ' ' < "$LOG")"
     return
   fi
   if [[ -n "$message" ]] && ! grep -qF -- "$message" <<< "$OUTPUT"; then
@@ -114,7 +114,7 @@ run_hook feature/1-x "refs/heads/main $SHA refs/heads/dev $ZERO"
 expect "pushing to dev from a feature branch is refused" refused tests-skipped "Direct pushes to 'dev' are not allowed."
 
 run_hook feature/1-x "refs/tags/v1.0.0 $SHA refs/tags/v1.0.0 $ZERO"
-expect "a tag-only push skips the gates" allowed tests-skipped "Tag push"
+expect "a tag-only push skips the gates" allowed tests-skipped "No branch updates"
 
 run_hook main "refs/tags/v1.0.0 $SHA refs/tags/v1.0.0 $ZERO
 refs/heads/feature/1-x $SHA refs/heads/feature/1-x $ZERO"
@@ -123,6 +123,12 @@ expect "a mixed tag and branch push gates the branch" allowed tests-ran
 run_hook feature/1-x "refs/tags/v1.0.0 $SHA refs/tags/v1.0.0 $ZERO
 refs/heads/feature/1-x $SHA refs/heads/bad-name $ZERO"
 expect "a mixed tag and badly named branch push is refused" refused tests-skipped "Branch name 'bad-name' does not match"
+
+run_hook feature/1-x "refs/tags/v1.0.0 $SHA refs/heads/main $ZERO"
+expect "pushing a tag to main is refused" refused tests-skipped "Direct pushes to 'main' are not allowed."
+
+run_hook main "refs/tags/v1.0.0 $SHA refs/heads/feature/1-x $ZERO"
+expect "pushing a tag to a feature branch runs the gates" allowed tests-ran
 
 run_hook main "(delete) $ZERO refs/tags/v1.0.0 $SHA"
 expect "deleting a tag skips the gates" allowed tests-skipped
