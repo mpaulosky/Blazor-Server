@@ -17,5 +17,6 @@ This repository is a GitHub template for a server-rendered Blazor Web App on .NE
 ## Project layout
 
 - `src/UI/`: the Blazor Web App.
-- `src/Core/`: feature slices and shared types such as `Result`.
+- `src/Core/`: feature slices and cross-cutting infrastructure.
+- `src/Domain/`: the Shared Kernel (`Result`/`Result<T>` and `ApplicationConstants`). It references no other project or package (see `docs/adr/0001-shared-kernel-in-domain-project.md`).
 - `tests/`: test projects named `<Project>.Tests.<Kind>`, for example `UI.Tests.Unit`, `UI.Tests.E2E`, and `Architecture.Tests`.

@@ -31,3 +31,9 @@ _Avoid_: Account, member
 **Admin**:
 A User whose Auth0 claims include the Admin role. The only audience for the Admin page, which demonstrates role-based authorization.
 _Avoid_: Administrator, superuser
+
+**Shared Kernel**:
+The set of building blocks every Generated App needs no matter what it does or where it stores data: operation
+outcomes (success or failure, with a failure category) and the names the Template itself relies on (authorization
+policy, role, cookie names). It carries no business concepts and assumes no persistence technology.
+_Avoid_: Common, Core, Utilities
