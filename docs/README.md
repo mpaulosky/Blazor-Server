@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.35](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.35) | 2026-09-24 | ci: Fail Test Report Summary when the test matrix fails | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-35-ci-fail-test-report-summary-when-the-test-matrix-fails.md) |
 | [v0.0.34](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.34) | 2026-09-24 | fix(hooks): Pre-push gate checks the checked-out branch instead of the pushed refs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-31-fix-hooks-pre-push-gate-checks-the-checked-out-branch-instead-of-the-pushed-refs.md) |
 | [v0.0.33](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.33) | 2026-09-24 | docs(blogs): Backfill missing release blog posts and link them from the README | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-26-docs-blogs-backfill-missing-release-blog-posts-and-link-them-from-the-readme.md) |
 | [v0.0.32](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.32) | 2026-09-24 | feat(sandcastle): Hold back issues whose blockers haven't landed | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-28-feat-sandcastle-hold-back-issues-whose-blockers-haven-t-landed.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.25](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.25) | 2026-09-24 | fix(sandcastle): Publish work already on an issue branch | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-12-fix-sandcastle-publish-work-already-on-an-issue-branch.md) |
 | [v0.0.23](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.23) | 2026-09-24 | chore(skills): Add code-review skill for Copilot code review | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-11-chore-skills-add-code-review-skill-for-copilot-code-review.md) |
 | [v0.0.21](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.21) | 2026-09-24 | feat(Domain): Add Domain project as the Template's Shared Kernel | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-10-feat-domain-add-domain-project-as-the-template-s-shared-kernel.md) |
-| [v0.0.19](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.19) | 2026-09-24 | chore(hooks): Fix pre-push test command, npm package name, and review prompt | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-9-chore-hooks-fix-pre-push-test-command-npm-package-name-and-review-prompt.md) |
 
 <!-- RELEASES_END -->
 
