@@ -28,7 +28,7 @@ Review the code changes on branch `{{BRANCH}}` and improve code clarity, consist
 3. **Check correctness**:
    - Does the implementation match the intent? Are edge cases handled?
    - Are new/changed behaviours covered by tests?
-   - Are there unsafe casts, `null!` suppressions, or unchecked assumptions?
+   - Are there unsafe casts, null-forgiving operators, or unchecked assumptions?
    - Does it follow the red → green history the issue asks for, with tests covering every new or changed behaviour?
    - Does the change introduce injection vulnerabilities, credential leaks, or other security issues?
 
