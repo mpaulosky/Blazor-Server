@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.31](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.31) | 2026-09-24 | fix(release): Bump the release version once instead of twice | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-25-fix-release-bump-the-release-version-once-instead-of-twice.md) |
 | [v0.0.30](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.30) | 2026-09-24 | docs(readme): Add root README with badges and auto-maintained Releases table | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-16-docs-readme-add-root-readme-with-badges-and-auto-maintained-releases-table.md) |
 | [v0.0.27](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.27) | 2026-09-24 | fix(release): Release-notes PR is never created, and the failure is hidden | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-15-fix-release-release-notes-pr-is-never-created-and-the-failure-is-hidden.md) |
 | [v0.0.25](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.25) | 2026-09-24 | fix(sandcastle): Publish work already on an issue branch | — |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.17](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.17) | 2026-09-24 | chore(sandcastle): Adapt Sandcastle for .NET and pull-request delivery | — |
 | [v0.0.15](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.15) | 2026-09-24 | chore(workflows): Remove squad workflows | — |
 | [v0.0.13](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.13) | 2026-09-24 | chore(hooks): Use feature/ and hotfix/ branch naming convention | — |
-| [v0.0.11](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.11) | 2026-09-24 | chore(build): Add coding standards, CPM, and shared build props | — |
 
 <!-- RELEASES_END -->
 
