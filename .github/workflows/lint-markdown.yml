@@ -29,7 +29,6 @@ jobs:
             !**/node_modules/**
             !**/bin/**
             !**/obj/**
-            !.squad/**
             !.copilot/**
             !.github/agents/**
             !.github/skills/**

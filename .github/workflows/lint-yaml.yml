@@ -26,8 +26,6 @@ jobs:
           file_or_dir: .
           config_data: |
             extends: default
-            ignore: |
-              .squad/
             rules:
               line-length:
                 max: 200
