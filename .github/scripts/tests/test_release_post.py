@@ -231,7 +231,7 @@ def test_same_day_posts_are_ordered_by_release_version():
         {"date": "2026-09-24", "tag": "v0.0.9", "pr": "4", "title": "a", "file": "a.md"},
         {"date": "2026-09-24", "tag": "v0.0.32", "pr": "28", "title": "b", "file": "b.md"},
     ]
-    assert [p["tag"] for p in rp.sort_posts(posts)] == ["v0.0.32", "v0.0.9"]
+    assert [p["tag"] for p in rp.newest_first(posts)] == ["v0.0.32", "v0.0.9"]
 
 
 def test_readme_without_markers_gets_releases_section_after_about(tmp_path):
