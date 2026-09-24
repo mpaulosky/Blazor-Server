@@ -48,7 +48,7 @@ public enum ResultErrorCode
 }
 
 /// <summary>
-///     Represents the success or failure outcome of a domain operation.
+///     Represents the success or failure outcome of an operation.
 /// </summary>
 public class Result
 {
@@ -195,7 +195,7 @@ public class Result
 }
 
 /// <summary>
-///     Represents the success or failure outcome of a domain operation that returns a value.
+///     Represents the success or failure outcome of an operation that returns a value.
 /// </summary>
 /// <typeparam name="T">The value type.</typeparam>
 public sealed class Result<T> : Result
