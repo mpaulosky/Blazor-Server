@@ -43,9 +43,12 @@ jobs:
           branch: ${{ github.ref }}
           dir: ${{ './' }}
 
+      # Only open a metrics PR from main. Pull request runs check out a detached
+      # merge commit (refs/pull/N/merge), which create-pull-request can't use as a
+      # base, and a manual run from another branch must not publish metrics either.
       - name: Create pull request
         uses: peter-evans/create-pull-request@v8.1.1
-        if: ${{ steps.dotnet-code-metrics.outputs.updated-metrics == 'true' }}
+        if: ${{ github.ref == 'refs/heads/main' && steps.dotnet-code-metrics.outputs.updated-metrics == 'true' }}
         with:
           title: "${{ steps.dotnet-code-metrics.outputs.summary-title }}"
           body: "${{ steps.dotnet-code-metrics.outputs.summary-details }}"

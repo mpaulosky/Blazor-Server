@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="Architecture.Tests" />
+		<InternalsVisibleTo Include="Domain.Tests.Unit" />
+	</ItemGroup>
+
+</Project>

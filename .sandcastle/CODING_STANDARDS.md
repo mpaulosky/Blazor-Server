@@ -97,7 +97,7 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 
 ### Error handling and configuration
 
-- Handlers return a `Result` or `Result<T>` (defined once in the Core library) for expected failures such as validation errors, not-found, and forbidden. Don't use exceptions for control flow.
+- Handlers return a `Result` or `Result<T>` (defined once in the Domain project) for expected failures such as validation errors, not-found, and forbidden. Don't use exceptions for control flow.
 - Throw exceptions only for truly unexpected failures, such as bugs, infrastructure outages, and violated invariants. Let them reach the global error handler or an `<ErrorBoundary>` rather than catching them to return a failed `Result`.
 - Callers must check a `Result` before using its value. Components show `Result` errors to the user, and endpoints map them to `ProblemDetails` with the matching status code.
 - Carry a stable error code (for example `"Palette.Unknown"`) and a human-readable message on each error, so tests can assert on the code.
