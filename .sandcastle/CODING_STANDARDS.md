@@ -112,11 +112,11 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - **NSubstitute** for test doubles. Only substitute interfaces, never concrete classes.
 - **bUnit** for Blazor component tests.
 - **`Microsoft.AspNetCore.Mvc.Testing`** (`WebApplicationFactory<Program>`) for integration tests of endpoints, middleware, authorization policies, and DI wiring.
-- **Playwright** for end-to-end tests. CI installs browsers automatically for any project that references `Microsoft.Playwright`, and supplies Auth0 settings and a test user for each role through environment variables. E2E tests start the app through the Aspire AppHost. Read credentials from configuration, and never hardcode them.
+- **Playwright** for end-to-end tests. Keep Playwright tests in `*.Tests.E2E` projects. CI builds any project that references `Microsoft.Playwright` and installs its browsers, and supplies Auth0 settings and a test user for each role through environment variables. E2E tests start the app through the Aspire AppHost. Read credentials from configuration, and never hardcode them.
 
 ### Conventions
 
-- Put test projects under `tests/` and give them names ending in `.Tests`. `Directory.Build.props` uses that suffix to apply test-only settings. Mirror the namespaces and folder layout of the production code they cover.
+- Put test projects under `tests/`, named `<Project>.Tests.<Kind>` (`Web.Tests.Unit`, `Web.Tests.Integration`, `Web.Tests.E2E`) or `Architecture.Tests`, as in `docs/CONTRIBUTING.md`. `Directory.Build.props` applies test-only settings to any project whose name contains `.Tests`. Mirror the namespaces and folder layout of the production code they cover.
 - Name test methods `MethodUnderTest_Scenario_ExpectedResult`. `.editorconfig` suppresses CA1707 in tests to allow the underscores.
 - Structure every test as Arrange/Act/Assert, marked with `// Arrange`, `// Act`, and `// Assert` comments. All three comments are required, even when a section is empty.
 - Test one behavior per test. Use `[Theory]` with `[InlineData]` or `[MemberData]` instead of copy-pasting near-identical `[Fact]`s.
