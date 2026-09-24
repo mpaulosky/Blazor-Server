@@ -70,8 +70,6 @@ env:
   # Role test-user credentials for Web.E2E.Tests' authenticated Playwright fixtures
   Auth0__E2E__Admin__Username: ${{ secrets.AUTH0_ADMIN_USERNAME }}
   Auth0__E2E__Admin__Password: ${{ secrets.AUTH0_ADMIN_PASSWORD }}
-  Auth0__E2E__Author__Username: ${{ secrets.AUTH0_AUTHOR_USERNAME }}
-  Auth0__E2E__Author__Password: ${{ secrets.AUTH0_AUTHOR_PASSWORD }}
   Auth0__E2E__User__Username: ${{ secrets.AUTH0_USER_USERNAME }}
   Auth0__E2E__User__Password: ${{ secrets.AUTH0_USER_PASSWORD }}
 
