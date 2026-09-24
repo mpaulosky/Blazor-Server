@@ -177,9 +177,11 @@ jobs:
 
           # Base on the highest release tag by version, then bump exactly
           # once. Not `git describe`: that returns the nearest ancestor tag,
-          # which isn't guaranteed to be the highest version.
+          # which isn't guaranteed to be the highest version. `|| true` keeps
+          # a repo with no release tags yet (grep exits 1) on the fallback
+          # below if the step ever runs with pipefail.
           LAST_TAG=$(git tag --list 'v[0-9]*' --sort=-v:refname \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)
           LAST_TAG="${LAST_TAG:-v0.0.0}"
           BASE_VERSION="${LAST_TAG#v}"
 
