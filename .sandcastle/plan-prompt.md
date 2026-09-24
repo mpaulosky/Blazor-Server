@@ -8,7 +8,9 @@ Here are the open issues in the repo:
 
 </issues-json>
 
-The list above has already been filtered to issues ready for work. Issues with an explicit blocker (a GitHub "blocked by" link, or a "Blocked by #N" or "Depends on #N" line) whose work hasn't landed on main were removed before you saw the list, so don't hold an issue back only because its body mentions an issue that isn't in the list: that issue is either finished or outside this backlog.
+The list above has already been filtered to issues ready for work.
+Issues with an explicit blocker (a GitHub "blocked by" link, or a "Blocked by #N" or "Depends on #N" line) whose work hasn't landed on main were removed before you saw the list.
+So don't hold an issue back only because its body mentions an issue that isn't in the list: that issue is either finished or outside this backlog.
 
 These branches already have an open pull request:
 
