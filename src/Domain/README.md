@@ -1,10 +1,13 @@
 # Domain
 
-The Template's **Shared Kernel** (see [CONTEXT.md](../../CONTEXT.md)): the building blocks every Generated App needs, no matter what it does or where it stores data. Both `Core` and `UI` reference it.
+The Template's **Shared Kernel** (see [CONTEXT.md](../../CONTEXT.md)): the building blocks every Generated App
+needs, no matter what it does or where it stores data. The `Core` and `UI` projects, once they exist, reference it.
 
 ## Contents
 
-- `Abstractions/Result.cs`: operation outcomes. `Result` and `Result<T>` report success or failure, and a failure carries a message, a `ResultErrorCode` category (`NotFound`, `Validation`, `Conflict`, ...) and optional details. Handlers return them for expected failures instead of throwing.
+- `Abstractions/Result.cs`: operation outcomes. `Result` and `Result<T>` report success or failure, and a failure
+  carries a message, a `ResultErrorCode` category (`NotFound`, `Validation`, `Conflict`, ...) and optional details.
+  Handlers return them for expected failures instead of throwing.
 - `Constants/ApplicationConstants.cs`: the names the Template itself relies on, such as the Admin policy and role, the Theme and Palette cookie names, and the Aspire resource name of the UI project.
 
 ## Rules
