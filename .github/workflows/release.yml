@@ -393,6 +393,13 @@ jobs:
                     "name": release.get("name") or release["tag_name"],
                 }
             )
+          # Sort before slicing: a workflow_dispatch re-run for an older PR
+          # must not pin its in-flight row above newer releases.
+          def entry_sort_key(entry):
+            version = re.match(r"v?(\d+)\.(\d+)\.(\d+)", entry["tag"])
+            return (entry["date"], tuple(int(p) for p in version.groups()) if version else (0, 0, 0))
+
+          entries.sort(key=entry_sort_key, reverse=True)
           entries = entries[:10]
 
           release_rows = []
@@ -428,6 +435,16 @@ jobs:
 
           readme_path = Path("README.md")
           readme = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
+
+          # Migrate READMEs written by the previous workflow: drop the legacy
+          # Dev Blog section and its BLOG_START/BLOG_END block.
+          readme = re.sub(
+              r"(?:^## Dev Blog[^\n]*\n\s*)?<!-- BLOG_START -->.*?<!-- BLOG_END -->\n?",
+              "",
+              readme,
+              flags=re.DOTALL | re.MULTILINE,
+          )
+          readme = re.sub(r"\n{3,}", "\n\n", readme).strip("\n") + "\n" if readme.strip() else ""
 
           if "<!-- RELEASES_START -->" in readme and "<!-- RELEASES_END -->" in readme:
             readme = re.sub(

@@ -8,7 +8,7 @@
 
 [![Codecov](https://img.shields.io/codecov/c/github/mpaulosky/Blazor-Server?logo=codecov)](https://codecov.io/gh/mpaulosky/Blazor-Server)
 [![Latest release](https://img.shields.io/github/v/release/mpaulosky/Blazor-Server)](https://github.com/mpaulosky/Blazor-Server/releases/latest)
-[![License](https://img.shields.io/github/license/mpaulosky/Blazor-Server)](LICENSE)
+[![License](https://img.shields.io/github/license/mpaulosky/Blazor-Server)](https://github.com/mpaulosky/Blazor-Server/blob/main/LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 [![Open issues](https://img.shields.io/github/issues/mpaulosky/Blazor-Server)](https://github.com/mpaulosky/Blazor-Server/issues)
@@ -30,7 +30,7 @@ The Template is intended to give every Generated App:
 - Auth0 authentication and authorization, distinguishing a **Visitor** (unauthenticated), a **User** (authenticated)
   and an **Admin** (a User with the Admin role).
 
-See [CONTEXT.md](CONTEXT.md) for the exact meaning of these terms.
+See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md) for the exact meaning of these terms.
 
 **Status:** early stage. The Template currently contains only the **Shared Kernel** (`src/Domain`) and its tests.
 
@@ -67,7 +67,7 @@ See [CONTEXT.md](CONTEXT.md) for the exact meaning of these terms.
 
 2. Install the prerequisites:
 
-   - The .NET SDK `10.0.401`, as pinned in [global.json](global.json) (later 10.0 feature bands are accepted).
+   - The .NET SDK `10.0.401`, as pinned in [global.json](https://github.com/mpaulosky/Blazor-Server/blob/main/global.json) (later 10.0 feature bands are accepted).
    - Node.js and npm, used by the git hooks and the lint tools.
 
 3. Install the npm packages, then build and test:
@@ -88,8 +88,8 @@ See [CONTEXT.md](CONTEXT.md) for the exact meaning of these terms.
 
 - Replace this README with one that describes your Generated App.
 - Repoint the badges at your own repository, or remove them.
-- Decide whether to keep the release automation: [release.yml](.github/workflows/release.yml) tags a release and
-  opens a release-notes PR for every merged PR, and [sync-readme.yml](.github/workflows/sync-readme.yml) copies
+- Decide whether to keep the release automation: [release.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/release.yml) tags a release and
+  opens a release-notes PR for every merged PR, and [sync-readme.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/sync-readme.yml) copies
   `README.md` to `docs/README.md`. Delete both workflows if you don't want them.
 
 ## Project layout
@@ -115,11 +115,12 @@ All of the following are *planned* and don't exist yet:
 
 ## Contributing
 
-- Name branches `feature/{issue}-{slug}` or `hotfix/{issue}-{slug}`, for example `feature/14-add-root-readme`.
+- Name branches `feature/{issue}-{slug}` for issue work, `hotfix/{issue}-{slug}` for bug fixes, or `chore/{slug}`
+  for maintenance with no issue, for example `feature/14-add-root-readme`.
 - Issues labelled `Sandcastle` are worked by Sandcastle agents, which open a pull request for review.
-- Read [CONTRIBUTING.md](docs/CONTRIBUTING.md), the [Code of Conduct](docs/CODE_OF_CONDUCT.md) and the
-  [Security Policy](docs/SECURITY.md) before contributing.
+- Read [CONTRIBUTING.md](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CONTRIBUTING.md), the [Code of Conduct](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CODE_OF_CONDUCT.md) and the
+  [Security Policy](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/SECURITY.md) before contributing.
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](https://github.com/mpaulosky/Blazor-Server/blob/main/LICENSE).
