@@ -5,7 +5,9 @@ applyTo: '**/*.md'
 
 # Markdown Instructions
 
-`markdownlint-cli2` enforces these rules in CI, using `.markdownlint-cli2.jsonc`.
+`markdownlint-cli2` enforces these rules in CI and in the pre-commit and pre-push hooks, using `.markdownlint-cli2.jsonc`.
+Its `ignores` list skips vendored skills and agents and the release blog posts in `docs/blogs/`, which the release workflow generates from PR bodies.
+`.sandcastle/.markdownlint-cli2.jsonc` also allows several top-level headings in the Sandcastle prompts.
 
 ## Structure
 

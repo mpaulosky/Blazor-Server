@@ -34,8 +34,8 @@ entities, feature logic, validators, persistence types, or a new reference there
 **Tests.** Every new or changed behaviour has a test, following the Testing section of `CODING_STANDARDS.md`. For a
 `Result`-returning handler, that means its success value and each error code it can return.
 
-**Markdown.** Lines stay within 200 characters (`.markdownlint-cli2.jsonc`). Review this by eye:
-`.markdownlint.json` sets `"default": false`, so CI's markdownlint passes over-long lines.
+**Markdown.** Lines stay within 200 characters. CI's markdownlint enforces this and the other rules in
+`.markdownlint-cli2.jsonc`, except in the paths it ignores, such as the generated posts in `docs/blogs/`.
 
 **Workflows and hooks.** Steps that publish anything (open a PR, push, tag, release) run only for `main`: a
 `github.ref == 'refs/heads/main'` check, or a merged-into-`main` condition as in `release.yml`. `workflow_dispatch`
