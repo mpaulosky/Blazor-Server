@@ -43,9 +43,11 @@ jobs:
           branch: ${{ github.ref }}
           dir: ${{ './' }}
 
+      # Only open a metrics PR from main. On pull_request events the checkout is a
+      # detached merge commit, which create-pull-request can't use as a base.
       - name: Create pull request
         uses: peter-evans/create-pull-request@v8.1.1
-        if: ${{ steps.dotnet-code-metrics.outputs.updated-metrics == 'true' }}
+        if: ${{ github.event_name != 'pull_request' && steps.dotnet-code-metrics.outputs.updated-metrics == 'true' }}
         with:
           title: "${{ steps.dotnet-code-metrics.outputs.summary-title }}"
           body: "${{ steps.dotnet-code-metrics.outputs.summary-details }}"
