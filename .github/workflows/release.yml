@@ -158,56 +158,32 @@ jobs:
             echo "already_released=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup .NET
-        if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true'
-        uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
-      - name: Install GitVersion
-        if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true'
-        continue-on-error: true
-        uses: gittools/actions/gitversion/setup@v4.7.0
-        with:
-          versionSpec: "6.x"
-
-      - name: Get version base from GitVersion
-        if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true'
-        id: gitversion
-        continue-on-error: true
-        uses: gittools/actions/gitversion/execute@v4.7.0
-        with:
-          configFilePath: GitVersion.yml
-
       - name: Compute next version
         if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true'
         id: version
         env:
           LABELS_JSON: ${{ steps.pr.outputs.labels }}
-          GV_MAJOR: ${{ steps.gitversion.outputs.major }}
-          GV_MINOR: ${{ steps.gitversion.outputs.minor }}
-          GV_PATCH: ${{ steps.gitversion.outputs.patch }}
-          GV_MMP: ${{ steps.gitversion.outputs.majorMinorPatch }}
-          GV_OUTCOME: ${{ steps.gitversion.outcome }}
         run: |
+          # any() is required: with `.[] | test(...)`, jq -e exits on the
+          # last label only, so e.g. ["semver:minor","bug"] would miss minor.
           BUMP=patch
-          if echo "$LABELS_JSON" | jq -e '.[] | test("^(semver|release):major$")' >/dev/null; then
+          if echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):major$"))' >/dev/null; then
             BUMP=major
-          elif echo "$LABELS_JSON" | jq -e '.[] | test("^(semver|release):minor$")' >/dev/null; then
+          elif echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):minor$"))' >/dev/null; then
             BUMP=minor
-          elif echo "$LABELS_JSON" | jq -e '.[] | test("^(semver|release):patch$")' >/dev/null; then
+          elif echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):patch$"))' >/dev/null; then
             BUMP=patch
           fi
 
-          BASE_VERSION=""
-          if [ "$GV_OUTCOME" = "success" ] && [ -n "$GV_MMP" ]; then
-            BASE_VERSION="$GV_MMP"
-          elif [ "$GV_OUTCOME" = "success" ] && [ -n "$GV_MAJOR" ] && [ -n "$GV_MINOR" ] && [ -n "$GV_PATCH" ]; then
-            BASE_VERSION="${GV_MAJOR}.${GV_MINOR}.${GV_PATCH}"
-          else
-            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            BASE_VERSION="${LAST_TAG#v}"
-          fi
+          # Base on the highest release tag by version, then bump exactly
+          # once. Not `git describe`: that returns the nearest ancestor tag,
+          # which isn't guaranteed to be the highest version. `|| true` keeps
+          # a repo with no release tags yet (grep exits 1) on the fallback
+          # below if the step ever runs with pipefail.
+          LAST_TAG=$(git tag --list 'v[0-9]*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)
+          LAST_TAG="${LAST_TAG:-v0.0.0}"
+          BASE_VERSION="${LAST_TAG#v}"
 
           if ! echo "$BASE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             BASE_VERSION="0.0.0"
