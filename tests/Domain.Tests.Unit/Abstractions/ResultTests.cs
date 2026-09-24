@@ -247,4 +247,42 @@ public class ResultTests
 		result.Failure.Should().BeTrue();
 		result.Value.Should().BeNull();
 	}
+
+	[Fact]
+	public void FromValue_NullValue_ReturnsSameFailureMessageAsTypedFromValue()
+	{
+		// Arrange
+		string? value = null;
+
+		// Act
+		Result<string> fromResult = Result.FromValue(value);
+		Result<string> fromTyped = Result<string>.FromValue(value);
+
+		// Assert
+		fromResult.Error.Should().NotBeNullOrWhiteSpace();
+		fromResult.Error.Should().Be(fromTyped.Error);
+	}
+
+	[Theory]
+	[InlineData(nameof(Result.FromValue))]
+	[InlineData("Result<T>.FromValue")]
+	[InlineData("implicit")]
+	public void FromValue_NullValue_ReturnsValidationFailure(string factory)
+	{
+		// Arrange
+		string? value = null;
+
+		// Act
+		Result<string> result = factory switch
+		{
+			nameof(Result.FromValue) => Result.FromValue(value),
+			"Result<T>.FromValue" => Result<string>.FromValue(value),
+			_ => value,
+		};
+
+		// Assert
+		result.Failure.Should().BeTrue();
+		result.ErrorCode.Should().Be(ResultErrorCode.Validation);
+		result.Details.Should().BeNull();
+	}
 }

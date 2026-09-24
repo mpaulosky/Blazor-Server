@@ -187,10 +187,10 @@ public class Result
 	/// </summary>
 	/// <typeparam name="T">The value type.</typeparam>
 	/// <param name="value">The value to wrap.</param>
-	/// <returns>A typed result containing the value or a failure when the value is null.</returns>
+	/// <returns>A typed result containing the value, or a validation failure when the value is null.</returns>
 	public static Result<T> FromValue<T>(T? value)
 	{
-		return value is not null ? Ok(value) : Result<T>.Fail("Provided value is null.");
+		return Result<T>.FromValue(value);
 	}
 }
 
@@ -215,6 +215,8 @@ public sealed class Result<T> : Result
 		Value = value;
 	}
 
+	private const string NullValueError = "Value cannot be null.";
+
 	/// <summary>
 	///     Gets the operation value when the result is successful.
 	/// </summary>
@@ -238,12 +240,10 @@ public sealed class Result<T> : Result
 	///     Creates a successful result when a value is present; otherwise, creates a failed result.
 	/// </summary>
 	/// <param name="value">The value to wrap.</param>
-	/// <returns>A typed result containing the value or a failure when the value is null.</returns>
+	/// <returns>A typed result containing the value, or a validation failure when the value is null.</returns>
 	public static Result<T> FromValue(T? value)
 	{
-		if (value is null)
-			return Fail("Value cannot be null.");
-		return Ok(value);
+		return value is null ? Fail(NullValueError, ResultErrorCode.Validation) : Ok(value);
 	}
 
 	/// <summary>
