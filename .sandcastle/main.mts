@@ -1,6 +1,10 @@
 // Parallel Planner with Review — plan → execute → review → PR loop
 //
 // This template drives a multi-phase workflow:
+//   Phase 0 (Gate):             The host resolves each open issue's blockers
+//                               (GitHub "blocked by" links and "Blocked by #N"
+//                               / "Depends on #N" lines) and holds back every
+//                               issue whose blocker hasn't landed yet.
 //   Phase 1 (Plan):             An opus agent analyzes open issues, builds a
 //                               dependency graph, and outputs a <plan> JSON
 //                               listing unblocked issues with branch names.
@@ -57,6 +61,129 @@ function publish(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Blocker gate
+//
+// An issue is blocked while any issue it depends on is unfinished. Blockers
+// come from two places: GitHub's native "blocked by" relationships and lines
+// in the issue body that start with "Blocked by #N" or "Depends on #N". A
+// blocker is finished only when it closed as completed (for an issue) or was
+// merged (for a PR). An open blocker, one closed as not planned or duplicate,
+// or a PR closed without merging keeps the dependent issue blocked, since the
+// code it needs never reached main.
+// ---------------------------------------------------------------------------
+
+type SandcastleIssue = {
+  number: number;
+  title: string;
+  body: string;
+  labels: string[];
+  comments: string[];
+};
+
+type Blocker = {
+  number: number;
+  state: string;
+  state_reason: string | null;
+  merged_at: string | null;
+  is_pr: boolean;
+};
+
+const blockerFields =
+  "{number, state, state_reason, merged_at: (.pull_request.merged_at // null), is_pr: (.pull_request != null)}";
+
+const REPO = sh(process.cwd(), "gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner");
+
+const blockerCache = new Map<number, Blocker>();
+
+// Undefined when the lookup fails (a mistyped number 404s, the network drops).
+// Callers treat that as still blocking, so one bad reference holds back only
+// its own issue instead of aborting the whole run.
+function fetchBlocker(number: number): Blocker | undefined {
+  let blocker = blockerCache.get(number);
+  if (!blocker) {
+    try {
+      blocker = JSON.parse(
+        sh(process.cwd(), "gh", "api", `repos/${REPO}/issues/${number}`, "--jq", blockerFields),
+      ) as Blocker;
+    } catch {
+      return undefined;
+    }
+    blockerCache.set(number, blocker);
+  }
+  return blocker;
+}
+
+// Issue numbers named on "Blocked by #N" / "Depends on #N" lines in the body.
+// Only line starts count, so prose such as "reuses the generator from #22"
+// doesn't create a dependency.
+function bodyBlockers(body: string): number[] {
+  const numbers: number[] = [];
+  for (const line of body.split("\n")) {
+    const match = /^\s*(?:[-*]\s+)?\**(?:blocked by|depends on)\**:?\s*(.*)$/i.exec(line);
+    if (!match) continue;
+    for (const ref of match[1]!.matchAll(/(?<![\w/])#(\d+)\b/g)) numbers.push(Number(ref[1]));
+  }
+  return numbers;
+}
+
+// Why a blocker still blocks, or undefined when it has landed.
+function unfinishedReason(blocker: Blocker): string | undefined {
+  const ref = `#${blocker.number}`;
+  if (blocker.state === "open") return `${ref} is still open`;
+  if (blocker.is_pr) return blocker.merged_at ? undefined : `${ref} was closed without merging`;
+  if (blocker.state_reason === "completed") return undefined;
+  return `${ref} was closed as ${blocker.state_reason ?? "unknown"}, so its work never landed`;
+}
+
+// Split the open Sandcastle issues into those ready to plan and those waiting
+// on an unfinished blocker, with the reasons for each held-back issue.
+function gateIssues(): { ready: SandcastleIssue[]; blocked: { issue: SandcastleIssue; reasons: string[] }[] } {
+  const issues = JSON.parse(
+    sh(
+      process.cwd(), "gh", "issue", "list", "--state", "open", "--label", "Sandcastle", "--limit", "100",
+      "--json", "number,title,body,labels,comments",
+      "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]",
+    ),
+  ) as SandcastleIssue[];
+
+  const ready: SandcastleIssue[] = [];
+  const blocked: { issue: SandcastleIssue; reasons: string[] }[] = [];
+
+  for (const issue of issues) {
+    let native: Blocker[];
+    try {
+      native = sh(
+        process.cwd(), "gh", "api", "--paginate", `repos/${REPO}/issues/${issue.number}/dependencies/blocked_by`,
+        "--jq", `.[] | ${blockerFields}`,
+      )
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Blocker);
+    } catch {
+      // Without its native links the issue's blockers are unknown, so hold it back.
+      blocked.push({ issue, reasons: ["its GitHub \"blocked by\" links couldn't be read"] });
+      continue;
+    }
+    for (const blocker of native) blockerCache.set(blocker.number, blocker);
+
+    const numbers = new Set([...native.map((b) => b.number), ...bodyBlockers(issue.body)]);
+    numbers.delete(issue.number);
+
+    const reasons = [...numbers]
+      .map((number) => {
+        const blocker = fetchBlocker(number);
+        return blocker ? unfinishedReason(blocker) : `#${number} couldn't be fetched`;
+      })
+      .filter((reason): reason is string => reason !== undefined);
+
+    if (reasons.length > 0) blocked.push({ issue, reasons });
+    else ready.push(issue);
+  }
+
+  return { ready, blocked };
+}
+
 // Count the commits on the worktree's branch that origin/main doesn't have.
 // origin/main is refreshed once per round, before the pipelines start, because
 // concurrent fetches from each pipeline would contend on the same ref lock.
@@ -101,9 +228,31 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
   // -------------------------------------------------------------------------
+  // Phase 0: Gate
+  //
+  // Blockers are resolved afresh every round: an issue whose blocker's PR
+  // merged during the previous round becomes ready now.
+  // -------------------------------------------------------------------------
+  blockerCache.clear();
+  const { ready, blocked } = gateIssues();
+
+  for (const { issue, reasons } of blocked) {
+    console.log(`  ⏸ #${issue.number} is blocked: ${reasons.join("; ")}`);
+  }
+
+  if (ready.length === 0) {
+    console.log(
+      blocked.length > 0
+        ? "Every open issue is waiting on a blocker. Exiting."
+        : "No open Sandcastle issues. Exiting.",
+    );
+    break;
+  }
+
+  // -------------------------------------------------------------------------
   // Phase 1: Plan
   //
-  // The planning agent (opus, for deeper reasoning) reads the open issue list,
+  // The planning agent (opus, for deeper reasoning) reads the ready issues,
   // builds a dependency graph, and selects the issues that can be worked in
   // parallel right now (i.e., no blocking dependencies on other open issues).
   //
@@ -119,13 +268,22 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // Opus for planning: dependency analysis benefits from deeper reasoning.
     agent: sandcastle.claudeCode("claude-opus-5-5"),
     promptFile: "./.sandcastle/plan-prompt.md",
+    // Only issues that passed the blocker gate reach the planner.
+    promptArgs: { ISSUES_JSON: JSON.stringify(ready) },
     // Extract and validate the <plan> JSON into a typed object. Throws
     // StructuredOutputError if the tag is missing, the JSON is malformed, or
     // validation fails — which aborts the loop.
     output: sandcastle.Output.object({ tag: "plan", schema: planSchema }),
   });
 
-  const issues = plan.output.issues;
+  // The planner only saw ready issues, but enforce the gate in code so a
+  // hallucinated or stale id can't start work on a blocked issue.
+  const readyIds = new Set(ready.map((issue) => String(issue.number)));
+  const issues = plan.output.issues.filter((issue) => {
+    if (readyIds.has(issue.id)) return true;
+    console.log(`  ⏸ Dropping #${issue.id} from the plan: it didn't pass the blocker gate.`);
+    return false;
+  });
 
   if (issues.length === 0) {
     // No unblocked work — either everything is done or everything is blocked.
