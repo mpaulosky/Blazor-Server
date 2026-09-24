@@ -1,4 +1,4 @@
-// Parallel Planner with Review — four-phase orchestration loop
+// Parallel Planner with Review — plan → execute → review → PR loop
 //
 // This template drives a multi-phase workflow:
 //   Phase 1 (Plan):             An opus agent analyzes open issues, builds a
@@ -10,11 +10,11 @@
 //                               reviewer runs in the same sandbox on the same
 //                               branch (1 iteration). All issue pipelines run
 //                               concurrently via Promise.allSettled().
-//   Phase 3 (Merge):            A single agent merges all completed branches
-//                               into the current branch.
+//                               The branch is then pushed and gets a pull
+//                               request that closes its issue.
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
-// issues are picked up after each round of merges.
+// issues are picked up after each round; issues with an open PR are skipped.
 //
 // Usage:
 //   npx tsx .sandcastle/main.mts
@@ -23,7 +23,34 @@
 
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { execFileSync } from "node:child_process";
 import { z } from "zod";
+
+// Run a command on the host in `cwd` and return trimmed stdout. Throws on failure.
+const sh = (cwd: string, cmd: string, ...args: string[]) =>
+  execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+
+// Push an issue branch from its worktree and open (or reuse) the PR that closes
+// the issue. Pushing from the worktree matters: the pre-push hook checks the
+// checked-out branch's name and runs lint and tests against that tree.
+function publish(
+  issue: { id: string; title: string; branch: string },
+  worktreePath: string,
+): string {
+  sh(worktreePath, "git", "push", "--force-with-lease", "-u", "origin", issue.branch);
+
+  const existing = sh(
+    worktreePath, "gh", "pr", "list", "--head", issue.branch, "--state", "open",
+    "--json", "url", "--jq", ".[0].url",
+  );
+  if (existing) return existing;
+
+  return sh(
+    worktreePath, "gh", "pr", "create", "--base", "main", "--head", issue.branch,
+    "--title", issue.title,
+    "--body", `Closes #${issue.id}\n\nImplemented and reviewed by Sandcastle.`,
+  );
+}
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts
 // and validates it against this schema. We use Zod here, but any Standard
@@ -106,7 +133,9 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   //
   // For each issue, create a sandbox via createSandbox() so the implementer
   // and reviewer share the same sandbox instance per branch. The implementer
-  // runs first; if it produces commits, the reviewer runs in the same sandbox.
+  // runs first; if it produces commits, the reviewer runs in the same sandbox,
+  // and then the branch is pushed and gets a pull request that closes its issue.
+  // Nothing is merged locally: every change reaches main through a reviewed PR.
   //
   // Promise.allSettled means one failing pipeline doesn't cancel the others.
   // -------------------------------------------------------------------------
@@ -146,15 +175,14 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             },
           });
 
-          // Merge commits from both runs so the merge phase sees all of them.
-          // Each sandbox.run() only returns commits from its own run.
+          // Publish while the worktree still exists; close() may remove it.
           return {
-            ...review,
             commits: [...implement.commits, ...review.commits],
+            prUrl: publish(issue, sandbox.worktreePath),
           };
         }
 
-        return implement;
+        return { commits: implement.commits, prUrl: undefined };
       } finally {
         await sandbox.close();
       }
@@ -170,57 +198,16 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     }
   }
 
-  // Only pass branches that actually produced commits to the merge phase.
-  // An agent that ran successfully but made no commits has nothing to merge.
-  const completedIssues = settled
-    .map((outcome, i) => ({ outcome, issue: issues[i]! }))
-    .filter(
-      (entry) =>
-        entry.outcome.status === "fulfilled" &&
-        entry.outcome.value.commits.length > 0,
-    )
-    .map((entry) => entry.issue);
-
-  const completedBranches = completedIssues.map((i) => i.branch);
-
-  console.log(
-    `\nExecution complete. ${completedBranches.length} branch(es) with commits:`,
+  const published = settled.flatMap((outcome, i) =>
+    outcome.status === "fulfilled" && outcome.value.prUrl
+      ? [{ issue: issues[i]!, prUrl: outcome.value.prUrl }]
+      : [],
   );
-  for (const branch of completedBranches) {
-    console.log(`  ${branch}`);
+
+  console.log(`\nExecution complete. ${published.length} pull request(s):`);
+  for (const { issue, prUrl } of published) {
+    console.log(`  ${issue.id} (${issue.branch}) → ${prUrl}`);
   }
-
-  if (completedBranches.length === 0) {
-    // All agents ran but none made commits — nothing to merge this cycle.
-    console.log("No commits produced. Nothing to merge.");
-    continue;
-  }
-
-  // -------------------------------------------------------------------------
-  // Phase 3: Merge
-  //
-  // One agent merges all completed branches into the current branch,
-  // resolving any conflicts and running tests to confirm everything works.
-  //
-  // The {{BRANCHES}} and {{ISSUES}} prompt arguments are lists that the agent
-  // uses to know which branches to merge and which issues to close.
-  // -------------------------------------------------------------------------
-  await sandcastle.run({
-    hooks,
-    sandbox: docker(),
-    name: "merger",
-    maxIterations: 1,
-    agent: sandcastle.claudeCode("claude-opus-5-5"),
-    promptFile: "./.sandcastle/merge-prompt.md",
-    promptArgs: {
-      // A markdown list of branch names, one per line.
-      BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
-      // A markdown list of issue IDs and titles, one per line.
-      ISSUES: completedIssues.map((i) => `- ${i.id}: ${i.title}`).join("\n"),
-    },
-  });
-
-  console.log("\nBranches merged.");
 }
 
 console.log("\nAll done.");
