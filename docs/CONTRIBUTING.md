@@ -38,60 +38,55 @@ We have adopted a code of conduct from the Contributor Covenant. Contributors to
 
 ## What should I know before I get started
 
-This project is a project to build a [describe your solution, e.g., web application] with [technology stack, e.g., .NET, Blazor, MongoDB].
+This project is a GitHub template for a server-rendered Blazor Web App built with .NET 10, C# 14, Tailwind CSS v4, and Auth0 authentication. See [CONTEXT.md](../CONTEXT.md) for the domain language.
 
 ### Code Style & Commit Messages
 
-- Use consistent formatting (C# conventions, .editorconfig if present).
-- Write clear, descriptive commit messages:
-  - Use present tense (e.g., "Add search feature")
-  - Reference issues (e.g., `Fixes #123`)
-- Add comments to explain complex logic.
+- Follow the coding standards in [.sandcastle/CODING_STANDARDS.md](../.sandcastle/CODING_STANDARDS.md) and the formatting rules in `.editorconfig`.
+- Write commit messages in the `<type>(<scope>): <Summary>` format described in [git-commit-instructions.md](../.github/instructions/git-commit-instructions.md), and reference issues (e.g., `Fixes #123`).
+- Add comments to explain *why* for complex logic.
 
 ### Project Folder Structure
 
 This project is designed to be built and run primarily with [your preferred IDEs/editors]. The folders are configured so that they will support editing and working in other editors and on other operating systems. We encourage you to develop with these other environments, because we would like to be able to support developers who use those tools as well. The folders are configured as follows:
 
-```bash
+```text
 docs/                                   -- Documentation and guides
 
 src/                                    -- Source code
-  Api/                                  -- API project
-    Properties/                         -- API project properties
-    bin/                                -- Build output
-    obj/                                -- Build objects
-    appsettings.json                    -- API configuration
-    appsettings.Development.json        -- API development config
-  Shared/                               -- Domain models, interfaces, and shared code
-    bin/                                -- Build output
-    obj/                                -- Build objects
-  UI/                                   -- UI project
-    Components/                         -- Blazor components
+  AppHost/                              -- Aspire AppHost (local orchestration, E2E host)
+  Core/                                 -- Class library: feature slices and shared types
+    Features/                           -- One folder per feature (Vertical Slice Architecture)
+      <Feature>/                        -- Requests, handlers, validators for one use case
+    Shared/                             -- Cross-cutting types (e.g. Result, Result<T>)
+  ServiceDefaults/                      -- Aspire service defaults (telemetry, health checks)
+  UI/                                   -- Blazor Web App (server-rendered)
+    Components/                         -- App-wide components
       Layout/                           -- Layout components
-      Pages/                            -- Page components
       _Imports.razor                    -- Razor imports
       App.razor                         -- App root component
       Routes.razor                      -- Route definitions
+    Features/                           -- Feature pages and components, one folder per feature
+    Styles/                             -- Tailwind CSS v4 sources
     Properties/                         -- UI project properties
     wwwroot/                            -- Static web assets (CSS, JS, etc.)
-    bin/                                -- Build output
-    obj/                                -- Build objects
     appsettings.json                    -- UI configuration
     appsettings.Development.json        -- UI development config
 
-tests/                                  -- Unit and Integration tests
-  Api.Tests.Integration/                -- API integration tests
-  Api.Tests.Unit/                       -- API unit tests
-  Architecture.Tests/                   -- Architecture and design rules tests
-  Shared.Tests.Unit/                    -- Shared library unit tests
-  UI.Tests.Integration/                 -- UI integration tests
-  UI.Tests.Unit/                        -- UI unit tests
+tests/                                  -- Test projects (<Project>.Tests.<Kind>)
+  Architecture.Tests/                   -- Architecture and slice-boundary rules
+  Core.Tests.Unit/                      -- Core handler and validator unit tests
+  UI.Tests.Unit/                        -- UI component tests (bUnit)
+  UI.Tests.Integration/                 -- UI integration tests (WebApplicationFactory)
+  UI.Tests.E2E/                         -- End-to-end tests (Playwright)
 
- [SolutionName].slnx                    -- Solution file
-codecov.yml                             -- Code coverage configuration
+[SolutionName].slnx                     -- Solution file
+.editorconfig                           -- Formatting, style, and naming rules
+CONTEXT.md                              -- Domain language
+Directory.Build.props                   -- Shared build settings
 Directory.Packages.props                -- Central NuGet package management
 global.json                             -- Global SDK version
-LICENSE.txt                             -- License
+LICENSE                                 -- License
 README.md                               -- Project overview
 ```
 
@@ -103,11 +98,12 @@ All official versions of the project are built and delivered with [your CI/CD sy
 
 Design for this project is ultimately decided by the project team lead ([maintainer name or role]). The following project tenets are adhered to when making decisions:
 
-1. Use [UI framework] for the UI.
-1. Use [database technology] for data persistence.
-1. Provide both [ORM/driver options] for data access.
-1. Use [cloud orchestration/tooling] for cloud-native orchestration.
-1. Follow clean architecture principles with repository pattern.
+1. Use server-rendered Blazor with Tailwind CSS v4 for the UI.
+1. Use Auth0 for authentication and role-based authorization.
+1. Organize code with Vertical Slice Architecture: one folder per feature, not per technical layer.
+1. Return `Result`/`Result<T>` for expected failures, and validate requests with FluentValidation.
+1. Use .NET Aspire for local orchestration and end-to-end test hosting.
+1. Manage NuGet versions centrally in `Directory.Packages.props`.
 
 If you have suggestions, please open an issue or discuss in your pull request.
 
@@ -144,7 +140,7 @@ Please provide as much detail as possible, including steps to reproduce, expecte
 
 1. Create a new Branch from the develop branch with a reference to the existing Issue number.
 1. Work on the issue.
-1. Create Unit, Integration tests for any code that require them. We use [your test frameworks, e.g., xUnit, bUnit] to test our code and components.
+1. Create Unit, Integration tests for any code that require them. We use xUnit v3, FluentAssertions, NSubstitute, bUnit, and Playwright to test our code and components.
 1. When you are done Create a Pull Request from your branch to the develop branch.
 1. Submit the Pull Request.
 
