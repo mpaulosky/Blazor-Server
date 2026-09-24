@@ -89,7 +89,6 @@ temp/
 tmp/
 *.tmp
 .directory
-.squad/
 
 .fake
 
