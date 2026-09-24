@@ -6,7 +6,7 @@ Pull in the issue using `gh issue view <ID>`. If it has a parent PRD, pull that 
 
 Only work on the issue specified.
 
-Work on branch {{BRANCH}}. Make commits and run tests.
+Work on branch {{BRANCH}}. It may already hold earlier commits for this issue. Build on them, don't redo them.
 
 # CONTEXT
 
@@ -22,38 +22,52 @@ Here are the last 10 commits:
 
 Explore the repo and fill your context window with relevant information that will allow you to complete the task.
 
+Read `CONTEXT.md` for the domain language, `docs/adr/` for recorded decisions, and `.sandcastle/CODING_STANDARDS.md` for the rules the code must follow.
+
 Pay extra attention to test files that touch the relevant parts of the code.
+
+# SKILLS
+
+This repository ships .NET skills in `.claude/skills/`. Use them where they apply:
+
+- `dotnet-tdd`: the red-green-refactor loop with xUnit v3
+- `dotnet-add-testing`: scaffolding a new test project
+- `dotnet-xunit`: xUnit v3 conventions
+- `dotnet-testing-strategy`: choosing unit, integration, or E2E tests
+- `dotnet-project-analysis`: solution, project, and Central Package Management wiring
+- `dotnet-inspect`: checking a NuGet package's API surface
 
 # EXECUTION
 
-If applicable, use RGR to complete the task.
+Work test-first (red → green → refactor):
 
-1. RED: write one test
-2. GREEN: write the implementation to pass that test
-3. REPEAT until done
-4. REFACTOR the code
+1. RED: write one failing test and run it to watch it fail
+2. GREEN: write the least implementation that passes it
+3. REPEAT until the issue is done
+4. REFACTOR with the tests green
 
 # FEEDBACK LOOPS
 
-Before committing, run `npm run typecheck` and `npm run test` to ensure the tests pass.
+Before every commit, both of these must succeed with no warnings (`TreatWarningsAsErrors` is on):
+
+- `dotnet build Blazor-Server.slnx`
+- `dotnet test --solution Blazor-Server.slnx`
+
+If you change Markdown, also run `npx --no-install markdownlint-cli2 <files>`.
 
 # COMMIT
 
-Make a git commit. The commit message must:
+Commit in small steps. Each message follows `.github/instructions/git-commit-instructions.md`:
 
-1. Start with `RALPH:` prefix
-2. Include task completed + PRD reference
-3. Key decisions made
-4. Files changed
-5. Blockers or notes for next iteration
-
-Keep it concise.
+- Subject: `<type>(<scope>): <Summary>`, for example `test(Domain): Add Result null-conversion test` or `feat(Domain): Port Result with targeted fixes`
+- Body: what changed and why, key decisions, and any blockers for the next iteration
+- Footer: `Refs #{{TASK_ID}}`
 
 # THE ISSUE
 
-If the task is not complete, leave a comment on the issue with what was done.
+If the task is not complete, leave a comment on the issue with what was done and what remains.
 
-Do not close the issue - this will be done later.
+Do not close the issue, push the branch, or open a pull request. The orchestrator does that after review.
 
 Once complete, output <promise>COMPLETE</promise>.
 

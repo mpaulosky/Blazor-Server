@@ -10,6 +10,16 @@ Here are the open issues in the repo:
 
 The list above has already been filtered to issues ready for work.
 
+These branches already have an open pull request:
+
+<open-pr-branches>
+
+!`gh pr list --state open --limit 100 --json headRefName --jq '.[].headRefName'`
+
+</open-pr-branches>
+
+Leave out any issue whose branch (`feature/{id}-…` or `hotfix/{id}-…`) is in that list. Its work is waiting for review, not for an agent.
+
 # TASK
 
 Analyze the open issues and build a dependency graph. For each issue, determine whether it **blocks** or **is blocked by** any other open issue.

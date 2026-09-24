@@ -28,7 +28,8 @@ Review the code changes on branch `{{BRANCH}}` and improve code clarity, consist
 3. **Check correctness**:
    - Does the implementation match the intent? Are edge cases handled?
    - Are new/changed behaviours covered by tests?
-   - Are there unsafe casts, `any` types, or unchecked assumptions?
+   - Are there unsafe casts, `null!` suppressions, or unchecked assumptions?
+   - Does it follow the red → green history the issue asks for, with tests covering every new or changed behaviour?
    - Does the change introduce injection vulnerabilities, credential leaks, or other security issues?
 
 4. **Maintain balance**: Avoid over-simplification that could:
@@ -47,8 +48,8 @@ Review the code changes on branch `{{BRANCH}}` and improve code clarity, consist
 If you find improvements to make:
 
 1. Make the changes directly on this branch
-2. Run tests and type checking to ensure nothing is broken
-3. Commit describing the refinements
+2. Run `dotnet build Blazor-Server.slnx` and `dotnet test --solution Blazor-Server.slnx` and confirm both pass with no warnings
+3. Commit using `refactor(<scope>): <Summary>` as described in `.github/instructions/git-commit-instructions.md`
 
 If the code is already clean and well-structured, do nothing.
 

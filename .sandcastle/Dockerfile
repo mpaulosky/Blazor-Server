@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
   git \
   curl \
   jq \
+  libicu72 \
   && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
@@ -28,8 +29,20 @@ USER ${AGENT_UID}:${AGENT_GID}
 # Install Claude Code CLI
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
-# Add Claude to PATH
-ENV PATH="/home/agent/.local/bin:$PATH"
+# Install the .NET SDK. global.json pins 10.0.401 with rollForward latestMinor,
+# so the latest 10.0 SDK satisfies it.
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+  && bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /home/agent/.dotnet \
+  && rm /tmp/dotnet-install.sh \
+  && mkdir -p /home/agent/.local/bin \
+  && ln -s /home/agent/.dotnet/dotnet /home/agent/.local/bin/dotnet
+
+ENV DOTNET_ROOT="/home/agent/.dotnet" \
+  DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+  DOTNET_NOLOGO=1
+
+# Add Claude and .NET to PATH
+ENV PATH="/home/agent/.local/bin:/home/agent/.dotnet:/home/agent/.dotnet/tools:$PATH"
 
 WORKDIR /home/agent
 
