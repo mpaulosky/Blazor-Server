@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-push gate for squad-workflow-standard
+# Pre-push gate: branch naming, YAML/Markdown lint, and tests
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -26,9 +26,9 @@ if [[ "$CURRENT_BRANCH" == "main" || "$CURRENT_BRANCH" == "preview" || "$CURRENT
   exit 1
 fi
 
-if ! [[ "$CURRENT_BRANCH" =~ ^(squad|sprint)/[0-9]+-[a-z0-9-]+$ ]] && ! [[ "$CURRENT_BRANCH" =~ ^hotfix/[a-z0-9-]+$ ]] && ! [[ "$CURRENT_BRANCH" =~ ^chore/[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+if ! [[ "$CURRENT_BRANCH" =~ ^(feature|hotfix)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]] && ! [[ "$CURRENT_BRANCH" =~ ^chore/[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
   echo -e "${RED}❌ Branch name '${CURRENT_BRANCH}' does not match naming convention.${RESET}"
-  echo -e "   Expected: ${YELLOW}squad/{issue-number}-{kebab-slug}${RESET}, ${YELLOW}sprint/{n}-{kebab-slug}${RESET}, ${YELLOW}hotfix/{kebab-slug}${RESET}, or ${YELLOW}chore/{kebab-slug}${RESET}"
+  echo -e "   Expected: ${YELLOW}feature/{issue-number}-{kebab-slug}${RESET}, ${YELLOW}hotfix/{issue-number}-{kebab-slug}${RESET}, or ${YELLOW}chore/{kebab-slug}${RESET}"
   exit 1
 fi
 
