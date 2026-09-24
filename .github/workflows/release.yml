@@ -1,6 +1,6 @@
 # yamllint disable rule:line-length
 ---
-name: Squad Release
+name: Release
 
 "on":
   pull_request:
@@ -19,7 +19,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: squad-release-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: release-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: false
 
 jobs:
@@ -285,7 +285,7 @@ jobs:
               [
                   "---",
                   f'post_title: "{safe_title}"',
-                  "author1: team-squad",
+                  "author1: mpaulosky",
                   f'post_slug: "{tag.lower()}-pr-{pr_number}"',
                   "microsoft_alias: n/a",
                   'featured_image: ""',

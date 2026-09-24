@@ -59,8 +59,6 @@ if [[ ${#CHANGED_YAML[@]} -gt 0 ]]; then
     YAML_CONFIG_FILE="$(mktemp)"
     cat > "$YAML_CONFIG_FILE" <<'EOF'
 extends: default
-ignore: |
-  .squad/
 rules:
   line-length:
     max: 200
