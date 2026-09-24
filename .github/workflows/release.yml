@@ -350,8 +350,6 @@ jobs:
           )
           blog_index.write_text(index_text, encoding="utf-8")
 
-          top_rows = rows[:5]
-
           # The README Releases table comes from the GitHub Releases API, not the
           # blog index, so releases without a blog post are listed too.
           repository = os.environ["REPOSITORY"].strip()
@@ -383,7 +381,7 @@ jobs:
                 {"tag": release_tag, "date": merged_date, "pr": pr_number, "title": title_line}
             )
           for release in releases:
-            if any(e["tag"] == release["tag_name"] for e in entries):
+            if release["tag_name"] == release_tag:
               continue
             source_pr = re.search(r"Source PR: #(\d+)", release.get("body") or "")
             entries.append(
@@ -463,7 +461,7 @@ jobs:
           if docs_index_path.exists():
             docs_index = docs_index_path.read_text(encoding="utf-8")
             html_items = []
-            for row in top_rows:
+            for row in rows[:5]:
               parts = [p.strip() for p in row.strip("|").split("|")]
               if len(parts) < 3:
                 continue
