@@ -1,4 +1,6 @@
 {
+  "name": "blazor-server",
+  "private": true,
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.12.0"
   },

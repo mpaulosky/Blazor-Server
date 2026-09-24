@@ -104,7 +104,8 @@ fi
 echo -e "\n${CYAN}🧪 Running test suite...${RESET}"
 # Discover each test project explicitly. The repo uses Microsoft Testing Platform
 # for .NET 10, and running the solution file directly can report "Zero tests ran"
-# even while the project-level test runs pass.
+# even while the project-level test runs pass. Under MTP, `dotnet test` takes the
+# project through --project and rejects VSTest-only flags such as --nologo.
 TEST_PROJECTS=()
 if [[ -d "$ROOT/tests" ]]; then
   mapfile -d '' -t TEST_PROJECTS < <(find "$ROOT/tests" -type f -name '*.csproj' -print0 | sort -z)
@@ -121,7 +122,7 @@ for project_file in "${TEST_PROJECTS[@]}"; do
   echo -e "${CYAN}▶ Testing ${project_file#"$ROOT"/}...${RESET}"
 
   if env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_PREFIX \
-    dotnet test "$project_file" --configuration Release --nologo --verbosity minimal \
+    dotnet test --project "$project_file" --configuration Release --verbosity minimal \
     --results-directory "$ROOT/.tmp-test-results" --report-xunit-trx \
     --report-xunit-trx-filename "${project_name}.trx"; then
     continue
