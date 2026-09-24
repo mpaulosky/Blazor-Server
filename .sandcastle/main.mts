@@ -38,7 +38,7 @@ const sh = (cwd: string, cmd: string, ...args: string[]) =>
 function publish(
   issue: { id: string; title: string; branch: string },
   worktreePath: string,
-  note = "",
+  reviewed: boolean,
 ): string {
   sh(worktreePath, "git", "push", "--force-with-lease", "-u", "origin", issue.branch);
 
@@ -51,13 +51,16 @@ function publish(
   return sh(
     worktreePath, "gh", "pr", "create", "--base", "main", "--head", issue.branch,
     "--title", issue.title,
-    "--body", `Closes #${issue.id}\n\nImplemented and reviewed by Sandcastle.${note}`,
+    "--body", reviewed
+      ? `Closes #${issue.id}\n\nImplemented and reviewed by Sandcastle.`
+      : `Closes #${issue.id}\n\nImplemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.`,
   );
 }
 
 // Count the commits on the worktree's branch that origin/main doesn't have.
+// origin/main is refreshed once per round, before the pipelines start, because
+// concurrent fetches from each pipeline would contend on the same ref lock.
 function commitsAhead(worktreePath: string): number {
-  sh(worktreePath, "git", "fetch", "--quiet", "origin", "main");
   return Number(sh(worktreePath, "git", "rev-list", "--count", "origin/main..HEAD"));
 }
 
@@ -150,6 +153,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // Promise.allSettled means one failing pipeline doesn't cancel the others.
   // -------------------------------------------------------------------------
 
+  sh(process.cwd(), "git", "fetch", "--quiet", "origin", "main");
+
   const settled = await Promise.allSettled(
     issues.map(async (issue) => {
       const sandbox = await sandcastle.createSandbox({
@@ -181,7 +186,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         }
 
         let reviewCommits: typeof implement.commits = [];
-        let reviewNote = "";
+        let reviewed = true;
         try {
           const review = await sandbox.run({
             name: "reviewer",
@@ -197,13 +202,13 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           // A failed review shouldn't strand finished work: publish anyway and
           // say so in the PR, which gets a human review regardless.
           console.error(`  ⚠ ${issue.id}: reviewer failed, publishing unreviewed: ${error}`);
-          reviewNote = "\n\n⚠️ The Sandcastle review step failed, so this PR has not been reviewed by an agent.";
+          reviewed = false;
         }
 
         // Publish while the worktree still exists; close() may remove it.
         return {
           commits: [...implement.commits, ...reviewCommits],
-          prUrl: publish(issue, sandbox.worktreePath, reviewNote),
+          prUrl: publish(issue, sandbox.worktreePath, reviewed),
         };
       } finally {
         await sandbox.close();
