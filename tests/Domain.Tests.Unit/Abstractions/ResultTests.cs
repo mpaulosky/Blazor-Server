@@ -7,6 +7,8 @@
 // Project Name :  Domain.Tests.Unit
 // =============================================
 
+using System.Reflection;
+
 using Domain.Abstractions;
 
 namespace Domain.Tests.Unit.Abstractions;
@@ -284,5 +286,21 @@ public class ResultTests
 		result.Failure.Should().BeTrue();
 		result.ErrorCode.Should().Be(ResultErrorCode.Validation);
 		result.Details.Should().BeNull();
+	}
+
+	[Fact]
+	public void ResultOfT_PublicSurface_HasNoImplicitConversionToValue()
+	{
+		// Arrange
+		Type resultType = typeof(Result<string>);
+
+		// Act
+		IEnumerable<MethodInfo> conversionsToValue = resultType
+			.GetMethods(BindingFlags.Public | BindingFlags.Static)
+			.Where(static method => method.Name == "op_Implicit" && method.ReturnType == typeof(string));
+
+		// Assert
+		conversionsToValue.Should().BeEmpty(
+			"an implicit conversion would silently turn a failed result into null; callers check Success and read Value");
 	}
 }
