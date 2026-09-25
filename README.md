@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.37](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.37) | 2026-09-25 | Created CODE_METRICS.md file, analyzed metrics for 3 projects. | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-39-created-code-metrics-md-file-analyzed-metrics-for-3-projects.md) |
 | [v0.0.36](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.36) | 2026-09-25 | ci(code-metrics): Grant write access and open the metrics PR with the PAT | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-37-ci-code-metrics-grant-write-access-and-open-the-metrics-pr-with-the-pat.md) |
 | [v0.0.35](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.35) | 2026-09-24 | ci: Fail Test Report Summary when the test matrix fails | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-35-ci-fail-test-report-summary-when-the-test-matrix-fails.md) |
 | [v0.0.34](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.34) | 2026-09-24 | fix(hooks): Pre-push gate checks the checked-out branch instead of the pushed refs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-31-fix-hooks-pre-push-gate-checks-the-checked-out-branch-instead-of-the-pushed-refs.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.30](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.30) | 2026-09-24 | docs(readme): Add root README with badges and auto-maintained Releases table | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-16-docs-readme-add-root-readme-with-badges-and-auto-maintained-releases-table.md) |
 | [v0.0.27](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.27) | 2026-09-24 | fix(release): Release-notes PR is never created, and the failure is hidden | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-15-fix-release-release-notes-pr-is-never-created-and-the-failure-is-hidden.md) |
 | [v0.0.25](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.25) | 2026-09-24 | fix(sandcastle): Publish work already on an issue branch | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-12-fix-sandcastle-publish-work-already-on-an-issue-branch.md) |
-| [v0.0.23](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.23) | 2026-09-24 | chore(skills): Add code-review skill for Copilot code review | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-11-chore-skills-add-code-review-skill-for-copilot-code-review.md) |
 
 <!-- RELEASES_END -->
 
@@ -123,8 +123,8 @@ All of the following are *planned* and don't exist yet:
 - Name branches `feature/{issue}-{slug}` for issue work, `hotfix/{issue}-{slug}` for bug fixes, or `chore/{slug}`
   for maintenance with no issue, for example `feature/14-add-root-readme`.
 - Issues labelled `Sandcastle` are worked by Sandcastle agents, which open a pull request for review.
-- Read [CONTRIBUTING.md](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CONTRIBUTING.md), the [Code of Conduct](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CODE_OF_CONDUCT.md) and the
-  [Security Policy](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/SECURITY.md) before contributing.
+- Read [CONTRIBUTING.md](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CONTRIBUTING.md), the [Code of Conduct](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CODE_OF_CONDUCT.md)
+  and the [Security Policy](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/SECURITY.md) before contributing.
 
 ## License
 

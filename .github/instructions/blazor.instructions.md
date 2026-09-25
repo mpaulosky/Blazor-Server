@@ -9,7 +9,8 @@ This is a server-rendered Blazor Web App on .NET 10 and C# 14. `.sandcastle/CODI
 
 ## Structure
 
-- Organize components by feature (Vertical Slice Architecture): a component lives in its feature's `Features/<Feature>/` folder, next to that feature's handler, validator, and request and response types.
+- Organize components by feature (Vertical Slice Architecture): a component lives in its feature's `Features/<Feature>/`
+  folder, next to that feature's handler, validator, and request and response types.
 - Keep markup in `.razor` files. Move non-trivial logic into a code-behind (`.razor.cs`) or an injected service.
 - Get services through `[Inject]` or `@inject`. Never `new` them up.
 - Use the domain terms from `CONTEXT.md`, such as Theme, Palette, Visitor, User, and Admin.
