@@ -25,7 +25,6 @@ name: Backfill blog posts
 permissions:
   contents: write
   pull-requests: write
-  actions: write
 
 env:
   # Model for the AI Summary in the posts (used only when the
@@ -111,22 +110,6 @@ jobs:
               --head "$BRANCH" \
               --title "$TITLE" \
               --body "Automated blog post backfill for past releases, opened by the Backfill blog posts workflow. Each post uses its Release's existing tag; no tags or Releases were created. The [skip-release] title marker keeps its merge from starting a release."
-          fi
-
-          dispatch_failed=0
-          for workflow in \
-            "lint-markdown.yml" \
-            "lint-yaml.yml" \
-            "codeql-analysis.yml"; do
-            echo "Dispatching validation workflow: $workflow -> $BRANCH"
-            if ! gh workflow run "$workflow" --ref "$BRANCH"; then
-              echo "::warning::Failed to dispatch $workflow for $BRANCH. The PR may still need manual workflow approval."
-              dispatch_failed=1
-            fi
-          done
-
-          if [ "$dispatch_failed" -eq 1 ]; then
-            echo "::warning::One or more validation workflows did not start automatically for $BRANCH. Review the PR and trigger them manually if needed."
           fi
 
           gh pr merge "$BRANCH" --auto --squash

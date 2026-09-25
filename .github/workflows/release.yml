@@ -16,7 +16,6 @@ name: Release
 permissions:
   contents: write
   pull-requests: write
-  actions: write
 
 env:
   # Model for the AI Summary in release blog posts (used only when the
@@ -47,9 +46,10 @@ jobs:
           # opened via GITHUB_TOKEN) as untrusted and gates every
           # pull_request-triggered workflow behind a manual "Approve and run"
           # click. Authoring as a real collaborator (via RELEASE_PR_PAT)
-          # avoids that approval requirement entirely. Falls back to
-          # GITHUB_TOKEN if the PAT secret isn't configured, in which case
-          # the approval-gate workaround further down still applies.
+          # avoids that approval requirement entirely, so the PR's
+          # pull_request checks (lint, CodeQL) start on their own. Falls back
+          # to GITHUB_TOKEN if the PAT secret isn't configured, in which case
+          # those checks wait for a manual "Approve and run".
           token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Resolve PR metadata
@@ -280,22 +280,6 @@ jobs:
             --head "$BRANCH" \
             --title "docs: add release blog for PR #${PR_NUMBER} [skip-release]" \
             --body "Automated release-notes update generated for #${PR_NUMBER}. Opened by the release workflow; the [skip-release] title marker keeps its own merge from starting another release."
-
-          dispatch_failed=0
-          for workflow in \
-            "lint-markdown.yml" \
-            "lint-yaml.yml" \
-            "codeql-analysis.yml"; do
-            echo "Dispatching validation workflow: $workflow -> $BRANCH"
-            if ! gh workflow run "$workflow" --ref "$BRANCH"; then
-              echo "::warning::Failed to dispatch $workflow for release PR $BRANCH. The PR may still need manual workflow approval."
-              dispatch_failed=1
-            fi
-          done
-
-          if [ "$dispatch_failed" -eq 1 ]; then
-            echo "::warning::One or more validation workflows did not start automatically for $BRANCH. Review the PR and trigger them manually if needed."
-          fi
 
           gh pr merge "$BRANCH" --auto --squash
 
