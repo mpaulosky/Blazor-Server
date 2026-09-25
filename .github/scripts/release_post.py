@@ -32,6 +32,10 @@ API_TIMEOUT_SECONDS = 60
 DIFF_LIMIT = 60_000
 TABLE_SIZE = 10
 
+# Dependency bumps get the deterministic sections only: a summary of a
+# version bump adds nothing the title doesn't say.
+NO_SUMMARY_AUTHORS = {"dependabot[bot]"}
+
 AREAS = ["src/", "tests/", ".github/", ".sandcastle/", "docs/"]
 OTHER_AREA = "other"
 
@@ -255,8 +259,14 @@ def update_blog_index(blog_dir, merged_date, title_line, post_name):
             continue
         rows.append(line)
 
+    # Drop this post's old row, and rows whose post was deleted (write_post
+    # removes a PR's post when its title or merge date gives it a new name).
+    def linked_post_exists(row):
+        linked = re.search(r"\]\(([^)]+\.md)\)", row)
+        return not linked or (blog_dir / linked.group(1)).exists()
+
     row_title = title_line.replace("|", "\\|")
-    rows = [r for r in rows if f"({post_name})" not in r]
+    rows = [r for r in rows if f"({post_name})" not in r and linked_post_exists(r)]
     rows.insert(0, f"| {merged_date} | [{row_title}]({post_name}) | release,automation |")
 
     def row_date(row):
@@ -315,24 +325,38 @@ def newest_first(items):
 # Release tables
 
 
+def source_pr_of(release):
+    """The PR number in the release body's "Source PR: #n" line, or None."""
+    match = re.search(r"Source PR: #(\d+)", release.get("body") or "")
+    return int(match.group(1)) if match else None
+
+
+def posts_for_pr(blog_dir, pr_number):
+    """The docs/blogs posts for a PR, sorted by name (so by date)."""
+    return sorted(blog_dir.glob(f"*-pr-{pr_number}-*.md"))
+
+
 def post_url(repository, name):
     return f"https://github.com/{repository}/blob/main/docs/blogs/{name}"
 
 
-def release_entries(gh, repository, tag, merged_date, pr_number, title_line, blog_dir):
-    """The newest releases, including the one being created now, newest first."""
-    entries = [{"tag": tag, "date": merged_date, "pr": str(pr_number), "title": title_line}]
+def release_entries(gh, repository, blog_dir, current=None):
+    """The newest releases, newest first.
+
+    current is {"tag", "date", "pr", "title"} for a release that is being
+    created now and so isn't in the Releases API response yet.
+    """
+    entries = [dict(current)] if current else []
     for release in gh.releases():
-        # This runs before "Create tag and release", so the release being
-        # created now isn't in the API response yet. On a re-run it is.
-        if release["tag_name"] == tag:
+        # On a re-run the release being created is already in the response.
+        if current and release["tag_name"] == current["tag"]:
             continue
-        source_pr = re.search(r"Source PR: #(\d+)", release.get("body") or "")
+        source_pr = source_pr_of(release)
         entries.append(
             {
                 "tag": release["tag_name"],
                 "date": (release.get("published_at") or "")[:10],
-                "pr": source_pr.group(1) if source_pr else "",
+                "pr": str(source_pr) if source_pr else "",
                 "title": "",
                 "name": release.get("name") or release["tag_name"],
             }
@@ -351,7 +375,7 @@ def release_entries(gh, repository, tag, merged_date, pr_number, title_line, blo
         entry["url"] = f"https://github.com/{repository}/releases/tag/{entry['tag']}"
         entry["post_url"] = ""
         if entry["pr"]:
-            posts = sorted(blog_dir.glob(f"*-pr-{entry['pr']}-*.md"))
+            posts = posts_for_pr(blog_dir, entry["pr"])
             if posts:
                 entry["post_url"] = post_url(repository, posts[-1].name)
     return entries
@@ -484,7 +508,8 @@ def update_index_html(path, entries, posts, repository):
     path.write_text(text, encoding="utf-8")
 
 
-def run(repository, pr_number, tag, gh, root=Path("."), api_key=None, model=DEFAULT_MODEL, urlopen=urllib.request.urlopen):
+def write_post(gh, pr_number, tag, root=Path("."), api_key=None, model=DEFAULT_MODEL, urlopen=urllib.request.urlopen):
+    """Write the post for a merged PR and its blog index row; return (merged_date, title_line)."""
     root = Path(root)
     pr = gh.pull(pr_number)
     commits = gh.commits(pr_number)
@@ -494,7 +519,10 @@ def run(repository, pr_number, tag, gh, root=Path("."), api_key=None, model=DEFA
     merged_date = (pr.get("merged_at") or "")[:10] or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
     summary = None
-    if api_key:
+    author = (pr.get("user") or {}).get("login") or ""
+    if author in NO_SUMMARY_AUTHORS:
+        log(f"::notice::PR #{pr_number} is by {author}; writing the post without an AI summary.")
+    elif api_key:
         summary = request_summary(api_key, model, build_prompt(pr, commits, build_diff(files)), urlopen)
     else:
         log("::notice::ANTHROPIC_API_KEY is not set; writing the post without an AI summary.")
@@ -502,15 +530,27 @@ def run(repository, pr_number, tag, gh, root=Path("."), api_key=None, model=DEFA
     blog_dir = root / "docs" / "blogs"
     blog_dir.mkdir(parents=True, exist_ok=True)
     post_name = f"{merged_date}-pr-{pr_number}-{slugify(title_line)}.md"
+    # A renamed PR, or an older post dated differently, would otherwise leave
+    # two posts for one PR.
+    for old_post in posts_for_pr(blog_dir, pr_number):
+        if old_post.name != post_name:
+            old_post.unlink()
+            log(f"Removed docs/blogs/{old_post.name}")
     (blog_dir / post_name).write_text(
         render_post(pr, title_line, tag, merged_date, commits, files, summary, model), encoding="utf-8"
     )
     log(f"Wrote docs/blogs/{post_name}")
     update_blog_index(blog_dir, merged_date, title_line, post_name)
+    return merged_date, title_line
 
+
+def update_tables(repository, gh, root=Path("."), current=None):
+    """Rewrite the README, docs/README.md and docs/index.html release and blog tables."""
+    root = Path(root)
+    blog_dir = root / "docs" / "blogs"
     # The Releases tables come from the GitHub Releases API, not the blog
     # index, so releases without a blog post are listed too.
-    entries = release_entries(gh, repository, tag, merged_date, pr_number, title_line, blog_dir)
+    entries = release_entries(gh, repository, blog_dir, current)
 
     readme_path = root / "README.md"
     readme = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
@@ -519,6 +559,13 @@ def run(repository, pr_number, tag, gh, root=Path("."), api_key=None, model=DEFA
     (root / "docs" / "README.md").write_text(readme, encoding="utf-8")
 
     update_index_html(root / "docs" / "index.html", entries, read_blog_posts(blog_dir), repository)
+
+
+def run(repository, pr_number, tag, gh, root=Path("."), api_key=None, model=DEFAULT_MODEL, urlopen=urllib.request.urlopen):
+    merged_date, title_line = write_post(gh, pr_number, tag, root, api_key, model, urlopen)
+    # This runs before "Create tag and release", so the new release is passed in.
+    current = {"tag": tag, "date": merged_date, "pr": str(pr_number), "title": title_line}
+    update_tables(repository, gh, root, current)
 
 
 def main(argv=None):

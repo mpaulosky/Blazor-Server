@@ -93,6 +93,8 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
   `README.md` to `docs/README.md`. Delete both workflows if you don't want them.
 - The release-notes PR adds a blog post written by [release_post.py](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/scripts/release_post.py).
   Add an `ANTHROPIC_API_KEY` repository secret to open each post with a short AI summary; without it, posts skip the summary.
+  Run [backfill-blog-posts.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/backfill-blog-posts.yml) by hand to write posts for
+  past releases that lack one, or set `regenerate` to rewrite them all. It opens one PR and never creates tags or Releases.
 - [docs/index.html](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/index.html) is the GitHub Pages home page. Repoint its header links at your
   repository, or delete it and `docs/.nojekyll` if you don't publish Pages.
 
@@ -106,7 +108,7 @@ docs/adr/                    -- Architecture decision records
 CONTEXT.md                   -- Domain language
 .sandcastle/                 -- Sandcastle agent setup and coding standards
 .github/workflows/           -- CI, code analysis, linting and release workflows
-.github/scripts/             -- Release blog post generator and its pytest tests
+.github/scripts/             -- Release blog post generator, backfill and pytest tests
 ```
 
 ## Roadmap
