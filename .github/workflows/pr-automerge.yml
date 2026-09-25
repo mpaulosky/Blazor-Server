@@ -65,9 +65,12 @@ jobs:
                        autoMergeRequest {
                          enabledAt
                        }
-                       reviews(last: 50) {
+                       # Filtering by author keeps other reviews (each thread
+                       # reply counts as one) from pushing Copilot's off the
+                       # page. The filter takes the "[bot]" login; the nodes
+                       # themselves report it without the suffix.
+                       copilotReviews: reviews(last: 20, author: "copilot-pull-request-reviewer[bot]") {
                          nodes {
-                           author { login }
                            commit { oid }
                          }
                        }
@@ -96,11 +99,8 @@ jobs:
 
               // Copilot re-reviews every push, including merge-from-main
               // commits, so its review has to cover the exact head.
-              const copilotReviewed = pr.reviews.nodes.some((review) => {
-                return (
-                  review.author?.login === "copilot-pull-request-reviewer" &&
-                  review.commit?.oid === pr.headRefOid
-                );
+              const copilotReviewed = pr.copilotReviews.nodes.some((review) => {
+                return review.commit?.oid === pr.headRefOid;
               });
               if (!copilotReviewed) {
                 core.info(`Waiting on PR #${pullNumber}: no Copilot review of ${pr.headRefOid} yet.`);
