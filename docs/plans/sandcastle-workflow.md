@@ -9,7 +9,8 @@ so Sandcastle builds its own upgrade.
 
 ## Principles
 
-- **Fully unattended.** No human approves plans or merges. A human steps in only when Sandcastle hands something back (see [Giving up](#giving-up-and-telling-the-human)).
+- **Fully unattended.** No human approves plans or merges. A human steps in only when Sandcastle hands something back (see [Giving up](#giving-up-and-telling-the-human)), or when
+  they choose to join a PR's review: `pr-automerge.yml` merges only once every thread is resolved, so a thread a human opens waits for that human to resolve it.
 - **The host decides; agents propose.** Agents never call GitHub write APIs. They return structured verdicts or write files, and the host (`main.mts`) validates them and applies
   labels, comments, links, pushes and thread resolutions with `gh`.
 - **Anything that must be stable is host code.** Branch names, retry counts and gate results come from code, never from a model.
@@ -58,7 +59,8 @@ skipped.
 
 **Settled.** A PR gets a pass only when every check run on its head has completed and Copilot has reviewed the head (a Copilot review with `commit.oid == headRefOid`, and Copilot not in
 `reviewRequests`). If CI has been settled for about an hour with no Copilot review and no pending request, the host re-requests one with `requestReviewsByLogin` (once per head).
-A settled PR that is `CLEAN` with every thread resolved, or with only human threads open, is left alone.
+A settled PR that is `CLEAN` with every thread resolved, or with only human threads open, is left alone. A PR with open human threads doesn't merge until
+that human resolves them. That is deliberate: a human who comments has joined the review, and resolving the thread is their sign-off.
 
 **Catching up with `main`.** Always a merge, never a rebase or force-push. `BEHIND` with nothing else to do is fixed on the server with `PUT /pulls/{n}/update-branch` and
 `expected_head_sha`. `DIRTY` is merged locally in the sandbox during a pass.
@@ -87,7 +89,8 @@ waits for a later sweep.
 
 **Giving up on a PR.** Three passes per PR, counted as follow-up marker comments since `sandcastle:needs-human` was last removed from it. It gives up at once when the gate-fixer runs
 out of attempts, a conflict can't be resolved to a green gate, a re-run check stays red, or an agent run fails. Giving up adds `sandcastle:needs-human` to the **PR** with one comment
-quoting or linking the last gate or CI output. Open human threads never count as giving up.
+quoting or linking the last gate or CI output. Open human threads never count as giving up: the human who opened them is already involved, and the job summary lists PRs waiting
+on them.
 
 **Closed PRs.** If a PR closes without merging while its issue is open, the host adds `sandcastle:needs-human` to the issue with the comment "PR #x was closed without merging; remove the
 label to rebuild". The next build of that issue starts fresh from `main`: the host deletes the old remote branch before `createSandbox()`.
@@ -203,8 +206,9 @@ validation, marker counting) that unit tests can pin down.
 authority, not what an agent reports. At each checkpoint the gate-fixer gets **2 attempts**, with the gate re-run after each. Past that, nothing is published, the branch keeps its
 commits, and the build counts as failed.
 
-**Pushing.** When checkpoint 2 exits 0, the host writes a gate-pass marker for that commit SHA inside the git common dir (never committed). The pre-push hook always checks the branch
-name, and it skips lint, build and tests only when every pushed SHA has a marker. Follow-up pushes that passed the gate get markers too. CI stays the independent check
+**Pushing.** When checkpoint 2 exits 0, the host writes a gate-pass marker for the `HEAD` SHA it gated, inside the git common dir (never committed). The gate ran on that commit's
+whole tree, so the marker vouches for the tip, not for each ancestor. The pre-push hook always checks the branch name, and it skips lint, build and tests only when the tip SHA
+of every branch being pushed (the hook's `local_sha`) has a marker. Follow-up pushes that passed the gate get markers too. CI stays the independent check
 ([model and budget decision](https://github.com/mpaulosky/Blazor-Server/issues/64)).
 
 ## Roles, models and budgets
@@ -262,12 +266,15 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
-- `pull_request_review` submitted by Copilot, and `workflow_run` completed for `ci.yml`, only for same-repo `feature/*` / `hotfix/*` heads, so a fork never runs with secrets;
+- `pull_request_review` submitted by Copilot, and `workflow_run` completed for `Build and Test Suite` (the `name:` of `ci.yml`,
+  since `workflow_run` matches workflow names, not file names), only for same-repo `feature/*` / `hotfix/*` heads, so a fork never runs with secrets;
 - `workflow_dispatch`, and `schedule` every 2 hours as a backstop for blockers cleared by merges and PRs that fall behind `main` (`push: main` deliberately isn't a trigger).
 
-Filters match exact label names, so labels the host applies (`sandcastle:ready`) never re-trigger the pipeline.
+Event triggers can't filter by label name, so every `labeled` / `unlabeled` event starts the workflow. The job's `if:` checks `github.event.label.name` against the
+exact names above (and the fork and branch conditions), so labels the host applies (`sandcastle:ready`, `bug`) end as a skipped job and never start Sandcastle.
 
-**Overlap:** `concurrency: { group: sandcastle, cancel-in-progress: false }`: one run going and at most one pending. Every run re-reads the whole queue, so collapsed triggers lose nothing.
+**Overlap:** `concurrency: { group: sandcastle, cancel-in-progress: false }` on the **job**, not the workflow, so a filtered-out event is skipped before it takes the
+pending slot and can't displace a real pending run. One run going and at most one pending. Every run re-reads the whole queue, so collapsed triggers lose nothing.
 
 **Time:** the job has `timeout-minutes: 350`, and no new round starts after 4 hours. A usage or rate-limit error ends the run cleanly like the time budget: it doesn't fail roles or
 bounce issues. The next trigger resumes the work.
