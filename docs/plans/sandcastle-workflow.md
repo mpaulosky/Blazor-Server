@@ -28,6 +28,11 @@ so Sandcastle builds its own upgrade.
 
 The host creates any missing `sandcastle:*` label at startup. The wayfinder map and its tickets must never carry `Sandcastle`.
 
+**Only the repository owner queues work.** Anyone with triage access can add a label, and a queued issue's text goes to an unattended agent holding a write token. So the host treats an
+issue as queued only when the most recent `labeled` event adding `Sandcastle` in its issue events was made by the repository owner. The PAT is the owner's, so the labels the host adds
+to split children pass. An issue labelled by anyone else is skipped and logged, without a comment. The workflow applies the same rule to the label events that start it (see
+**Trigger and run environment**), and the host check covers scheduled, manual and local runs.
+
 Saved search for everything waiting on a human: `is:open label:sandcastle:needs-human,sandcastle:needs-info`.
 
 ## The round
@@ -124,7 +129,8 @@ concerns belong to the critique.
 ## Phase 3: Blocker gate
 
 Unchanged: an issue is blocked while any issue it depends on (native "blocked by" links and `Blocked by #N` / `Depends on #N` lines) hasn't closed as completed or merged. It now also
-drops, in code, issues labelled `sandcastle:needs-info` or `sandcastle:needs-human`, issues without `sandcastle:ready`, and issues with an open PR (labelled or not), logging each reason.
+drops, in code, issues labelled `sandcastle:needs-info` or `sandcastle:needs-human`, issues without `sandcastle:ready`, issues with an open PR (labelled or not), and issues whose
+`Sandcastle` label wasn't added by the repository owner, logging each reason.
 The "skip issues with an open PR" rule leaves `plan-prompt.md`.
 
 ## Phase 4: Plan
@@ -272,7 +278,9 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 
 **Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` with `SANDCASTLE_GH_TOKEN` (never the event's ref), sets up Node 22, runs
 `npm ci` to install the locked dependencies (including the `tsx` devDependency), and then runs `npx --no-install tsx .sandcastle/main.mts` with `GH_TOKEN` set to
-`SANDCASTLE_GH_TOKEN`. Checkout only gives git the token; the `gh` CLI the host calls for labels, comments, PRs and threads reads `GH_TOKEN`. Triggers:
+`SANDCASTLE_GH_TOKEN`. Checkout only gives git the token; the `gh` CLI the host calls for labels, comments, PRs and threads reads `GH_TOKEN`. The step also passes
+`ANTHROPIC_API_KEY` when that secret is set and `CLAUDE_CODE_OAUTH_TOKEN` otherwise, and an earlier step fails the job with a clear message when `SANDCASTLE_GH_TOKEN` or both
+Claude secrets are missing. Triggers:
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
@@ -281,7 +289,8 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 - `workflow_dispatch`, and `schedule` every 2 hours as a backstop for blockers cleared by merges and PRs that fall behind `main` (`push: main` deliberately isn't a trigger).
 
 Event triggers can't filter by label name, so every `labeled` / `unlabeled` event starts the workflow. The job's `if:` checks `github.event.label.name` against the
-exact names above (and the fork and branch conditions), so labels the host applies (`sandcastle:ready`, `bug`) end as a skipped job and never start Sandcastle.
+exact names above (and the fork and branch conditions), so labels the host applies (`sandcastle:ready`, `bug`) end as a skipped job and never start Sandcastle. For label
+events it also requires `github.event.sender.login == github.repository_owner`, so only the owner adding `Sandcastle` or removing a hand-back label starts a run.
 The one exception is intentional: the host's PAT adding
 `Sandcastle` to split children fires `issues: labeled`, which queues a pending run that picks the children up.
 
@@ -306,7 +315,9 @@ bounce issues. The next trigger resumes the work.
 regenerate it under *Settings → Developer settings → Fine-grained tokens* with the same scopes and update the secret. An expired secret shows up as a red run with an auth error.
 
 **Observability:** `.sandcastle/logs/` is uploaded with `actions/upload-artifact` (`if: always()`, 14-day retention). The job summary lists each issue or PR touched and its outcome
-(published, deferred, handed back, role failed, gate failed, timed out), each hand-back with a link, and each role's token usage. There are no per-run comments on issues or PRs.
+(published, deferred, handed back, role failed, gate failed, timed out), each hand-back with a link, and each role's token usage. There is no run-summary comment on issues or
+PRs; the only comments are the ones the phases above post (intake verdicts, critique deferrals, architect design notes, follow-up pass summaries, build-failure markers and
+hand-backs).
 
 ## Proposed module layout
 
