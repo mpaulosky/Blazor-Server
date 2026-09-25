@@ -21,6 +21,6 @@ Its `ignores` list skips vendored skills and agents and the release blog posts i
 - **Links:** Use `[descriptive text](url)`. Use relative links for files in this repository, and make sure they resolve.
 - **Images:** Use `![alt text](url)` with meaningful alt text.
 - **Tables:** Use tables for tabular data, with a header row.
-- **Line length:** Keep lines at or under 200 characters. Prefer one sentence or clause per line in long paragraphs.
+- **Line length:** Keep lines at or under 200 characters. Table rows are exempt because they can't wrap. Prefer one sentence or clause per line in long paragraphs.
 
 Blog posts under `docs/blogs/` have extra front-matter rules in `blog.instructions.md`. Other Markdown files have no front matter, apart from the `applyTo` header that instruction files need.
