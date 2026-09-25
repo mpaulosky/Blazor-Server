@@ -20,7 +20,7 @@ so Sandcastle builds its own upgrade.
 
 | Label | Applied by | Meaning | Cleared by |
 |---|---|---|---|
-| `Sandcastle` | Human | The issue is in the queue. | Human, or intake when it splits the issue into children |
+| `Sandcastle` | Human, or the host on the child issues intake creates when it splits an issue | The issue is in the queue. | Human, or intake when it splits the issue into children |
 | `sandcastle:ready` | Host (intake) | The issue passed the Definition of Ready and isn't re-checked. | Human (forces a re-check), or the host when it applies an issue-level `sandcastle:needs-human` |
 | `sandcastle:needs-info` | Host (intake) | The issue's text is the problem: answer the questions and edit the issue. | Human, which re-queues the issue |
 | `sandcastle:needs-human` | Host | Sandcastle tried and couldn't. On an issue: two failed builds, a PR closed without merging, or a push touching `.github/workflows/**`. On a PR: follow-up gave up. | Human, which re-queues the issue or PR |
@@ -89,7 +89,8 @@ waits for a later sweep.
 
 **Giving up on a PR.** Three passes per PR, counted as follow-up marker comments since `sandcastle:needs-human` was last removed from it. It gives up at once when the gate-fixer runs
 out of attempts, a conflict can't be resolved to a green gate, a re-run check stays red, or an agent run fails. Giving up adds `sandcastle:needs-human` to the **PR** with one comment
-quoting or linking the last gate or CI output. Open human threads never count as giving up: the human who opened them is already involved, and the job summary lists PRs waiting
+quoting or linking the last gate or CI output. `pr-automerge.yml` skips PRs labelled `sandcastle:needs-human`, so a handed-back PR never merges until the human removes
+the label. Open human threads never count as giving up: the human who opened them is already involved, and the job summary lists PRs waiting
 on them.
 
 **Closed PRs.** If a PR closes without merging while its issue is open, the host adds `sandcastle:needs-human` to the issue with the comment "PR #x was closed without merging; remove the
@@ -262,7 +263,8 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 [Where an automatic Sandcastle trigger could run](https://github.com/mpaulosky/Blazor-Server/issues/54). The reasoning for the runner and token is in
 [ADR 0002](../adr/0002-unattended-sandcastle-on-a-hosted-runner.md).
 
-**Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`, running `npx tsx .sandcastle/main.mts`. Triggers:
+**Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` with `SANDCASTLE_GH_TOKEN` (never the event's ref), sets up Node 22, runs
+`npm ci` to install the locked dependencies (including the `tsx` devDependency), and then runs `npx --no-install tsx .sandcastle/main.mts`. Triggers:
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
@@ -272,6 +274,11 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 
 Event triggers can't filter by label name, so every `labeled` / `unlabeled` event starts the workflow. The job's `if:` checks `github.event.label.name` against the
 exact names above (and the fork and branch conditions), so labels the host applies (`sandcastle:ready`, `bug`) end as a skipped job and never start Sandcastle.
+The one exception is intentional: the host's PAT adding
+`Sandcastle` to split children fires `issues: labeled`, which queues a pending run that picks the children up.
+
+**Main only.** A `workflow_dispatch` run starts only when `github.ref == 'refs/heads/main'`, so a manual run can never execute unreviewed host code from another branch
+with the write token, and every other event runs the host code checked out from `main`.
 
 **Overlap:** `concurrency: { group: sandcastle, cancel-in-progress: false }` on the **job**, not the workflow, so a filtered-out event is skipped before it takes the
 pending slot and can't displace a real pending run. One run going and at most one pending. Every run re-reads the whole queue, so collapsed triggers lose nothing.
