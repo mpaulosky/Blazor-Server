@@ -277,7 +277,7 @@ jobs:
           git checkout main
 
           if [ "$HAS_RELEASE_PR_PAT" != "true" ]; then
-            echo "::notice::RELEASE_PR_PAT is not set, so $BRANCH is opened with GITHUB_TOKEN. Its lint and CodeQL checks will wait for a manual \"Approve and run\"."
+            echo "::notice::RELEASE_PR_PAT is not set, so $BRANCH is pushed and opened with GITHUB_TOKEN. GitHub starts no workflows for GITHUB_TOKEN events, so its lint and CodeQL checks will not run and auto-merge will wait on them. Set RELEASE_PR_PAT to fix this."
           fi
 
           gh pr create \
