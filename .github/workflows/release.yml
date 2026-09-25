@@ -245,6 +245,7 @@ jobs:
           # gh pr create authors the PR as whichever identity this token
           # belongs to.
           GH_TOKEN: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
+          HAS_RELEASE_PR_PAT: ${{ secrets.RELEASE_PR_PAT != '' }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
           git config user.name "github-actions[bot]"
@@ -274,6 +275,10 @@ jobs:
           git commit -m "docs: add release blog for PR #${PR_NUMBER} [skip-release]"
           git push origin "$BRANCH"
           git checkout main
+
+          if [ "$HAS_RELEASE_PR_PAT" != "true" ]; then
+            echo "::notice::RELEASE_PR_PAT is not set, so $BRANCH is opened with GITHUB_TOKEN. Its lint and CodeQL checks will wait for a manual \"Approve and run\"."
+          fi
 
           gh pr create \
             --base main \
