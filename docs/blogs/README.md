@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-25 | [fix(lint): Markdown lint CI checks nothing because .markdownlint.json disables every rule](2026-09-25-pr-32-fix-lint-markdown-lint-ci-checks-nothing-because-markdownlint-json-disables-every-rule.md) | release,automation |
 | 2026-09-25 | [Created CODE_METRICS.md file, analyzed metrics for 3 projects.](2026-09-25-pr-39-created-code-metrics-md-file-analyzed-metrics-for-3-projects.md) | release,automation |
 | 2026-09-25 | [ci(code-metrics): Grant write access and open the metrics PR with the PAT](2026-09-25-pr-37-ci-code-metrics-grant-write-access-and-open-the-metrics-pr-with-the-pat.md) | release,automation |
 | 2026-09-24 | [ci: Fail Test Report Summary when the test matrix fails](2026-09-24-pr-35-ci-fail-test-report-summary-when-the-test-matrix-fails.md) | release,automation |
