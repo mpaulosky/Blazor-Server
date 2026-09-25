@@ -315,4 +315,23 @@ The file names are a proposal; the first implementation issue settles them.
 Filed as `Sandcastle` issues with native "blocked by" links, so the blocker gate builds them in order and the trigger lands last. One manual setup issue (secrets) isn't labelled
 `Sandcastle`, and it blocks the trigger.
 
-<!-- implementation-issues -->
+| Issue | Blocked by |
+|---|---|
+| [Split main.mts into modules and configure every role from one ROLE_AGENTS map](https://github.com/mpaulosky/Blazor-Server/issues/66) | [#65](https://github.com/mpaulosky/Blazor-Server/pull/65) (this spec) |
+| [One gate script shared by the pre-push hook, the sandbox and people](https://github.com/mpaulosky/Blazor-Server/issues/67) | #66 |
+| [The host names branches and skips issues that already have a PR](https://github.com/mpaulosky/Blazor-Server/issues/68) | #66 |
+| [Run the gate at two checkpoints with a gate-fixer role](https://github.com/mpaulosky/Blazor-Server/issues/69) | #66, #67 |
+| [Skip the pre-push hook's gate for commits the sandbox already gated](https://github.com/mpaulosky/Blazor-Server/issues/70) | #69 |
+| [Replace the implementer with a tester and a backend developer](https://github.com/mpaulosky/Blazor-Server/issues/71) | #69 |
+| [Add architect, UI developer and scribe roles picked by the planner](https://github.com/mpaulosky/Blazor-Server/issues/72) | #68, #71 |
+| [Hand an issue back to a human after two failed builds](https://github.com/mpaulosky/Blazor-Server/issues/73) | #69 |
+| [Intake judges each issue against the Definition of Ready](https://github.com/mpaulosky/Blazor-Server/issues/74) | #68, #73 |
+| [Intake splits oversized issues into blocked child issues](https://github.com/mpaulosky/Blazor-Server/issues/75) | #74 |
+| [Critique each round's plan and defer picks that aren't safe in parallel](https://github.com/mpaulosky/Blazor-Server/issues/76) | #68 |
+| [Sweep open Sandcastle PRs each round and keep them current](https://github.com/mpaulosky/Blazor-Server/issues/77) | #68, #73 |
+| [Follow-up passes resolve review threads and merge conflicts](https://github.com/mpaulosky/Blazor-Server/issues/78) | #69, #77 |
+| [Follow-up passes fix red CI on Sandcastle PRs](https://github.com/mpaulosky/Blazor-Server/issues/79) | #78 |
+| [Make Sandcastle runs safe to start unattended](https://github.com/mpaulosky/Blazor-Server/issues/80) | #74, #77 |
+| [Write a run report with outcomes, hand-backs and token usage](https://github.com/mpaulosky/Blazor-Server/issues/81) | #73 |
+| [Create the secrets Sandcastle needs to run from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/83) | none |
+| [Trigger Sandcastle automatically from GitHub Actions](https://github.com/mpaulosky/Blazor-Server/issues/82) | #70, #72, #75, #76, #79, #80, #81, #83 |
