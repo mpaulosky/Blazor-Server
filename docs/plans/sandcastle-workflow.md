@@ -250,7 +250,8 @@ A usage-limit stop and the time-budget stop never count.
 alone.
 
 **Workflow files.** The PAT has no Workflows permission, so a push touching `.github/workflows/**` is rejected. The host recognises that rejection and adds `sandcastle:needs-human` to
-the issue instead of retrying it every round.
+the issue instead of retrying it every round. That rejection is a safety net, not the plan: work that needs a `.github/workflows/**` change is filed as a manual issue without
+the `Sandcastle` label, and a `Sandcastle` issue that depends on it lists it as a blocker. This includes Sandcastle's own upgrades to `pr-automerge.yml` and `sandcastle.yml`.
 
 **Notification: the run ends red.** The PAT is the human's own, so GitHub never notifies them about Sandcastle's labels or comments. The host records every hand-back (`needs-info` or
 `needs-human`) it applies in the run, and after all work is done a final workflow step fails the job when that list is non-empty. GitHub Actions then emails the person who triggered
@@ -326,8 +327,8 @@ The file names are a proposal; the first implementation issue settles them.
 
 ## Implementation issues
 
-Filed as `Sandcastle` issues with native "blocked by" links, so the blocker gate builds them in order and the trigger lands last. One manual setup issue (secrets) isn't labelled
-`Sandcastle`, and it blocks the trigger.
+Filed with native "blocked by" links, so the blocker gate builds them in order and the trigger lands last. Three are manual and aren't labelled `Sandcastle`: the secrets, and the
+two `.github/workflows/**` changes the PAT can't push (see **Workflow files**). A human builds the trigger once its blockers have landed.
 
 | Issue | Blocked by |
 |---|---|
@@ -343,9 +344,10 @@ Filed as `Sandcastle` issues with native "blocked by" links, so the blocker gate
 | [Intake splits oversized issues into blocked child issues](https://github.com/mpaulosky/Blazor-Server/issues/75) | #74 |
 | [Critique each round's plan and defer picks that aren't safe in parallel](https://github.com/mpaulosky/Blazor-Server/issues/76) | #68 |
 | [Sweep open Sandcastle PRs each round and keep them current](https://github.com/mpaulosky/Blazor-Server/issues/77) | #68, #73 |
-| [Follow-up passes resolve review threads and merge conflicts](https://github.com/mpaulosky/Blazor-Server/issues/78) | #69, #77 |
+| [Keep pr-automerge.yml from merging PRs handed back to a human (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/84) | none |
+| [Follow-up passes resolve review threads and merge conflicts](https://github.com/mpaulosky/Blazor-Server/issues/78) | #69, #77, #84 |
 | [Follow-up passes fix red CI on Sandcastle PRs](https://github.com/mpaulosky/Blazor-Server/issues/79) | #78 |
 | [Make Sandcastle runs safe to start unattended](https://github.com/mpaulosky/Blazor-Server/issues/80) | #74, #77 |
 | [Write a run report with outcomes, hand-backs and token usage](https://github.com/mpaulosky/Blazor-Server/issues/81) | #73 |
 | [Create the secrets Sandcastle needs to run from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/83) | none |
-| [Trigger Sandcastle automatically from GitHub Actions](https://github.com/mpaulosky/Blazor-Server/issues/82) | #70, #72, #75, #76, #79, #80, #81, #83 |
+| [Trigger Sandcastle automatically from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/82) | #70, #72, #75, #76, #79, #80, #81, #83 |
