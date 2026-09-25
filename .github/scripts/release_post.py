@@ -243,11 +243,17 @@ def update_blog_index(blog_dir, merged_date, title_line, post_name):
     blog_index = blog_dir / "README.md"
     existing = blog_index.read_text(encoding="utf-8") if blog_index.exists() else ""
 
+    # Keep the post rows, skipping the header and its separator. Matching the
+    # header's first cell exactly keeps posts whose title mentions "Date".
     rows = []
     for line in existing.splitlines():
         line = line.strip()
-        if line.startswith("|") and line.endswith("|") and "---" not in line and "Date" not in line:
-            rows.append(line)
+        if not (line.startswith("|") and line.endswith("|")):
+            continue
+        first_cell = line.strip("|").split("|")[0].strip()
+        if first_cell == "Date" or set(first_cell) <= set("-: "):
+            continue
+        rows.append(line)
 
     row_title = title_line.replace("|", "\\|")
     rows = [r for r in rows if f"({post_name})" not in r]

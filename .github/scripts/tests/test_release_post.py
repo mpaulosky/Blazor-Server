@@ -279,6 +279,16 @@ def test_blog_index_lists_the_post_once(tmp_path):
     assert "| 2026-09-24 | [feat(ui): Add the \"dark\" theme](2026-09-24-pr-42-feat-ui-add-the-dark-theme.md) | release,automation |" in index
 
 
+def test_blog_index_keeps_posts_whose_title_mentions_date(tmp_path):
+    blog_dir = make_repo(tmp_path) / "docs" / "blogs"
+    older = "| 2026-09-20 | [fix(ui): Date parsing fix](2026-09-20-pr-7-fix-ui-date-parsing-fix.md) | release,automation |"
+    rp.update_blog_index(blog_dir, "2026-09-20", "fix(ui): Date parsing fix", "2026-09-20-pr-7-fix-ui-date-parsing-fix.md")
+    rp.update_blog_index(blog_dir, "2026-09-24", "feat(ui): Next", "2026-09-24-pr-8-feat-ui-next.md")
+    index = (blog_dir / "README.md").read_text(encoding="utf-8")
+    assert older in index
+    assert index.count("| Date | Title | Tags |") == 1
+
+
 # Post content and the AI summary
 
 
