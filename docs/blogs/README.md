@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-25 | [ci(release): Flag when release PRs fall back to GITHUB_TOKEN](2026-09-25-pr-48-ci-release-flag-when-release-prs-fall-back-to-github-token.md) | release,automation |
 | 2026-09-25 | [fix(release): Remove the workflow dispatch loop that always fails with HTTP 403](2026-09-25-pr-46-fix-release-remove-the-workflow-dispatch-loop-that-always-fails-with-http-403.md) | release,automation |
 | 2026-09-25 | [feat(release): Backfill blog posts for past releases](2026-09-25-pr-43-feat-release-backfill-blog-posts-for-past-releases.md) | release,automation |
 | 2026-09-25 | [feat(release): Richer per-PR blog posts and a Pages index.html](2026-09-25-pr-33-feat-release-richer-per-pr-blog-posts-and-a-pages-index-html.md) | release,automation |
