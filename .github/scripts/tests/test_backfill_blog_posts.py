@@ -1,3 +1,6 @@
+import io
+import json
+
 import pytest
 
 import backfill_blog_posts as bf
@@ -152,9 +155,6 @@ def test_dependabot_post_has_no_summary_but_others_do(tmp_path):
     make_repo(tmp_path)
 
     def urlopen(request, timeout):
-        import io
-        import json
-
         class Response(io.BytesIO):
             def __enter__(self):
                 return self

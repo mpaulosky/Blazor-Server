@@ -32,7 +32,7 @@ def parse_pr_numbers(text):
 
 
 def has_post(blog_dir, pr_number):
-    return any(blog_dir.glob(f"*-pr-{pr_number}-*.md"))
+    return bool(rp.posts_for_pr(blog_dir, pr_number))
 
 
 def select_releases(releases, blog_dir, regenerate=False, only=None):

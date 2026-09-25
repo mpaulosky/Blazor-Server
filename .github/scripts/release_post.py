@@ -331,6 +331,11 @@ def source_pr_of(release):
     return int(match.group(1)) if match else None
 
 
+def posts_for_pr(blog_dir, pr_number):
+    """The docs/blogs posts for a PR, sorted by name (so by date)."""
+    return sorted(blog_dir.glob(f"*-pr-{pr_number}-*.md"))
+
+
 def post_url(repository, name):
     return f"https://github.com/{repository}/blob/main/docs/blogs/{name}"
 
@@ -370,7 +375,7 @@ def release_entries(gh, repository, blog_dir, current=None):
         entry["url"] = f"https://github.com/{repository}/releases/tag/{entry['tag']}"
         entry["post_url"] = ""
         if entry["pr"]:
-            posts = sorted(blog_dir.glob(f"*-pr-{entry['pr']}-*.md"))
+            posts = posts_for_pr(blog_dir, entry["pr"])
             if posts:
                 entry["post_url"] = post_url(repository, posts[-1].name)
     return entries
@@ -527,7 +532,7 @@ def write_post(gh, pr_number, tag, root=Path("."), api_key=None, model=DEFAULT_M
     post_name = f"{merged_date}-pr-{pr_number}-{slugify(title_line)}.md"
     # A renamed PR, or an older post dated differently, would otherwise leave
     # two posts for one PR.
-    for old_post in blog_dir.glob(f"*-pr-{pr_number}-*.md"):
+    for old_post in posts_for_pr(blog_dir, pr_number):
         if old_post.name != post_name:
             old_post.unlink()
             log(f"Removed docs/blogs/{old_post.name}")
