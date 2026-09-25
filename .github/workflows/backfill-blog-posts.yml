@@ -82,6 +82,7 @@ jobs:
         env:
           # Same PAT-with-fallback as the checkout step.
           GH_TOKEN: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
+          HAS_RELEASE_PR_PAT: ${{ secrets.RELEASE_PR_PAT != '' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -100,6 +101,10 @@ jobs:
           # The branch is rebuilt from main on every run, so an open backfill
           # PR is updated in place rather than stacked with a second one.
           git push --force origin "$BRANCH"
+
+          if [ "$HAS_RELEASE_PR_PAT" != "true" ]; then
+            echo "::notice::RELEASE_PR_PAT is not set, so the backfill PR is pushed with GITHUB_TOKEN. GitHub starts no workflows for GITHUB_TOKEN events, so its lint and CodeQL checks will not run and auto-merge will wait on them. Set RELEASE_PR_PAT to fix this."
+          fi
 
           EXISTING=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
