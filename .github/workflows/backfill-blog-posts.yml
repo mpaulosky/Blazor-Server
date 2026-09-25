@@ -39,6 +39,9 @@ concurrency:
 
 jobs:
   backfill:
+    # The job force-pushes, opens a PR and enables auto-merge, so it runs
+    # only when dispatched from main, never from a branch's copy of this file.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
