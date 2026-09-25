@@ -13,6 +13,10 @@ obj/
 packages.config.lock.json
 .nuget/
 
+# Python
+__pycache__/
+*.pyc
+
 # Test Coverage
 coverage/
 *.coverage
