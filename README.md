@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.41](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.41) | 2026-09-25 | fix(release): Remove the workflow dispatch loop that always fails with HTTP 403 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-46-fix-release-remove-the-workflow-dispatch-loop-that-always-fails-with-http-403.md) |
 | [v0.0.40](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.40) | 2026-09-25 | feat(release): Backfill blog posts for past releases | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-43-feat-release-backfill-blog-posts-for-past-releases.md) |
 | [v0.0.39](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.39) | 2026-09-25 | feat(release): Richer per-PR blog posts and a Pages index.html | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-33-feat-release-richer-per-pr-blog-posts-and-a-pages-index-html.md) |
 | [v0.0.38](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.38) | 2026-09-25 | fix(lint): Markdown lint CI checks nothing because .markdownlint.json disables every rule | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-32-fix-lint-markdown-lint-ci-checks-nothing-because-markdownlint-json-disables-every-rule.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.34](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.34) | 2026-09-24 | fix(hooks): Pre-push gate checks the checked-out branch instead of the pushed refs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-31-fix-hooks-pre-push-gate-checks-the-checked-out-branch-instead-of-the-pushed-refs.md) |
 | [v0.0.33](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.33) | 2026-09-24 | docs(blogs): Backfill missing release blog posts and link them from the README | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-26-docs-blogs-backfill-missing-release-blog-posts-and-link-them-from-the-readme.md) |
 | [v0.0.32](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.32) | 2026-09-24 | feat(sandcastle): Hold back issues whose blockers haven't landed | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-28-feat-sandcastle-hold-back-issues-whose-blockers-haven-t-landed.md) |
-| [v0.0.31](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.31) | 2026-09-24 | fix(release): Bump the release version once instead of twice | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-25-fix-release-bump-the-release-version-once-instead-of-twice.md) |
 
 <!-- RELEASES_END -->
 
