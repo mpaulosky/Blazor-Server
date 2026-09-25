@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-25 | [ci(code-metrics): Grant write access and open the metrics PR with the PAT](2026-09-25-pr-37-ci-code-metrics-grant-write-access-and-open-the-metrics-pr-with-the-pat.md) | release,automation |
 | 2026-09-24 | [ci: Fail Test Report Summary when the test matrix fails](2026-09-24-pr-35-ci-fail-test-report-summary-when-the-test-matrix-fails.md) | release,automation |
 | 2026-09-24 | [fix(hooks): Pre-push gate checks the checked-out branch instead of the pushed refs](2026-09-24-pr-31-fix-hooks-pre-push-gate-checks-the-checked-out-branch-instead-of-the-pushed-refs.md) | release,automation |
 | 2026-09-24 | [docs(blogs): Backfill missing release blog posts and link them from the README](2026-09-24-pr-26-docs-blogs-backfill-missing-release-blog-posts-and-link-them-from-the-readme.md) | release,automation |
