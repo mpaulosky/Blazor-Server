@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-25 | [fix(ci): Merge same-repo PRs after Copilot review instead of never](2026-09-25-pr-50-fix-ci-merge-same-repo-prs-after-copilot-review-instead-of-never.md) | release,automation |
 | 2026-09-25 | [ci(release): Flag when release PRs fall back to GITHUB_TOKEN](2026-09-25-pr-48-ci-release-flag-when-release-prs-fall-back-to-github-token.md) | release,automation |
 | 2026-09-25 | [fix(release): Remove the workflow dispatch loop that always fails with HTTP 403](2026-09-25-pr-46-fix-release-remove-the-workflow-dispatch-loop-that-always-fails-with-http-403.md) | release,automation |
 | 2026-09-25 | [feat(release): Backfill blog posts for past releases](2026-09-25-pr-43-feat-release-backfill-blog-posts-for-past-releases.md) | release,automation |

@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.43](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.43) | 2026-09-25 | fix(ci): Merge same-repo PRs after Copilot review instead of never | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-50-fix-ci-merge-same-repo-prs-after-copilot-review-instead-of-never.md) |
 | [v0.0.42](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.42) | 2026-09-25 | ci(release): Flag when release PRs fall back to GITHUB_TOKEN | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-48-ci-release-flag-when-release-prs-fall-back-to-github-token.md) |
 | [v0.0.41](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.41) | 2026-09-25 | fix(release): Remove the workflow dispatch loop that always fails with HTTP 403 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-46-fix-release-remove-the-workflow-dispatch-loop-that-always-fails-with-http-403.md) |
 | [v0.0.40](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.40) | 2026-09-25 | feat(release): Backfill blog posts for past releases | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-43-feat-release-backfill-blog-posts-for-past-releases.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.36](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.36) | 2026-09-25 | ci(code-metrics): Grant write access and open the metrics PR with the PAT | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-37-ci-code-metrics-grant-write-access-and-open-the-metrics-pr-with-the-pat.md) |
 | [v0.0.35](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.35) | 2026-09-24 | ci: Fail Test Report Summary when the test matrix fails | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-35-ci-fail-test-report-summary-when-the-test-matrix-fails.md) |
 | [v0.0.34](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.34) | 2026-09-24 | fix(hooks): Pre-push gate checks the checked-out branch instead of the pushed refs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-31-fix-hooks-pre-push-gate-checks-the-checked-out-branch-instead-of-the-pushed-refs.md) |
-| [v0.0.33](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.33) | 2026-09-24 | docs(blogs): Backfill missing release blog posts and link them from the README | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-26-docs-blogs-backfill-missing-release-blog-posts-and-link-them-from-the-readme.md) |
 
 <!-- RELEASES_END -->
 
