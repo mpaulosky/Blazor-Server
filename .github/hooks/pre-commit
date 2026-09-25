@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Pre-commit gate: runs markdownlint on staged .md files.
+# Pre-commit gate: runs markdownlint-cli2 on staged .md files, with the same
+# .markdownlint-cli2.jsonc config as CI.
 # Blocks the commit if any markdownlint violations are found.
-# Degrades gracefully if markdownlint binary is not available.
+# Degrades gracefully if markdownlint-cli2 is not available.
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -21,16 +22,15 @@ echo -e "${CYAN}━━━ Pre-Commit Markdownlint Gate ━━━━━━━━�
 # ── Probe for markdownlint binary ──────────────────────────────────────────
 MARKDOWNLINT_BIN=""
 
-if command -v markdownlint &>/dev/null; then
-  MARKDOWNLINT_BIN="markdownlint"
-elif [[ -x "$ROOT/node_modules/.bin/markdownlint-cli2" ]]; then
+# Only markdownlint-cli2 reads .markdownlint-cli2.jsonc, the config CI uses.
+if [[ -x "$ROOT/node_modules/.bin/markdownlint-cli2" ]]; then
   MARKDOWNLINT_BIN="$ROOT/node_modules/.bin/markdownlint-cli2"
-elif [[ -x "$ROOT/node_modules/.bin/markdownlint" ]]; then
-  MARKDOWNLINT_BIN="$ROOT/node_modules/.bin/markdownlint"
+elif command -v markdownlint-cli2 &>/dev/null; then
+  MARKDOWNLINT_BIN="markdownlint-cli2"
 fi
 
 if [[ -z "$MARKDOWNLINT_BIN" ]]; then
-  echo -e "${YELLOW}⚠️   markdownlint not found — skipping markdown lint check.${RESET}"
+  echo -e "${YELLOW}⚠️   markdownlint-cli2 not found — skipping markdown lint check.${RESET}"
   echo -e "    To enable: run  ${CYAN}npm install${RESET}  (markdownlint-cli2 is a dev dependency)"
   echo -e "    Or install globally: ${CYAN}npm install -g markdownlint-cli2${RESET}"
   exit 0
@@ -42,17 +42,7 @@ echo -e "  Linting staged .md files with: ${CYAN}$(basename "$MARKDOWNLINT_BIN")
 # Build array of files and run linter
 mapfile -t MD_FILES <<< "$STAGED_MD"
 
-CONFIG_FLAG=""
-if [[ -f "$ROOT/.markdownlint.json" ]]; then
-  if [[ "$(basename "$MARKDOWNLINT_BIN")" == "markdownlint-cli2" ]]; then
-    CONFIG_FLAG="--config $ROOT/.markdownlint.json"
-  else
-    CONFIG_FLAG="--config $ROOT/.markdownlint.json"
-  fi
-fi
-
-# shellcheck disable=SC2086
-if "$MARKDOWNLINT_BIN" $CONFIG_FLAG "${MD_FILES[@]}" 2>&1; then
+if "$MARKDOWNLINT_BIN" "${MD_FILES[@]}" 2>&1; then
   echo -e "${GREEN}✅  All staged .md files passed markdownlint.${RESET}"
   exit 0
 else

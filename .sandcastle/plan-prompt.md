@@ -39,9 +39,12 @@ For each unblocked issue, assign a branch name that follows the repository conve
 - `hotfix/{id}-{slug}` when the issue has the `bug` label
 - `feature/{id}-{slug}` for every other issue
 
-`{slug}` is the issue title in kebab-case: lowercase, ASCII letters and digits only, words joined by single hyphens, with any leading conventional-commit prefix such as `feat(Domain):` dropped, and cut to at most five words.
+`{slug}` is the issue title in kebab-case: lowercase, ASCII letters and digits only, words joined by single hyphens, with any leading conventional-commit prefix such as `feat(Domain):` dropped, and
+cut to at most five words.
 
-The branch name must be deterministic so that re-planning the same issue always produces the same branch and accumulated progress is preserved. Before deriving a new name, check the existing branches below. If one already starts with `feature/{id}-` or `hotfix/{id}-`, reuse that exact name, even if the title has changed since.
+The branch name must be deterministic so that re-planning the same issue always produces the same branch and accumulated progress is preserved.
+Before deriving a new name, check the existing branches below.
+If one already starts with `feature/{id}-` or `hotfix/{id}-`, reuse that exact name, even if the title has changed since.
 
 !`git branch -a --format='%(refname:short)' --list 'feature/*' 'hotfix/*' 'origin/feature/*' 'origin/hotfix/*' | sed 's|^origin/||' | sort -u`
 
