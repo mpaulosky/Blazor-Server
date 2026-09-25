@@ -2,8 +2,8 @@
 name: PR Auto-Merge
 
 # Squash-merges a same-repo PR into main once it is ready: required checks
-# pass, Copilot has reviewed the PR's latest change, and every review thread
-# is resolved. The main ruleset asks Copilot to review each push but doesn't
+# pass, Copilot has reviewed the PR's head commit, and every review thread is
+# resolved. The main ruleset asks Copilot to review each push but doesn't
 # require its review, so merging on green alone would usually land a PR
 # before that review arrives. Each trigger below is a moment one of those
 # conditions can become true; the job re-checks all of them every time.
@@ -65,14 +65,6 @@ jobs:
                        autoMergeRequest {
                          enabledAt
                        }
-                       commits(last: 100) {
-                         nodes {
-                           commit {
-                             oid
-                             parents { totalCount }
-                           }
-                         }
-                       }
                        reviews(last: 50) {
                          nodes {
                            author { login }
@@ -80,6 +72,7 @@ jobs:
                          }
                        }
                        reviewThreads(first: 100) {
+                         totalCount
                          nodes { isResolved }
                        }
                      }
@@ -101,21 +94,23 @@ jobs:
                 return;
               }
 
-              // The strict required-checks rule makes PRs merge main back in
-              // before they can land. Those merge commits only bring in code
-              // already on main, so Copilot's review has to cover the newest
-              // commit that isn't a merge, not necessarily the head.
-              const authored = pr.commits.nodes
-                .map((node) => node.commit)
-                .filter((commit) => commit.parents.totalCount === 1);
-              const reviewTarget = authored.length > 0 ? authored[authored.length - 1].oid : pr.headRefOid;
-              const reviewedShas = new Set(
-                pr.reviews.nodes
-                  .filter((review) => review.author?.login === "copilot-pull-request-reviewer")
-                  .map((review) => review.commit?.oid)
-              );
-              if (!reviewedShas.has(reviewTarget) && !reviewedShas.has(pr.headRefOid)) {
-                core.info(`Waiting on PR #${pullNumber}: no Copilot review of ${reviewTarget} yet.`);
+              // Copilot re-reviews every push, including merge-from-main
+              // commits, so its review has to cover the exact head.
+              const copilotReviewed = pr.reviews.nodes.some((review) => {
+                return (
+                  review.author?.login === "copilot-pull-request-reviewer" &&
+                  review.commit?.oid === pr.headRefOid
+                );
+              });
+              if (!copilotReviewed) {
+                core.info(`Waiting on PR #${pullNumber}: no Copilot review of ${pr.headRefOid} yet.`);
+                return;
+              }
+
+              // Only the first 100 threads are fetched; past that, leave the
+              // merge to a person rather than miss an unresolved one.
+              if (pr.reviewThreads.totalCount > pr.reviewThreads.nodes.length) {
+                core.info(`Skipping PR #${pullNumber}: more review threads than one page; merge it by hand.`);
                 return;
               }
 
