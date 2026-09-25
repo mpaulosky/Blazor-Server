@@ -103,7 +103,7 @@ jobs:
           git push --force origin "$BRANCH"
 
           if [ "$HAS_RELEASE_PR_PAT" != "true" ]; then
-            echo "::notice::RELEASE_PR_PAT is not set, so the backfill PR is pushed with GITHUB_TOKEN. GitHub starts no workflows for GITHUB_TOKEN events, so its lint and CodeQL checks will not run and auto-merge will wait on them. Set RELEASE_PR_PAT to fix this."
+            echo "::notice::RELEASE_PR_PAT is not set, so the backfill PR is pushed with GITHUB_TOKEN. Its pull_request workflow runs (lint, CodeQL) need a manual \"Approve and run\" before they start, and auto-merge waits on them. Set RELEASE_PR_PAT to avoid this."
           fi
 
           EXISTING=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
