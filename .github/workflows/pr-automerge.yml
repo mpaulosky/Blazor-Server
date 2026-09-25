@@ -1,79 +1,71 @@
 ---
 name: PR Auto-Merge
 
+# Squash-merges a same-repo PR into main once it is ready: required checks
+# pass, Copilot has reviewed the current head commit, and every review
+# thread is resolved. The main ruleset asks Copilot to review each push but
+# doesn't require its review, so merging on green alone would usually land a
+# PR before that review arrives. Each trigger below is a moment one of those
+# conditions can become true; the job re-checks all of them every time.
 "on":
   pull_request:
     types: [opened, ready_for_review, reopened, edited, synchronize]
     branches: [main]
-  status:
-  check_suite:
-    types: [completed, requested, rerequested]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_thread:
+    types: [resolved]
+  # GitHub sends no check_suite events for suites created by Actions, and
+  # every required check comes from one of these workflows, so their
+  # completion is the signal that the checks may have gone green.
+  workflow_run:
+    workflows: ["Build and Test Suite", "Lint Markdown", "Lint YAML", "CodeQL"]
+    types: [completed]
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  enable-auto-merge:
-    name: Enable auto-merge for same-repo PRs
+  merge-when-ready:
+    name: Merge same-repo PRs when ready
     runs-on: ubuntu-latest
     steps:
-      - name: Enable auto-merge (squash)
+      - name: Squash-merge when ready
         uses: actions/github-script@v9
+        env:
+          HAS_RELEASE_PR_PAT: ${{ secrets.RELEASE_PR_PAT != '' }}
         with:
+          # A merge made with GITHUB_TOKEN starts no workflows, so release.yml
+          # (on: pull_request closed) would never run for it. Merge with the
+          # PAT when it's set, the same fallback the release workflow uses.
+          github-token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
+            // pull_request, pull_request_review and pull_request_review_thread
+            // events all carry the PR; workflow_run carries only a commit.
             const pullRequestPayload = context.payload.pull_request;
-            const statusPayload = context.payload.status;
-            const checkSuitePayload = context.payload.check_suite;
+            const workflowRun = context.payload.workflow_run;
 
-            let pullNumber;
-            if (pullRequestPayload) {
-              pullNumber = pullRequestPayload.number;
-            } else if (statusPayload) {
+            let pullNumber = pullRequestPayload?.number;
+            if (!pullNumber && workflowRun) {
               const associated = await github.rest.repos.listPullRequestsAssociatedWithCommit({
                 owner,
                 repo,
-                commit_sha: statusPayload.sha
+                commit_sha: workflowRun.head_sha
               });
 
               const matching = associated.data.find((pr) => {
                 return (
                   pr.state === "open" &&
-                  !pr.merged_at &&
                   !pr.draft &&
+                  pr.head?.sha === workflowRun.head_sha &&
                   pr.head?.repo?.full_name === `${owner}/${repo}`
                 );
               });
 
               if (!matching) {
-                core.info(
-                  `Skipping status update for ${statusPayload.sha}: no open PR is associated.`
-                );
-                return;
-              }
-
-              pullNumber = matching.number;
-            } else if (checkSuitePayload) {
-              const associated = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                owner,
-                repo,
-                commit_sha: checkSuitePayload.head_sha
-              });
-
-              const matching = associated.data.find((pr) => {
-                return (
-                  pr.state === "open" &&
-                  !pr.merged_at &&
-                  !pr.draft &&
-                  pr.head?.repo?.full_name === `${owner}/${repo}`
-                );
-              });
-
-              if (!matching) {
-                core.info(
-                  `Skipping check suite update for ${checkSuitePayload.head_sha}: no open PR is associated.`
-                );
+                core.info(`Skipping ${workflowRun.head_sha}: no open same-repo PR has it as its head.`);
                 return;
               }
 
@@ -103,23 +95,36 @@ jobs:
               return;
             }
 
+            if (pull.base?.ref !== "main") {
+              core.info(`Skipping PR #${pullNumber}: base is ${pull.base?.ref}, not main.`);
+              return;
+            }
+
             const status = await github.graphql(
-              `query AutoMergeStatus(
+              `query MergeReadiness(
                  $owner: String!,
                  $repo: String!,
                  $number: Int!
                ) {
                  repository(owner: $owner, name: $repo) {
                    pullRequest(number: $number) {
-                     id
-                     number
                      state
                      merged
+                     isDraft
+                     headRefOid
                      mergeable
                      mergeStateStatus
                      autoMergeRequest {
                        enabledAt
-                       mergeMethod
+                     }
+                     reviews(last: 50) {
+                       nodes {
+                         author { login }
+                         commit { oid }
+                       }
+                     }
+                     reviewThreads(first: 100) {
+                       nodes { isResolved }
                      }
                    }
                  }
@@ -128,73 +133,73 @@ jobs:
             );
 
             const currentPr = status.repository.pullRequest;
-            if (!currentPr || currentPr.state !== "OPEN" || currentPr.merged) {
-              core.info(
-                `Skipping PR #${pullNumber}: already closed or merged.`
-              );
+            if (!currentPr || currentPr.state !== "OPEN" || currentPr.merged || currentPr.isDraft) {
+              core.info(`Skipping PR #${pullNumber}: closed, merged, or draft.`);
               return;
             }
 
+            // release.yml and backfill-blog-posts.yml turn on auto-merge for
+            // their own docs PRs; GitHub finishes those, so leave them alone.
             if (currentPr.autoMergeRequest) {
-              core.info(
-                `Auto-merge already enabled on PR #${pullNumber}; ` +
-                `no action needed.`
-              );
+              core.info(`Skipping PR #${pullNumber}: auto-merge is already enabled.`);
               return;
             }
 
-            const isReadyForAutoMerge =
-              currentPr.mergeable === "MERGEABLE" && currentPr.mergeStateStatus === "CLEAN";
+            const headSha = currentPr.headRefOid;
+            const copilotReviewed = currentPr.reviews.nodes.some((review) => {
+              return (
+                review.author?.login === "copilot-pull-request-reviewer" &&
+                review.commit?.oid === headSha
+              );
+            });
+            if (!copilotReviewed) {
+              core.info(`Waiting on PR #${pullNumber}: no Copilot review of ${headSha} yet.`);
+              return;
+            }
 
-            if (!isReadyForAutoMerge) {
+            const unresolved = currentPr.reviewThreads.nodes.filter((thread) => !thread.isResolved).length;
+            if (unresolved > 0) {
+              core.info(`Waiting on PR #${pullNumber}: ${unresolved} unresolved review thread(s).`);
+              return;
+            }
+
+            // CLEAN means required checks passed and the branch is up to date
+            // with main. Anything else (pending or failing checks, BEHIND,
+            // conflicts, or UNKNOWN while GitHub computes it) waits for a
+            // later event.
+            if (currentPr.mergeable !== "MERGEABLE" || currentPr.mergeStateStatus !== "CLEAN") {
               core.info(
-                `Skipping PR #${pullNumber}: mergeable=${String(currentPr.mergeable)} ` +
+                `Waiting on PR #${pullNumber}: mergeable=${String(currentPr.mergeable)} ` +
                 `mergeStateStatus=${currentPr.mergeStateStatus ?? "unknown"}.`
               );
               return;
             }
 
-            try {
-              await github.graphql(
-                `mutation EnableAutoMerge($pullRequestId: ID!) {
-                   enablePullRequestAutoMerge(input: {
-                     pullRequestId: $pullRequestId,
-                     mergeMethod: SQUASH
-                   }) {
-                     pullRequest {
-                       number
-                       autoMergeRequest {
-                         mergeMethod
-                         enabledAt
-                       }
-                     }
-                   }
-                 }`,
-                { pullRequestId: currentPr.id }
+            if (process.env.HAS_RELEASE_PR_PAT !== "true") {
+              core.warning(
+                "RELEASE_PR_PAT is not set, so this merge uses GITHUB_TOKEN and release.yml will not run for it."
               );
-            } catch (error) {
-              const messages = Array.isArray(error?.errors)
-                ? error.errors.map((entry) => entry?.message || "")
-                : [];
-              const combinedMessage = [error?.message || "", ...messages]
-                .join("\n")
-                .toLowerCase();
+            }
 
-              if (
-                combinedMessage.includes("already merged") ||
-                combinedMessage.includes("already enabled") ||
-                combinedMessage.includes("unstable status") ||
-                combinedMessage.includes("mergeable") ||
-                combinedMessage.includes("required status") ||
-                combinedMessage.includes("not mergeable")
-              ) {
-                core.warning(
-                  `Skipping PR #${pullNumber}: ${error.message || "Auto-merge is not ready yet."}`
-                );
+            try {
+              // sha pins the merge to the commit that was checked above, so a
+              // push that lands in between makes the merge fail instead of
+              // merging unreviewed code.
+              await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: pullNumber,
+                sha: headSha,
+                merge_method: "squash"
+              });
+            } catch (error) {
+              // 405: not mergeable after all (e.g. a parallel run just merged
+              // it); 409: the head moved. A later event re-evaluates the PR.
+              if (error.status === 405 || error.status === 409) {
+                core.warning(`Not merging PR #${pullNumber}: ${error.message}`);
                 return;
               }
-
               throw error;
             }
 
-            core.info(`Auto-merge enabled on PR #${pullNumber}`);
+            core.info(`Squash-merged PR #${pullNumber} at ${headSha}.`);
