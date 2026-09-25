@@ -158,13 +158,17 @@ the next round rather than stopping. If the critique run itself fails, the round
 Decided in [How the role-based team is composed and run per issue](https://github.com/mpaulosky/Blazor-Server/issues/58) and
 [How the full pre-push gate runs inside the sandbox](https://github.com/mpaulosky/Blazor-Server/issues/59).
 
-Each picked issue gets one `createSandbox()`. The host calls `sandbox.run()` once per role, in this order, stopping the issue's pipeline on a role failure:
+Each picked issue gets one `createSandbox()`. The host calls `sandbox.run()` once per role, in this order:
 
 ```text
 [architect] → tester → backend → [ui] → gate checkpoint 1 → [scribe] → reviewer → gate checkpoint 2 → publish
 ```
 
 Roles in brackets run only when the planner picked them. The tester, backend developer and reviewer always run.
+
+**When a role fails**, the table's last column decides what happens. An architect, tester, backend or UI failure stops the issue's pipeline and counts as a failed build. A scribe or
+reviewer failure doesn't stop it: the pipeline carries on to the next step, and the PR is published with the note in the table. A gate-fixer failure counts as one of the checkpoint's
+gate attempts, and a checkpoint that runs out of attempts stops the pipeline without publishing (see **Checkpoints**).
 
 | Role | Prompt | Does | On failure |
 |---|---|---|---|
@@ -255,8 +259,10 @@ the `Sandcastle` label, and a `Sandcastle` issue that depends on it lists it as 
 
 **Notification: the run ends red.** The PAT is the human's own, so GitHub never notifies them about Sandcastle's labels or comments. The host records every hand-back (`needs-info` or
 `needs-human`) it applies in the run, and after all work is done a final workflow step fails the job when that list is non-empty. GitHub Actions then emails the person who triggered
-the run, and scheduled runs notify the workflow's creator. A crash fails an earlier step, and the job summary tells a hand-back from a crash. To verify while implementing: who gets the
-email for runs started by Copilot's `pull_request_review` or by `workflow_run`. If this proves noisy, the upgrade path is a separate bot identity (a GitHub App or machine user).
+the run, and scheduled runs notify the workflow's creator. A crash fails an earlier step, and the job summary tells a hand-back from a crash. Who gets the email for runs started by
+Copilot's `pull_request_review` or by `workflow_run` can only be confirmed from live runs, so the trigger issue
+([#82](https://github.com/mpaulosky/Blazor-Server/issues/82)) finds out and records the answer here. If this proves noisy, the upgrade path is a separate bot identity (a GitHub App
+or machine user).
 
 ## Trigger and run environment
 
@@ -265,7 +271,8 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 [ADR 0002](../adr/0002-unattended-sandcastle-on-a-hosted-runner.md).
 
 **Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` with `SANDCASTLE_GH_TOKEN` (never the event's ref), sets up Node 22, runs
-`npm ci` to install the locked dependencies (including the `tsx` devDependency), and then runs `npx --no-install tsx .sandcastle/main.mts`. Triggers:
+`npm ci` to install the locked dependencies (including the `tsx` devDependency), and then runs `npx --no-install tsx .sandcastle/main.mts` with `GH_TOKEN` set to
+`SANDCASTLE_GH_TOKEN`. Checkout only gives git the token; the `gh` CLI the host calls for labels, comments, PRs and threads reads `GH_TOKEN`. Triggers:
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
@@ -292,6 +299,8 @@ bounce issues. The next trigger resumes the work.
 - `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (valid one year) by default. When an `ANTHROPIC_API_KEY` secret is set, it's used instead.
 - `SANDCASTLE_GH_TOKEN`: a fine-grained PAT limited to this repository with Contents RW, Issues RW, Pull requests RW, Actions RW and Metadata R, and **no Workflows permission**.
   It is separate from `RELEASE_PR_PAT`. All pushes and PRs use it, because `GITHUB_TOKEN` pushes don't start CI.
+
+**Permissions:** the workflow declares `permissions: contents: read`, so `GITHUB_TOKEN` is read-only whatever the repository default is. Every write goes through the PAT.
 
 **Renewal:** record each secret's expiry date in the setup issue and a calendar reminder. To renew the OAuth token, run `claude setup-token` and update the secret. To renew the PAT,
 regenerate it under *Settings → Developer settings → Fine-grained tokens* with the same scopes and update the secret. An expired secret shows up as a red run with an auth error.
