@@ -282,6 +282,8 @@ def test_blog_index_lists_the_post_once(tmp_path):
 def test_blog_index_keeps_posts_whose_title_mentions_date(tmp_path):
     blog_dir = make_repo(tmp_path) / "docs" / "blogs"
     older = "| 2026-09-20 | [fix(ui): Date parsing fix](2026-09-20-pr-7-fix-ui-date-parsing-fix.md) | release,automation |"
+    for name in ["2026-09-20-pr-7-fix-ui-date-parsing-fix.md", "2026-09-24-pr-8-feat-ui-next.md"]:
+        (blog_dir / name).write_text("post\n", encoding="utf-8")
     rp.update_blog_index(blog_dir, "2026-09-20", "fix(ui): Date parsing fix", "2026-09-20-pr-7-fix-ui-date-parsing-fix.md")
     rp.update_blog_index(blog_dir, "2026-09-24", "feat(ui): Next", "2026-09-24-pr-8-feat-ui-next.md")
     index = (blog_dir / "README.md").read_text(encoding="utf-8")
@@ -389,3 +391,49 @@ def test_empty_api_answer_is_treated_as_no_summary(tmp_path, capsys):
     run(tmp_path, api_key="sk-test", urlopen=urlopen)
     assert "### Summary" not in post_text(tmp_path)
     assert "::warning::" in capsys.readouterr().out
+
+
+def test_dependabot_pr_gets_no_summary_even_with_a_key(tmp_path, capsys):
+    make_repo(tmp_path)
+    gh = FakeGitHub()
+    gh.pulls[42]["user"] = {"login": "dependabot[bot]"}
+
+    calls = []
+
+    def urlopen(request, timeout):
+        calls.append(request)
+        return FakeResponse(b'{"content": [{"type": "text", "text": "Summary."}]}')
+
+    run(tmp_path, gh=gh, api_key="sk-test", urlopen=urlopen)
+    post = post_text(tmp_path)
+    assert calls == []
+    assert "### Summary" not in post
+    assert "No AI summary." in post
+    assert "::notice::" in capsys.readouterr().out
+
+
+def test_rewriting_a_post_under_a_new_name_drops_the_old_one(tmp_path):
+    blog_dir = make_repo(tmp_path) / "docs" / "blogs"
+    stale = "2026-09-23-pr-42-old-title.md"
+    (blog_dir / stale).write_text("old\n", encoding="utf-8")
+    rp.update_blog_index(blog_dir, "2026-09-23", "Old title", stale)
+    (blog_dir / "2026-09-23-pr-420-other.md").write_text("other\n", encoding="utf-8")
+    rp.update_blog_index(blog_dir, "2026-09-23", "Other", "2026-09-23-pr-420-other.md")
+
+    run(tmp_path)
+
+    assert not (blog_dir / stale).exists()
+    assert (blog_dir / "2026-09-23-pr-420-other.md").exists()
+    index = (blog_dir / "README.md").read_text(encoding="utf-8")
+    assert stale not in index
+    assert "2026-09-23-pr-420-other.md" in index
+    assert index.count("pr-42-") == 1
+
+
+def test_update_tables_without_a_new_release_lists_existing_releases(tmp_path):
+    make_repo(tmp_path)
+    rp.update_tables(REPO, FakeGitHub(), root=tmp_path)
+    readme = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert "v0.0.3" not in readme
+    assert f"| [v0.0.2](https://github.com/{REPO}/releases/tag/v0.0.2) | 2026-09-20 | fix: Older change | — |" in readme
+    assert "v0.0.2" in (tmp_path / "docs" / "index.html").read_text(encoding="utf-8")
