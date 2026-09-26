@@ -46,13 +46,29 @@ export function branchFor(issue: BranchIssue, remoteBranches: readonly string[])
   return `${prefix}/${issue.number}-${slugFor(issue.title)}`;
 }
 
-// The feature/* and hotfix/* branches on origin, without the refs/heads/ prefix.
-function remoteIssueBranches(): string[] {
-  return sh(process.cwd(), "git", "ls-remote", "--heads", "origin", "refs/heads/feature/*", "refs/heads/hotfix/*")
+// Branch names from `git ls-remote --heads` output, without refs/heads/.
+export function parseHeads(lsRemote: string): string[] {
+  return lsRemote
     .split("\n")
     .filter(Boolean)
     .map((line) => line.split("\t")[1]!.replace(/^refs\/heads\//, ""));
 }
+
+// The remote git operations prepareBranches needs; tests pass a stub.
+export type RemoteGit = {
+  // The feature/* and hotfix/* branches on origin.
+  issueBranches(): string[];
+  // Fetch origin's branch into its remote-tracking ref.
+  fetch(branch: string): void;
+};
+
+const originGit: RemoteGit = {
+  issueBranches: () =>
+    parseHeads(sh(process.cwd(), "git", "ls-remote", "--heads", "origin", "refs/heads/feature/*", "refs/heads/hotfix/*")),
+  fetch: (branch) => {
+    sh(process.cwd(), "git", "fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
+  },
+};
 
 // Count the commits on the worktree's branch that origin/main doesn't have.
 // origin/main is refreshed once per round, before the pipelines start, because
@@ -70,13 +86,11 @@ export function fetchMain(): void {
 // origin/<branch>. Without the fetch, Sandcastle finds no such branch and
 // silently starts a fresh one from main. The fetches run serially, before the
 // pipelines start, for the same reason as fetchMain.
-export function prepareBranches<T extends BranchIssue>(issues: T[]): { issue: T; branch: string }[] {
-  const remoteBranches = remoteIssueBranches();
+export function prepareBranches<T extends BranchIssue>(issues: T[], git: RemoteGit = originGit): { issue: T; branch: string }[] {
+  const remoteBranches = git.issueBranches();
   return issues.map((issue) => {
     const branch = branchFor(issue, remoteBranches);
-    if (remoteBranches.includes(branch)) {
-      sh(process.cwd(), "git", "fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
-    }
+    if (remoteBranches.includes(branch)) git.fetch(branch);
     return { issue, branch };
   });
 }

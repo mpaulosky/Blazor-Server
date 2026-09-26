@@ -45,7 +45,7 @@ export function ownerApproved(issue: GhIssue, owner: string): SandcastleIssue {
 export function listSandcastleIssues(): SandcastleIssue[] {
   const issues = JSON.parse(
     sh(
-      process.cwd(), "gh", "issue", "list", "--state", "open", "--label", "Sandcastle", "--limit", "100",
+      process.cwd(), "gh", "issue", "list", "--state", "open", "--label", "Sandcastle", "--limit", "1000",
       "--json", "number,title,body,labels,comments",
       "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}]",
     ),
@@ -56,9 +56,11 @@ export function listSandcastleIssues(): SandcastleIssue[] {
 
 export type OpenPullRequest = { number: number; headRefName: string };
 
-// The open pull requests and their head branches.
+// The open pull requests and their head branches. gh pages through results up
+// to --limit, so the cap sits far above any real queue: a PR missed here would
+// let its issue be built twice.
 export function openPullRequests(): OpenPullRequest[] {
   return JSON.parse(
-    sh(process.cwd(), "gh", "pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName"),
+    sh(process.cwd(), "gh", "pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName"),
   ) as OpenPullRequest[];
 }

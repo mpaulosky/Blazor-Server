@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { branchFor, slugFor } from "./branches.mts";
+import { branchFor, parseHeads, prepareBranches, slugFor } from "./branches.mts";
 
 // The pre-push hook's rule for issue branches (.github/hooks/pre-push).
 const prePushBranch = /^(feature|hotfix)\/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -92,5 +92,29 @@ describe("branchFor", () => {
         assert.match(branch, prePushBranch, `${JSON.stringify(title)} gave ${branch}`);
       }
     }
+  });
+});
+
+describe("parseHeads", () => {
+  it("reads branch names from git ls-remote --heads output", () => {
+    const output = "abc123\trefs/heads/feature/66-split-main\ndef456\trefs/heads/hotfix/9-fix-it\n";
+
+    assert.deepEqual(parseHeads(output), ["feature/66-split-main", "hotfix/9-fix-it"]);
+  });
+
+  it("returns nothing for empty output", () => {
+    assert.deepEqual(parseHeads(""), []);
+  });
+});
+
+describe("prepareBranches", () => {
+  it("names every issue's branch and fetches only the ones that exist on origin", () => {
+    const fetched: string[] = [];
+    const git = { issueBranches: () => ["feature/7-old-title"], fetch: (branch: string) => void fetched.push(branch) };
+
+    const work = prepareBranches([issue(7, "feat: New title"), issue(8, "fix: Something", ["bug"])], git);
+
+    assert.deepEqual(work.map((w) => w.branch), ["feature/7-old-title", "hotfix/8-something"]);
+    assert.deepEqual(fetched, ["feature/7-old-title"]);
   });
 });

@@ -25,16 +25,39 @@ export type Blocker = {
 const blockerFields =
   "{number, state, state_reason, merged_at: (.pull_request.merged_at // null), is_pr: (.pull_request != null)}";
 
+// The GitHub reads the gate needs; tests pass a stub. The lookups throw when
+// GitHub can't answer.
+export type GateGitHub = {
+  sandcastleIssues(): SandcastleIssue[];
+  openPullRequests(): OpenPullRequest[];
+  // The issue's native "blocked by" links.
+  nativeBlockers(issueNumber: number): Blocker[];
+  blocker(number: number): Blocker;
+};
+
+const liveGitHub: GateGitHub = {
+  sandcastleIssues: listSandcastleIssues,
+  openPullRequests,
+  nativeBlockers: (issueNumber) =>
+    sh(
+      process.cwd(), "gh", "api", "--paginate", `repos/${repoName()}/issues/${issueNumber}/dependencies/blocked_by`,
+      "--jq", `.[] | ${blockerFields}`,
+    )
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Blocker),
+  blocker: (number) =>
+    JSON.parse(sh(process.cwd(), "gh", "api", `repos/${repoName()}/issues/${number}`, "--jq", blockerFields)) as Blocker,
+};
+
 // Undefined when the lookup fails (a mistyped number 404s, the network drops).
 // Callers treat that as still blocking, so one bad reference holds back only
 // its own issue instead of aborting the whole run.
-function fetchBlocker(number: number, cache: Map<number, Blocker>): Blocker | undefined {
+function fetchBlocker(number: number, cache: Map<number, Blocker>, github: GateGitHub): Blocker | undefined {
   let blocker = cache.get(number);
   if (!blocker) {
     try {
-      blocker = JSON.parse(
-        sh(process.cwd(), "gh", "api", `repos/${repoName()}/issues/${number}`, "--jq", blockerFields),
-      ) as Blocker;
+      blocker = github.blocker(number);
     } catch {
       return undefined;
     }
@@ -76,9 +99,11 @@ export function openPrReason(issueNumber: number, openPrs: OpenPullRequest[]): s
 // on an unfinished blocker or an open PR, with the reasons for each held-back
 // issue. Blockers are resolved afresh on every call: an issue whose blocker's
 // PR merged during the previous round becomes ready now.
-export function gateIssues(): { ready: SandcastleIssue[]; blocked: { issue: SandcastleIssue; reasons: string[] }[] } {
-  const issues = listSandcastleIssues();
-  const openPrs = openPullRequests();
+export function gateIssues(
+  github: GateGitHub = liveGitHub,
+): { ready: SandcastleIssue[]; blocked: { issue: SandcastleIssue; reasons: string[] }[] } {
+  const issues = github.sandcastleIssues();
+  const openPrs = github.openPullRequests();
   const cache = new Map<number, Blocker>();
 
   const ready: SandcastleIssue[] = [];
@@ -95,13 +120,7 @@ export function gateIssues(): { ready: SandcastleIssue[]; blocked: { issue: Sand
 
     let native: Blocker[];
     try {
-      native = sh(
-        process.cwd(), "gh", "api", "--paginate", `repos/${repoName()}/issues/${issue.number}/dependencies/blocked_by`,
-        "--jq", `.[] | ${blockerFields}`,
-      )
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as Blocker);
+      native = github.nativeBlockers(issue.number);
     } catch {
       // Without its native links the issue's blockers are unknown, so hold it back.
       blocked.push({ issue, reasons: ["its GitHub \"blocked by\" links couldn't be read"] });
@@ -114,7 +133,7 @@ export function gateIssues(): { ready: SandcastleIssue[]; blocked: { issue: Sand
 
     const reasons = [...numbers]
       .map((number) => {
-        const blocker = fetchBlocker(number, cache);
+        const blocker = fetchBlocker(number, cache, github);
         return blocker ? unfinishedReason(blocker) : `#${number} couldn't be fetched`;
       })
       .filter((reason): reason is string => reason !== undefined);

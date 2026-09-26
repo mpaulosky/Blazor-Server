@@ -153,7 +153,7 @@ concerns belong to the critique.
 Unchanged: an issue is blocked while any issue it depends on (native "blocked by" links and `Blocked by #N` / `Depends on #N` lines) hasn't closed as completed or merged. It now also
 drops, in code, issues labelled `sandcastle:needs-info` or `sandcastle:needs-human`, issues without `sandcastle:ready`, and issues with an open PR (labelled or not), logging each reason.
 Issues the owner didn't approve never get this far: the host drops them when it loads the queue.
-The "skip issues with an open PR" rule leaves `plan-prompt.md`.
+The "skip issues with an open PR" rule moves out of `plan-prompt.md` into this gate, so the planner never sees such an issue.
 
 ## Phase 4: Plan
 
