@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-26 | [feat(sandcastle): Run the gate at two checkpoints with a gate-fixer role](2026-09-26-pr-93-feat-sandcastle-run-the-gate-at-two-checkpoints-with-a-gate-fixer-role.md) | release,automation |
 | 2026-09-26 | [feat(sandcastle): Critique each round's plan and defer picks that aren't safe in parallel](2026-09-26-pr-92-feat-sandcastle-critique-each-round-s-plan-and-defer-picks-that-aren-t-safe-in-parallel.md) | release,automation |
 | 2026-09-26 | [feat(sandcastle): One gate script shared by the pre-push hook, the sandbox and people](2026-09-26-pr-89-feat-sandcastle-one-gate-script-shared-by-the-pre-push-hook-the-sandbox-and-people.md) | release,automation |
 | 2026-09-26 | [feat(sandcastle): The host names branches and skips issues that already have a PR](2026-09-26-pr-88-feat-sandcastle-the-host-names-branches-and-skips-issues-that-already-have-a-pr.md) | release,automation |
