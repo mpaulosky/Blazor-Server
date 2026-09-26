@@ -4,10 +4,12 @@
 //   Phase 0 (Gate):             The host resolves each open issue's blockers
 //                               (GitHub "blocked by" links and "Blocked by #N"
 //                               / "Depends on #N" lines) and holds back every
-//                               issue whose blocker hasn't landed yet.
+//                               issue whose blocker hasn't landed yet or that
+//                               already has an open PR.
 //   Phase 1 (Plan):             The planner analyzes the ready issues, builds
 //                               a dependency graph, and outputs a <plan> JSON
-//                               listing unblocked issues with branch names.
+//                               listing unblocked issues. The host names each
+//                               one's branch and fetches it if it exists.
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
 //                               createSandbox(). The implementer runs first.
 //                               If the branch is then ahead of main (this
@@ -18,8 +20,8 @@
 //                               via Promise.allSettled().
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
-// issues are picked up after each round. Issues with an open PR are skipped,
-// and the loop stops early when a round opens no pull request.
+// issues are picked up after each round. The loop stops early when a round
+// opens no pull request.
 //
 // Every role's model, effort, iteration cap and timeout comes from ROLE_AGENTS
 // in lib/config.mts. The sandbox gets no GitHub token: the host reads GitHub
@@ -32,7 +34,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
-import { fetchMain } from "./lib/branches.mts";
+import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { MAX_ITERATIONS } from "./lib/config.mts";
 import { gateIssues } from "./lib/gate.mts";
 import { planRound } from "./lib/plan.mts";
@@ -58,13 +60,13 @@ try {
     const { ready, blocked } = gateIssues();
 
     for (const { issue, reasons } of blocked) {
-      console.log(`  ⏸ #${issue.number} is blocked: ${reasons.join("; ")}`);
+      console.log(`  ⏸ #${issue.number} is held back: ${reasons.join("; ")}`);
     }
 
     if (ready.length === 0) {
       console.log(
         blocked.length > 0
-          ? "Every open issue is waiting on a blocker. Exiting."
+          ? "Every open issue is waiting on a blocker or a pull request. Exiting."
           : "No open Sandcastle issues. Exiting.",
       );
       break;
@@ -73,20 +75,17 @@ try {
     // -----------------------------------------------------------------------
     // Phase 1: Plan
     // -----------------------------------------------------------------------
-    const issues = await planRound(ready);
+    const planned = await planRound(ready);
 
-    if (issues.length === 0) {
+    if (planned.length === 0) {
       // No unblocked work — either everything is done or everything is blocked.
       console.log("No unblocked issues to work on. Exiting.");
       break;
     }
 
-    console.log(
-      `Planning complete. ${issues.length} issue(s) to work in parallel:`,
-    );
-    for (const issue of issues) {
-      console.log(`  ${issue.id}: ${issue.title} → ${issue.branch}`);
-    }
+    // planRound keeps only ids from the ready list, so the lookup can't miss.
+    const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
+    const issues = planned.map((issue) => readyById.get(issue.id)!);
 
     // -----------------------------------------------------------------------
     // Phase 2: Execute + Review
@@ -94,31 +93,37 @@ try {
     // Promise.allSettled means one failing pipeline doesn't cancel the others.
     // -----------------------------------------------------------------------
     fetchMain();
+    const work = prepareBranches(issues);
 
-    const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
+    console.log(
+      `Planning complete. ${work.length} issue(s) to work in parallel:`,
+    );
+    for (const { issue, branch } of work) {
+      console.log(`  #${issue.number}: ${issue.title} → ${branch}`);
+    }
+
     const settled = await Promise.allSettled(
-      // planRound keeps only ids from the ready list, so the lookup can't miss.
-      issues.map((issue) => buildIssue(issue, readyById.get(issue.id)!)),
+      work.map(({ issue, branch }) => buildIssue(issue, branch)),
     );
 
     // Log any agents that threw (network error, sandbox crash, timeout, etc.).
     for (const [i, outcome] of settled.entries()) {
       if (outcome.status === "rejected") {
         console.error(
-          `  ✗ ${issues[i]!.id} (${issues[i]!.branch}) failed: ${outcome.reason}`,
+          `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
         );
       }
     }
 
     const published = settled.flatMap((outcome, i) =>
       outcome.status === "fulfilled" && outcome.value.prUrl
-        ? [{ issue: issues[i]!, prUrl: outcome.value.prUrl }]
+        ? [{ ...work[i]!, prUrl: outcome.value.prUrl }]
         : [],
     );
 
     console.log(`\nExecution complete. ${published.length} pull request(s):`);
-    for (const { issue, prUrl } of published) {
-      console.log(`  ${issue.id} (${issue.branch}) → ${prUrl}`);
+    for (const { issue, branch, prUrl } of published) {
+      console.log(`  #${issue.number} (${branch}) → ${prUrl}`);
     }
 
     if (published.length === 0) {

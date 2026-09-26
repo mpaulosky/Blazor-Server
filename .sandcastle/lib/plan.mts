@@ -3,17 +3,16 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { hooks } from "./config.mts";
-import { openPrBranches, type SandcastleIssue } from "./github.mts";
+import type { SandcastleIssue } from "./github.mts";
 import { plannerPromptArgs } from "./prompts.mts";
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts
 // and validates it against this schema. We use Zod here, but any Standard
 // Schema validator works just as well — Valibot, ArkType, etc. See
-// https://standardschema.dev.
+// https://standardschema.dev. There's no branch field: the host names branches
+// (see branchFor), so a re-plan can't move an issue's work to a new branch.
 const planSchema = z.object({
-  issues: z.array(
-    z.object({ id: z.string(), title: z.string(), branch: z.string() }),
-  ),
+  issues: z.array(z.object({ id: z.string(), title: z.string() })),
 });
 
 export type PlannedIssue = z.infer<typeof planSchema>["issues"][number];
@@ -28,7 +27,7 @@ export async function planRound(ready: SandcastleIssue[]): Promise<PlannedIssue[
     hooks,
     sandbox: docker(),
     promptFile: "./.sandcastle/plan-prompt.md",
-    promptArgs: plannerPromptArgs(ready, openPrBranches()),
+    promptArgs: plannerPromptArgs(ready),
     // Extract and validate the <plan> JSON into a typed object. Throws
     // StructuredOutputError if the tag is missing, the JSON is malformed, or
     // validation fails — which aborts the loop.
