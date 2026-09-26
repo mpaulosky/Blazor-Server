@@ -35,7 +35,7 @@ export type GateGitHub = {
   blocker(number: number): Blocker;
 };
 
-const liveGitHub: GateGitHub = {
+export const liveGitHub: GateGitHub = {
   sandcastleIssues: listSandcastleIssues,
   openPullRequests,
   nativeBlockers: (issueNumber) =>
@@ -91,30 +91,42 @@ export function unfinishedReason(blocker: Blocker): string | undefined {
 // Why an issue waits for review rather than an agent, or undefined when no open
 // PR's head is its feature/{n}-* or hotfix/{n}-* branch.
 export function openPrReason(issueNumber: number, openPrs: OpenPullRequest[]): string | undefined {
-  const pr = openPrs.find((candidate) => isIssueBranch(candidate.headRefName, issueNumber));
-  return pr ? `PR #${pr.number} (${pr.headRefName}) is already open for it` : undefined;
+  const pr = openPrFor(issueNumber, openPrs);
+  return pr ? prReason(pr) : undefined;
 }
+
+function openPrFor(issueNumber: number, openPrs: OpenPullRequest[]): OpenPullRequest | undefined {
+  return openPrs.find((candidate) => isIssueBranch(candidate.headRefName, issueNumber));
+}
+
+function prReason(pr: OpenPullRequest): string {
+  return `PR #${pr.number} (${pr.headRefName}) is already open for it`;
+}
+
+// A held-back issue, why it waits, and the open PR holding it back, if any.
+export type HeldBackIssue = { issue: SandcastleIssue; reasons: string[]; pr?: OpenPullRequest };
 
 // Split the open Sandcastle issues into those ready to plan and those waiting
 // on an unfinished blocker or an open PR, with the reasons for each held-back
-// issue. Blockers are resolved afresh on every call: an issue whose blocker's
-// PR merged during the previous round becomes ready now.
+// issue and its open PR, which the critique compares the round's picks with.
+// Blockers are resolved afresh on every call: an issue whose blocker's PR
+// merged during the previous round becomes ready now.
 export function gateIssues(
   github: GateGitHub = liveGitHub,
-): { ready: SandcastleIssue[]; blocked: { issue: SandcastleIssue; reasons: string[] }[] } {
+): { ready: SandcastleIssue[]; blocked: HeldBackIssue[] } {
   const issues = github.sandcastleIssues();
   const openPrs = github.openPullRequests();
   const cache = new Map<number, Blocker>();
 
   const ready: SandcastleIssue[] = [];
-  const blocked: { issue: SandcastleIssue; reasons: string[] }[] = [];
+  const blocked: HeldBackIssue[] = [];
 
   for (const issue of issues) {
     // Its work is waiting for review, not for an agent. Checked first, so its
     // blockers aren't looked up for nothing.
-    const prReason = openPrReason(issue.number, openPrs);
-    if (prReason) {
-      blocked.push({ issue, reasons: [prReason] });
+    const pr = openPrFor(issue.number, openPrs);
+    if (pr) {
+      blocked.push({ issue, reasons: [prReason(pr)], pr });
       continue;
     }
 

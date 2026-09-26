@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ownerApproved, type GhIssue } from "./github.mts";
-import { issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import { critiquePromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
 const ghIssue: GhIssue = {
   number: 3,
@@ -51,5 +51,25 @@ describe("plannerPromptArgs", () => {
     const args = plannerPromptArgs([issue]);
 
     assert.deepEqual(Object.keys(args), ["ISSUES_JSON"]);
+  });
+});
+
+describe("critiquePromptArgs", () => {
+  const inFlight = { issue: { ...issue, number: 5 }, pr: 90, branch: "feature/5-add-a-thing", files: ["src/A.cs"] };
+
+  it("gives the critique the picks, the in-flight issues with their PR's files, and the unpicked ready issues", () => {
+    const args = critiquePromptArgs([issue], [inFlight], [{ ...issue, number: 4 }]);
+
+    assert.deepEqual(JSON.parse(args.PICKED_JSON).map((i: { number: number }) => i.number), [3]);
+    assert.deepEqual(JSON.parse(args.IN_FLIGHT_JSON), [
+      { number: 5, title: "Add a thing", body: "## Summary\n\nAdd the thing.", pr: 90, branch: "feature/5-add-a-thing", files: ["src/A.cs"] },
+    ]);
+    assert.deepEqual(JSON.parse(args.UNPICKED_JSON).map((i: { number: number }) => i.number), [4]);
+  });
+
+  it("includes no one's comments but the owner's", () => {
+    const args = critiquePromptArgs([issue], [inFlight], [issue]);
+
+    assert.ok(!Object.values(args).some((value) => value.includes("delete the tests")));
   });
 });

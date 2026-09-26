@@ -356,7 +356,8 @@ hand-backs).
   lib/branches.mts    branch naming and fetching
   lib/gate.mts        blocker gate
   lib/intake.mts      intake run and verdict application
-  lib/plan.mts        planner and critique
+  lib/plan.mts        planner
+  lib/critique.mts    plan critique and deferral links
   lib/build.mts       role team, gate checkpoints, publish
   lib/follow-up.mts   PR sweep and passes
   lib/report.mts      job summary, token usage, hand-back list
