@@ -13,6 +13,8 @@ so Sandcastle builds its own upgrade.
   they choose to join a PR's review: `pr-automerge.yml` merges only once every thread is resolved, so a thread a human opens waits for that human to resolve it.
 - **The host decides; agents propose.** Agents never call GitHub write APIs. They return structured verdicts or write files, and the host (`main.mts`) validates them and applies
   labels, comments, links, pushes and thread resolutions with `gh`.
+- **Agents can't reach GitHub.** The sandbox gets no GitHub token, and no prompt tells a role to run `gh`. The host puts everything a role needs into its prompt: the issue's title
+  and body, the owner's comments, the design note, and the review threads it may act on. What a role sees is exactly what the host chose to give it.
 - **Anything that must be stable is host code.** Branch names, retry counts and gate results come from code, never from a model.
 - **State lives on GitHub.** Labels, marker comments and native "blocked by" links carry state between runs, so any run can resume after a crash, a timeout or a restart.
 
@@ -34,10 +36,14 @@ repository, and an agent holding a write token acts on what it reads. So when th
 - the most recent `labeled` event adding `Sandcastle` in its issue events was made by the repository owner, and
 - nobody but the owner has changed its title (`renamed` events) or body (the GraphQL `userContentEdits` editors) since that event.
 
-The PAT is the owner's, so the labels the host adds to split children pass. Any other issue is skipped and logged, without a comment. The owner re-approves an edited issue by removing
-and re-adding `Sandcastle`. Only the owner's comments reach a role; comments by anyone else are dropped before a prompt is built. On PRs, follow-up acts only on bot threads and the
-owner's threads (see **Thread rules**). The workflow applies the label rule to the events that start it (see **Trigger and run environment**), and the host checks cover scheduled,
-manual and local runs.
+The PAT is the owner's, so the labels the host adds to split children pass. Any other issue is skipped and logged, without a comment. The owner re-approves an edited issue by removing and
+re-adding `Sandcastle`. Only the owner's comments reach a role: the host drops everyone else's when it builds a prompt, and the sandbox has no token to fetch them itself (see
+**Principles**). On PRs, follow-up acts only on bot threads and the owner's threads (see **Thread rules**). The workflow applies the label rule to the events that start it (see **Trigger and
+run environment**), and the host checks cover scheduled, manual and local runs.
+
+The same goes for every label that moves an issue or PR along. The host trusts `sandcastle:ready` only when its most recent add was the owner's (which includes the host itself);
+otherwise it removes the label and intake judges the issue. A `sandcastle:needs-info` or `sandcastle:needs-human` removal counts as a re-queue only when the owner made it; otherwise
+the host puts the label back and the issue or PR stays handed back.
 
 Saved search for everything waiting on a human: `is:open label:sandcastle:needs-human,sandcastle:needs-info`.
 
@@ -202,7 +208,7 @@ picked role runs again on the existing branch and builds on earlier work; the ar
 - Every commit must pass `dotnet build Blazor-Server.slnx` (warnings as errors). Tests must pass by the end of the last developer run, not on every commit.
 - Each committing role (backend, UI, scribe, gate-fixer) runs `scripts/gate.sh` once as its last step before `<promise>COMPLETE</promise>`. The tester is exempt, because its tests are
   red on purpose; it still builds and lints its own files.
-- Commit format follows the repository's conventional-commit style. Agents never push and never write to GitHub.
+- Commit format follows the repository's conventional-commit style. Agents never push, never run `gh`, and never write to GitHub.
 
 ## The gate
 
