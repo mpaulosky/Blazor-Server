@@ -117,6 +117,21 @@ describe("gateIssues", () => {
     assert.deepEqual(gh.lookedUp, [68]);
   });
 
+  it("returns the open PR that holds an issue back, so the critique can compare against it", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(67), sandcastleIssue(70, "Blocked by #69")],
+      openPullRequests: () => [{ number: 89, headRefName: "feature/67-one-gate-script" }],
+      blocker: (number) => ({ number, state: "open", state_reason: null, merged_at: null, is_pr: false }),
+    });
+
+    const { blocked } = gateIssues(gh);
+
+    assert.deepEqual(blocked.map((b) => [b.issue.number, b.pr]), [
+      [67, { number: 89, headRefName: "feature/67-one-gate-script" }],
+      [70, undefined],
+    ]);
+  });
+
   it("holds back an issue whose body blocker is still open", () => {
     const gh = github({
       sandcastleIssues: () => [sandcastleIssue(70, "Blocked by #69")],
