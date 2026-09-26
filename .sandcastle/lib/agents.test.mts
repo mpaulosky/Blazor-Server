@@ -5,6 +5,8 @@ import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
 import { roleOptions, runRoleInSandbox, withSharedRules } from "./agents.mts";
 import { usageReport } from "./report.mts";
 
+const sharedRules = readFileSync(new URL("../roles/shared-rules.md", import.meta.url), "utf8");
+
 describe("roleOptions", () => {
   it("names the run after the role and applies its iteration cap", () => {
     const options = roleOptions("tester");
@@ -57,8 +59,6 @@ describe("runRoleInSandbox", () => {
     assert.deepEqual(runs[0]!.promptArgs, { TASK_ID: "3", SHARED_RULES: sharedRules });
   });
 });
-
-const sharedRules = readFileSync(new URL("../roles/shared-rules.md", import.meta.url), "utf8");
 
 describe("withSharedRules", () => {
   it("adds the shared rules to a prompt file's arguments", () => {

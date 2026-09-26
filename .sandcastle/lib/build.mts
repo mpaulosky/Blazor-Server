@@ -78,11 +78,11 @@ export async function buildIssue(
       {
         gate: () => runGate(sandbox),
         fix: async (at, gateOutput) => {
-          const fix = await runRoleInSandbox(sandbox, "gate-fixer", {
+          const fixer = await runRoleInSandbox(sandbox, "gate-fixer", {
             promptFile: "./.sandcastle/roles/gate-fixer.md",
             promptArgs: gateFixerPromptArgs(issue, branch, at, gateOutput),
           });
-          commits.push(...fix.commits);
+          commits.push(...fixer.commits);
         },
       },
       (line) => console.log(`  #${issue.number} ${line}`),
