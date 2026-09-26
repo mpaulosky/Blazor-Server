@@ -8,9 +8,15 @@ const branch = "feature/69-run-the-gate";
 
 // A host whose sandbox records each role run and gate run in `steps`, and
 // answers the gate with the queued exit codes in order.
-function host(gateExitCodes: number[], { ahead = 1 } = {}) {
+function host(
+  gateExitCodes: number[],
+  { ahead = 1, statuses = [""] }: { ahead?: number | number[]; statuses?: string[] } = {},
+) {
   const steps: string[] = [];
   const comments: { issueNumber: number; body: string }[] = [];
+  const aheadCounts = Array.isArray(ahead) ? [...ahead] : [ahead];
+  const worktreeStatuses = [...statuses];
+  let aheadIndex = 0;
   const sandbox = {
     worktreePath: "/worktree",
     run: async (options: SandboxRunOptions) => {
@@ -18,7 +24,14 @@ function host(gateExitCodes: number[], { ahead = 1 } = {}) {
       return { iterations: [], commits: [{ sha: options.name! }] };
     },
     exec: async (command: string) => {
-      if (command.startsWith("git status")) return { stdout: "", stderr: "", exitCode: 0 };
+      if (command.startsWith("git status")) {
+        const stdout = worktreeStatuses.shift() ?? "";
+        return { stdout, stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git config --local sandcastle.gatedHead")) {
+        steps.push("record gated head");
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
       steps.push(`gate: ${command}`);
       const exitCode = gateExitCodes.shift();
       if (exitCode === undefined) throw new Error("the gate ran more often than the test expected");
@@ -31,7 +44,11 @@ function host(gateExitCodes: number[], { ahead = 1 } = {}) {
   } as unknown as Sandbox;
   const buildHost: BuildHost = {
     createSandbox: async () => sandbox,
-    commitsAhead: () => ahead,
+    commitsAhead: () => {
+      const current = aheadCounts[Math.min(aheadIndex, aheadCounts.length - 1)] ?? 0;
+      aheadIndex++;
+      return current;
+    },
     commentOnIssue: (issueNumber, body) => void comments.push({ issueNumber, body }),
     publish: (_issue, _branch, _worktreePath, reviewed) => {
       steps.push(`publish${reviewed ? "" : " unreviewed"}`);
@@ -52,6 +69,7 @@ describe("buildIssue", () => {
       "gate: scripts/gate.sh 2>&1",
       "reviewer",
       "gate: scripts/gate.sh 2>&1",
+      "record gated head",
       "publish",
       "close",
     ]);
@@ -70,6 +88,7 @@ describe("buildIssue", () => {
       "reviewer",
       "gate-fixer 2",
       "gate-fixer 2",
+      "record gated head",
       "publish",
       "close",
     ]);
@@ -108,5 +127,20 @@ describe("buildIssue", () => {
 
     assert.deepEqual(steps, ["implementer", "close"]);
     assert.equal(result.prUrl, undefined);
+  });
+
+  it("runs checkpoint 1 when the worktree is dirty even if no commits are ahead", async () => {
+    const { steps, comments, buildHost } = host([0, 0, 0], {
+      ahead: [0, 0],
+      statuses: [" M src/App.razor\n", " M src/App.razor\n", " M src/App.razor\n", " M src/App.razor\n"],
+    });
+
+    const result = await buildIssue(issue, branch, buildHost);
+
+    assert.deepEqual(steps.filter((step) => !step.startsWith("gate:")), ["implementer", "gate-fixer 1", "gate-fixer 1", "close"]);
+    assert.equal(result.prUrl, undefined);
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.body, /checkpoint 1/);
+    assert.match(comments[0]!.body, /uncommitted changes/);
   });
 });

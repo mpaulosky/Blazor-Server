@@ -62,6 +62,12 @@ else
   check_branch_name "$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
 fi
 
+GATED_HEAD="$(git config --local --get sandcastle.gatedHead 2>/dev/null || true)"
+if [[ -n "$GATED_HEAD" && "$GATED_HEAD" == "$(git rev-parse HEAD)" ]]; then
+  echo -e "${GREEN}✅ Sandcastle already gated HEAD — skipping the gate.${RESET}"
+  exit 0
+fi
+
 # The gate runs against the working tree. Sandcastle pushes from the issue
 # worktree, which has the pushed branch checked out.
 "$ROOT/scripts/gate.sh"

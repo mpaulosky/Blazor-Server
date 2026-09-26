@@ -94,6 +94,13 @@ export async function buildIssue(
     return result.passed;
   }
 
+  async function recordGatedHead(): Promise<void> {
+    const result = await sandbox.exec("git config --local sandcastle.gatedHead \"$(git rev-parse HEAD)\"");
+    if (result.exitCode !== 0) {
+      throw new Error(`failed to record checkpoint-2 success for HEAD: ${result.stderr || result.stdout}`);
+    }
+  }
+
   try {
     const implement = await runRoleInSandbox(sandbox, "implementer", {
       promptFile: "./.sandcastle/implement-prompt.md",
@@ -105,10 +112,16 @@ export async function buildIssue(
     // doesn't, not only when this run added commits: a re-run of a finished
     // issue makes none, and its earlier work still needs a PR.
     if (host.commitsAhead(sandbox.worktreePath) === 0) {
-      return { commits, prUrl: undefined };
+      const status = await sandbox.exec("git status --porcelain 2>&1");
+      if (status.exitCode === 0 && status.stdout.trim() === "") {
+        return { commits, prUrl: undefined };
+      }
     }
 
     if (!(await gatePasses(1))) return { commits, prUrl: undefined };
+    if (host.commitsAhead(sandbox.worktreePath) === 0) {
+      return { commits, prUrl: undefined };
+    }
 
     let reviewed = true;
     try {
@@ -125,6 +138,7 @@ export async function buildIssue(
     }
 
     if (!(await gatePasses(2))) return { commits, prUrl: undefined };
+    await recordGatedHead();
 
     // Publish while the worktree still exists; close() may remove it.
     return { commits, prUrl: host.publish(issue, branch, sandbox.worktreePath, reviewed) };

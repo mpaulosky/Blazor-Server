@@ -171,6 +171,10 @@ expect "a lint error in the first of two unpushed commits refuses the push" refu
 FAIL='dotnet build*' run_hook feature/1-x "refs/heads/feature/1-x $SHA refs/heads/feature/1-x $ZERO"
 expect "a failing build refuses the push" refused any
 
+git -C "$REPO" config --local sandcastle.gatedHead "$(git -C "$REPO" rev-parse feature/1-x)"
+run_hook feature/1-x "refs/heads/feature/1-x $SHA refs/heads/feature/1-x $ZERO"
+expect "a Sandcastle-gated HEAD skips the pre-push gate" allowed tests-skipped "Sandcastle already gated HEAD"
+
 echo
 echo "$PASSED passed, $FAILED failed"
 [[ $FAILED -eq 0 ]]
