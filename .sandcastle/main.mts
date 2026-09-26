@@ -13,11 +13,16 @@
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
 //                               createSandbox(). The implementer runs first.
 //                               If the branch is then ahead of main (this
-//                               run's commits or earlier ones), a reviewer
-//                               runs in the same sandbox, and the branch is
-//                               pushed and gets a pull request that closes its
-//                               issue. All issue pipelines run concurrently
-//                               via Promise.allSettled().
+//                               run's commits or earlier ones), the host runs
+//                               scripts/gate.sh in the sandbox (checkpoint 1),
+//                               a reviewer runs, and the gate runs again
+//                               (checkpoint 2). A red gate gets two gate-fixer
+//                               attempts per checkpoint; past that the issue
+//                               gets a comment and nothing is pushed.
+//                               Otherwise the branch is pushed and gets a pull
+//                               request that closes its issue. All issue
+//                               pipelines run concurrently via
+//                               Promise.allSettled().
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
 // issues are picked up after each round. The loop stops early when a round

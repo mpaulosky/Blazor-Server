@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { withSharedRules } from "./agents.mts";
 import { ownerApproved, type GhIssue } from "./github.mts";
-import { issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import { gateFixerPromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
 const ghIssue: GhIssue = {
   number: 3,
@@ -52,4 +54,41 @@ describe("plannerPromptArgs", () => {
 
     assert.deepEqual(Object.keys(args), ["ISSUES_JSON"]);
   });
+});
+
+describe("gateFixerPromptArgs", () => {
+  it("gives the gate-fixer the issue, the checkpoint number and the gate output", () => {
+    const args = gateFixerPromptArgs(issue, "feature/3-add-a-thing", 2, "error CS1002");
+
+    assert.equal(args.TASK_ID, "3");
+    assert.equal(args.ISSUE_TITLE, "Add a thing");
+    assert.equal(args.BRANCH, "feature/3-add-a-thing");
+    assert.equal(args.CHECKPOINT, "2");
+    assert.equal(args.GATE_OUTPUT, "error CS1002");
+  });
+});
+
+describe("prompt files", () => {
+  // Sandcastle fills these in itself.
+  const builtIn = new Set(["SOURCE_BRANCH", "TARGET_BRANCH"]);
+
+  const cases = [
+    ["implement-prompt.md", issuePromptArgs(issue, "feature/3-x")],
+    ["review-prompt.md", issuePromptArgs(issue, "feature/3-x")],
+    ["plan-prompt.md", plannerPromptArgs([issue])],
+    ["roles/gate-fixer.md", gateFixerPromptArgs(issue, "feature/3-x", 1, "")],
+  ] as const;
+
+  for (const [file, args] of cases) {
+    it(`${file} gets a value for every placeholder, including the shared rules`, () => {
+      const prompt = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      const { promptArgs } = withSharedRules({ promptFile: file, promptArgs: args });
+      const placeholders = [...prompt.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((match) => match[1]!);
+
+      assert.ok(placeholders.includes("SHARED_RULES"));
+      for (const key of placeholders.filter((key) => !builtIn.has(key))) {
+        assert.ok(promptArgs && key in promptArgs, `${file} uses {{${key}}}, which the host doesn't pass`);
+      }
+    });
+  }
 });

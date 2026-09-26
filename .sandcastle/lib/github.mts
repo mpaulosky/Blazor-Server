@@ -1,6 +1,7 @@
 // gh helpers. Only the host talks to GitHub: the sandbox gets no token, so
 // everything a role needs from GitHub reaches it through its prompt.
 
+import { execFileSync } from "node:child_process";
 import { sh } from "./shell.mts";
 
 let repo: string | undefined;
@@ -63,4 +64,13 @@ export function openPullRequests(): OpenPullRequest[] {
   return JSON.parse(
     sh(process.cwd(), "gh", "pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName"),
   ) as OpenPullRequest[];
+}
+
+// Post a comment on an issue. The body goes through stdin, so a long gate
+// output can't hit the per-argument size limit.
+export function commentOnIssue(issueNumber: number, body: string): void {
+  execFileSync("gh", ["issue", "comment", String(issueNumber), "--body-file", "-"], {
+    input: body,
+    stdio: ["pipe", "ignore", "inherit"],
+  });
 }
