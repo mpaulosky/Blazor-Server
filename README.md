@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.45](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.45) | 2026-09-26 | refactor(sandcastle): Split main.mts into modules and configure every role from one ROLE_AGENTS map | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-86-refactor-sandcastle-split-main-mts-into-modules-and-configure-every-role-from-one-role-agents-map.md) |
 | [v0.0.44](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.44) | 2026-09-26 | docs(sandcastle): Spec the enhanced Sandcastle workflow | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-65-docs-sandcastle-spec-the-enhanced-sandcastle-workflow.md) |
 | [v0.0.43](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.43) | 2026-09-25 | fix(ci): Merge same-repo PRs after Copilot review instead of never | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-50-fix-ci-merge-same-repo-prs-after-copilot-review-instead-of-never.md) |
 | [v0.0.42](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.42) | 2026-09-25 | ci(release): Flag when release PRs fall back to GITHUB_TOKEN | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-48-ci-release-flag-when-release-prs-fall-back-to-github-token.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.38](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.38) | 2026-09-25 | fix(lint): Markdown lint CI checks nothing because .markdownlint.json disables every rule | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-32-fix-lint-markdown-lint-ci-checks-nothing-because-markdownlint-json-disables-every-rule.md) |
 | [v0.0.37](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.37) | 2026-09-25 | Created CODE_METRICS.md file, analyzed metrics for 3 projects. | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-39-created-code-metrics-md-file-analyzed-metrics-for-3-projects.md) |
 | [v0.0.36](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.36) | 2026-09-25 | ci(code-metrics): Grant write access and open the metrics PR with the PAT | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-37-ci-code-metrics-grant-write-access-and-open-the-metrics-pr-with-the-pat.md) |
-| [v0.0.35](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.35) | 2026-09-24 | ci: Fail Test Report Summary when the test matrix fails | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-24-pr-35-ci-fail-test-report-summary-when-the-test-matrix-fails.md) |
 
 <!-- RELEASES_END -->
 
