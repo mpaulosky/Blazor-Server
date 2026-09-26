@@ -66,9 +66,13 @@ Comments on the issue from the repository owner:
 If you find improvements to make:
 
 1. Make the changes directly on this branch
-2. Run `dotnet build Blazor-Server.slnx` and `dotnet test --solution Blazor-Server.slnx` and confirm both pass with no warnings
-3. Commit using `refactor(<scope>): <Summary>` as described in `.github/instructions/git-commit-instructions.md`
+2. Commit using `refactor(<scope>): <Summary>`
+3. Run `scripts/gate.sh` as your last step and confirm it passes
 
 If the code is already clean and well-structured, do nothing.
 
 Once complete, output <promise>COMPLETE</promise>.
+
+# RULES
+
+{{SHARED_RULES}}

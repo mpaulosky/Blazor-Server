@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { withSharedRules } from "./agents.mts";
 import { ownerApproved, type GhIssue } from "./github.mts";
-import { critiquePromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import { critiquePromptArgs, gateFixerPromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
 const ghIssue: GhIssue = {
   number: 3,
@@ -51,6 +53,18 @@ describe("plannerPromptArgs", () => {
     const args = plannerPromptArgs([issue]);
 
     assert.deepEqual(Object.keys(args), ["ISSUES_JSON"]);
+  });
+});
+
+describe("gateFixerPromptArgs", () => {
+  it("preserves issue context and includes the checkpoint and complete gate output", () => {
+    const gateOutput = "Line 1\nLine 2\nLine 3";
+    const args = gateFixerPromptArgs(issue, "feature/3-add-a-thing", 2, gateOutput);
+
+    assert.equal(args.TASK_ID, "3");
+    assert.equal(args.BRANCH, "feature/3-add-a-thing");
+    assert.equal(args.CHECKPOINT, "2");
+    assert.equal(args.GATE_OUTPUT, gateOutput);
   });
 });
 

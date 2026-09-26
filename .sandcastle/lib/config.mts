@@ -41,6 +41,11 @@ export type Role = keyof typeof ROLE_AGENTS;
 // Raise this if your backlog is large; lower it for a quick smoke-test run.
 export const MAX_ITERATIONS = 10;
 
+// Gate-fixer runs allowed at each gate checkpoint before the issue's round is
+// given up, and how much of the final gate output the issue comment quotes.
+export const GATE_FIXER_ATTEMPTS = 2;
+export const GATE_COMMENT_LINES = 100;
+
 // Hooks run inside the sandbox before the agent starts each iteration.
 // npm install ensures the sandbox always has fresh dependencies.
 export const hooks = {

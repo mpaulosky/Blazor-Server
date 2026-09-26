@@ -37,6 +37,7 @@ if [[ -n "$PUSH_REFS" ]]; then
   # Classify by remote ref: `git push origin v1.0.0:main` has a tag as its
   # local ref but still updates main.
   UPDATES_BRANCH=false
+  PUSHED_BRANCH_SHAS=()
   while read -r _local_ref local_sha remote_ref _remote_sha; do
     [[ "$remote_ref" == refs/heads/* ]] || continue
     branch="${remote_ref#refs/heads/}"
@@ -51,6 +52,7 @@ if [[ -n "$PUSH_REFS" ]]; then
 
     check_branch_name "$branch"
     UPDATES_BRANCH=true
+    PUSHED_BRANCH_SHAS+=("$local_sha")
   done <<< "$PUSH_REFS"
 
   if [[ "$UPDATES_BRANCH" == false ]]; then
@@ -60,6 +62,27 @@ if [[ -n "$PUSH_REFS" ]]; then
 else
   # Run by hand: there are no refs on stdin, so gate the checked-out branch.
   check_branch_name "$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+fi
+
+GATED_HEAD="$(git config --local --get sandcastle.gatedHead 2>/dev/null || true)"
+if [[ -n "$GATED_HEAD" ]]; then
+  if [[ -n "$PUSH_REFS" ]]; then
+    ALL_PUSHED_SHAS_GATED=true
+    for local_sha in "${PUSHED_BRANCH_SHAS[@]}"; do
+      if [[ "$local_sha" != "$GATED_HEAD" ]]; then
+        ALL_PUSHED_SHAS_GATED=false
+        break
+      fi
+    done
+
+    if [[ "$ALL_PUSHED_SHAS_GATED" == true ]]; then
+      echo -e "${GREEN}✅ Sandcastle already gated all pushed branch HEADs — skipping the gate.${RESET}"
+      exit 0
+    fi
+  elif [[ "$GATED_HEAD" == "$(git rev-parse HEAD)" ]]; then
+    echo -e "${GREEN}✅ Sandcastle already gated HEAD — skipping the gate.${RESET}"
+    exit 0
+  fi
 fi
 
 # The gate runs against the working tree. Sandcastle pushes from the issue
