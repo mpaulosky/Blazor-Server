@@ -67,9 +67,10 @@ export function openPullRequests(): OpenPullRequest[] {
 }
 
 // Post a comment on an issue. The body goes through stdin, so a long gate
-// output can't hit the per-argument size limit.
-export function commentOnIssue(issueNumber: number, body: string): void {
-  execFileSync("gh", ["issue", "comment", String(issueNumber), "--body-file", "-"], {
+// output can't hit the per-argument size limit. Throws when gh fails; tests
+// pass their own `run`.
+export function commentOnIssue(issueNumber: number, body: string, run: typeof execFileSync = execFileSync): void {
+  run("gh", ["issue", "comment", String(issueNumber), "--body-file", "-"], {
     input: body,
     stdio: ["pipe", "ignore", "inherit"],
   });
