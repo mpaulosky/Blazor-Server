@@ -64,3 +64,27 @@ export function openPullRequests(): OpenPullRequest[] {
     sh(process.cwd(), "gh", "pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName"),
   ) as OpenPullRequest[];
 }
+
+// The paths an open PR changes.
+export function pullRequestFiles(pr: number): string[] {
+  return JSON.parse(sh(process.cwd(), "gh", "pr", "view", String(pr), "--json", "files", "--jq", "[.files[].path]")) as string[];
+}
+
+// Any issue's body, or "" when it has none.
+export function issueBody(number: number): string {
+  return sh(process.cwd(), "gh", "api", `repos/${repoName()}/issues/${number}`, "--jq", '.body // ""');
+}
+
+// Add the native "#issue blocked by #blocker" link. The API names the blocker
+// by its id, not its number.
+export function addBlockedBy(issue: number, blocker: number): void {
+  const id = sh(process.cwd(), "gh", "api", `repos/${repoName()}/issues/${blocker}`, "--jq", ".id");
+  sh(
+    process.cwd(), "gh", "api", "--method", "POST", `repos/${repoName()}/issues/${issue}/dependencies/blocked_by`,
+    "-F", `issue_id=${id}`,
+  );
+}
+
+export function commentOnIssue(issue: number, body: string): void {
+  sh(process.cwd(), "gh", "issue", "comment", String(issue), "--body", body);
+}
