@@ -195,19 +195,19 @@ expect "deleting a Sandcastle file still runs the Sandcastle check" passed "npm 
 $BUILD
 $TEST*"
 
-new_branch feature/7-package
+new_branch feature/8-package
 commit_file package-lock.json '{}'
 run_gate
 expect "a package*.json change runs the Sandcastle check" passed "npm run check:sandcastle
 $BUILD
 $TEST*"
 
-new_branch feature/8-main-moved
+new_branch feature/9-main-moved
 commit_file src/branch.txt
 git -C "$REPO" switch -q main
 commit_file docs/main-only.md '# Main'
 git -C "$REPO" update-ref refs/remotes/origin/main main
-git -C "$REPO" switch -q feature/8-main-moved
+git -C "$REPO" switch -q feature/9-main-moved
 run_gate
 expect "files changed only on main since the branch point are not linted" passed "$BUILD
 $TEST*"

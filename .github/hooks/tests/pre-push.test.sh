@@ -47,9 +47,15 @@ FAILED=0
 OUTPUT=""
 STATUS=0
 
+# switch_to <branch>: check out the branch, creating it from origin/main if new.
+# Existing branches keep their commits.
+switch_to() {
+  git -C "$REPO" switch -q "$1" 2>/dev/null || git -C "$REPO" switch -q -c "$1" origin/main
+}
+
 # run_hook <checked-out branch> <stdin>
 run_hook() {
-  git -C "$REPO" switch -q "$1" 2>/dev/null || git -C "$REPO" switch -q -c "$1" origin/main
+  switch_to "$1"
   : > "$LOG"
   OUTPUT="$(cd "$REPO" && PATH="$STUBS:$PATH" bash "$HOOK" <<< "$2" 2>&1)"
   STATUS=$?
@@ -57,7 +63,7 @@ run_hook() {
 
 # run_hook_without_stdin <checked-out branch>
 run_hook_without_stdin() {
-  git -C "$REPO" switch -q "$1" 2>/dev/null || git -C "$REPO" switch -q -c "$1" origin/main
+  switch_to "$1"
   : > "$LOG"
   OUTPUT="$(cd "$REPO" && PATH="$STUBS:$PATH" bash "$HOOK" < /dev/null 2>&1)"
   STATUS=$?
