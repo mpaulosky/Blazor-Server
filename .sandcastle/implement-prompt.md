@@ -58,28 +58,13 @@ Work test-first (red → green → refactor):
 3. REPEAT until the issue is done
 4. REFACTOR with the tests green
 
-# FEEDBACK LOOPS
+# RULES
 
-Before every commit, both of these must succeed with no warnings (`TreatWarningsAsErrors` is on):
-
-- `dotnet build Blazor-Server.slnx`
-- `dotnet test --solution Blazor-Server.slnx`
-
-If you change Markdown, also run `npx --no-install markdownlint-cli2 <files>`.
-
-# COMMIT
-
-Commit in small steps. Each message follows `.github/instructions/git-commit-instructions.md`:
-
-- Subject: `<type>(<scope>): <Summary>`, for example `test(Domain): Add Result null-conversion test` or `feat(Domain): Port Result with targeted fixes`
-- Body: what changed and why, key decisions, and any blockers for the next iteration
-- Footer: `Refs #{{TASK_ID}}`
+{{SHARED_RULES}}
 
 # THE ISSUE
 
-If the task is not complete, say what was done and what remains in your last commit's body.
-
-Do not push the branch or run `gh`. The orchestrator publishes the branch after review.
+Your run is the last developer run, so the tests must pass by its end. If the task is not complete, say what was done and what remains in your last commit's body.
 
 Once complete, output <promise>COMPLETE</promise>.
 
