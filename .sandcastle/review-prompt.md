@@ -4,6 +4,24 @@ Review the code changes on branch `{{BRANCH}}` and improve code clarity, consist
 
 # CONTEXT
 
+## The issue
+
+Issue #{{TASK_ID}}: {{ISSUE_TITLE}}
+
+<issue>
+
+{{ISSUE_BODY}}
+
+</issue>
+
+Comments on the issue from the repository owner:
+
+<issue-comments>
+
+{{ISSUE_COMMENTS}}
+
+</issue-comments>
+
 ## Branch diff
 
 !`git diff {{TARGET_BRANCH}}...{{BRANCH}}`

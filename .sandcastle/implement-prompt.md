@@ -2,9 +2,21 @@
 
 Fix issue {{TASK_ID}}: {{ISSUE_TITLE}}
 
-Pull in the issue using `gh issue view <ID>`. If it has a parent PRD, pull that in too.
+<issue>
 
-Only work on the issue specified.
+{{ISSUE_BODY}}
+
+</issue>
+
+Comments on the issue from the repository owner:
+
+<issue-comments>
+
+{{ISSUE_COMMENTS}}
+
+</issue-comments>
+
+Only work on the issue specified. You can't reach GitHub from here, and don't need to: everything the issue says is above.
 
 Work on branch {{BRANCH}}. It may already hold earlier commits for this issue. Build on them, don't redo them.
 
@@ -65,9 +77,9 @@ Commit in small steps. Each message follows `.github/instructions/git-commit-ins
 
 # THE ISSUE
 
-If the task is not complete, leave a comment on the issue with what was done and what remains.
+If the task is not complete, say what was done and what remains in your last commit's body.
 
-Do not close the issue, push the branch, or open a pull request. The orchestrator does that after review.
+Do not push the branch or run `gh`. The orchestrator publishes the branch after review.
 
 Once complete, output <promise>COMPLETE</promise>.
 
