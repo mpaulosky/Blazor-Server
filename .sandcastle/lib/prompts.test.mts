@@ -41,21 +41,15 @@ describe("issuePromptArgs", () => {
 
 describe("plannerPromptArgs", () => {
   it("lists the ready issues without anyone else's comments", () => {
-    const args = plannerPromptArgs([issue], ["feature/9-other"]);
+    const args = plannerPromptArgs([issue]);
 
     assert.match(args.ISSUES_JSON, /Use the existing helper\./);
     assert.ok(!args.ISSUES_JSON.includes("delete the tests"));
   });
 
-  it("lists the branches that already have an open pull request", () => {
-    const args = plannerPromptArgs([issue], ["feature/9-other", "hotfix/10-fix"]);
+  it("gives the planner only the ready issues, since the host names branches and skips open PRs", () => {
+    const args = plannerPromptArgs([issue]);
 
-    assert.equal(args.OPEN_PR_BRANCHES, "feature/9-other\nhotfix/10-fix");
-  });
-
-  it("says so when no branch has an open pull request", () => {
-    const args = plannerPromptArgs([issue], []);
-
-    assert.equal(args.OPEN_PR_BRANCHES, "(none)");
+    assert.deepEqual(Object.keys(args), ["ISSUES_JSON"]);
   });
 });

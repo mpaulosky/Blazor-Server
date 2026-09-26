@@ -10,7 +10,8 @@
 // code it needs never reached main.
 // ---------------------------------------------------------------------------
 
-import { listSandcastleIssues, repoName, type SandcastleIssue } from "./github.mts";
+import { isIssueBranch } from "./branches.mts";
+import { listSandcastleIssues, openPullRequests, repoName, type OpenPullRequest, type SandcastleIssue } from "./github.mts";
 import { sh } from "./shell.mts";
 
 export type Blocker = {
@@ -64,18 +65,34 @@ export function unfinishedReason(blocker: Blocker): string | undefined {
   return `${ref} was closed as ${blocker.state_reason ?? "unknown"}, so its work never landed`;
 }
 
+// Why an issue waits for review rather than an agent, or undefined when no open
+// PR's head is its feature/{n}-* or hotfix/{n}-* branch.
+export function openPrReason(issueNumber: number, openPrs: OpenPullRequest[]): string | undefined {
+  const pr = openPrs.find((candidate) => isIssueBranch(candidate.headRefName, issueNumber));
+  return pr ? `PR #${pr.number} (${pr.headRefName}) is already open for it` : undefined;
+}
+
 // Split the open Sandcastle issues into those ready to plan and those waiting
-// on an unfinished blocker, with the reasons for each held-back issue.
-// Blockers are resolved afresh on every call: an issue whose blocker's PR
-// merged during the previous round becomes ready now.
+// on an unfinished blocker or an open PR, with the reasons for each held-back
+// issue. Blockers are resolved afresh on every call: an issue whose blocker's
+// PR merged during the previous round becomes ready now.
 export function gateIssues(): { ready: SandcastleIssue[]; blocked: { issue: SandcastleIssue; reasons: string[] }[] } {
   const issues = listSandcastleIssues();
+  const openPrs = openPullRequests();
   const cache = new Map<number, Blocker>();
 
   const ready: SandcastleIssue[] = [];
   const blocked: { issue: SandcastleIssue; reasons: string[] }[] = [];
 
   for (const issue of issues) {
+    // Its work is waiting for review, not for an agent. Checked first, so its
+    // blockers aren't looked up for nothing.
+    const prReason = openPrReason(issue.number, openPrs);
+    if (prReason) {
+      blocked.push({ issue, reasons: [prReason] });
+      continue;
+    }
+
     let native: Blocker[];
     try {
       native = sh(

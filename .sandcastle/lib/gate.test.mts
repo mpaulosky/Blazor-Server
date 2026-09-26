@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bodyBlockers, unfinishedReason, type Blocker } from "./gate.mts";
+import { bodyBlockers, openPrReason, unfinishedReason, type Blocker } from "./gate.mts";
 
 describe("bodyBlockers", () => {
   it("reads issue numbers from lines that start with Blocked by or Depends on", () => {
@@ -59,5 +59,27 @@ describe("unfinishedReason", () => {
       unfinishedReason(blocker({ state_reason: "not_planned" })),
       "#5 was closed as not_planned, so its work never landed",
     );
+  });
+});
+
+describe("openPrReason", () => {
+  const prs = [
+    { number: 90, headRefName: "feature/28-other-slug" },
+    { number: 91, headRefName: "hotfix/7-fix-it" },
+    { number: 92, headRefName: "chore/28-tidy" },
+    { number: 93, headRefName: "feature/280-bigger" },
+  ];
+
+  it("names the open PR whose head is the issue's feature branch", () => {
+    assert.equal(openPrReason(28, prs), "PR #90 (feature/28-other-slug) is already open for it");
+  });
+
+  it("names the open PR whose head is the issue's hotfix branch", () => {
+    assert.equal(openPrReason(7, prs), "PR #91 (hotfix/7-fix-it) is already open for it");
+  });
+
+  it("ignores PRs from other branch kinds and issues whose numbers share a prefix", () => {
+    assert.equal(openPrReason(2, prs), undefined);
+    assert.equal(openPrReason(8, [{ number: 92, headRefName: "chore/8-tidy" }]), undefined);
   });
 });

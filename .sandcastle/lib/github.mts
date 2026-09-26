@@ -54,12 +54,11 @@ export function listSandcastleIssues(): SandcastleIssue[] {
   return issues.map((issue) => ownerApproved(issue, owner));
 }
 
-// Head branches that already have an open pull request.
-export function openPrBranches(): string[] {
-  return sh(
-    process.cwd(), "gh", "pr", "list", "--state", "open", "--limit", "100",
-    "--json", "headRefName", "--jq", ".[].headRefName",
-  )
-    .split("\n")
-    .filter(Boolean);
+export type OpenPullRequest = { number: number; headRefName: string };
+
+// The open pull requests and their head branches.
+export function openPullRequests(): OpenPullRequest[] {
+  return JSON.parse(
+    sh(process.cwd(), "gh", "pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName"),
+  ) as OpenPullRequest[];
 }

@@ -14,9 +14,8 @@ export function issuePromptArgs(issue: SandcastleIssue, branch: string) {
   };
 }
 
-export function plannerPromptArgs(ready: SandcastleIssue[], openPrBranches: string[]) {
-  return {
-    ISSUES_JSON: JSON.stringify(ready),
-    OPEN_PR_BRANCHES: openPrBranches.length > 0 ? openPrBranches.join("\n") : "(none)",
-  };
+// The host names branches and has already dropped issues with an open PR, so
+// the planner needs only the ready issues.
+export function plannerPromptArgs(ready: SandcastleIssue[]) {
+  return { ISSUES_JSON: JSON.stringify(ready) };
 }
