@@ -218,7 +218,10 @@ export async function critiqueRound(
   github: CritiqueGitHub = liveGitHub,
   log: (line: string) => void = console.log,
 ): Promise<SandcastleIssue[]> {
-  if (picks.length === 0 || (picks.length === 1 && inFlight.length === 0 && unpicked.length === 0)) return picks;
+  const [firstPick] = picks;
+  if (!firstPick) return picks;
+  const nothingToCompare = picks.length === 1 && inFlight.length === 0 && unpicked.length === 0;
+  if (nothingToCompare) return picks;
 
   let verdicts: CritiqueVerdict[];
   try {
@@ -230,8 +233,8 @@ export async function critiqueRound(
     }));
     verdicts = await run(critiquePromptArgs(picks, inFlightWithFiles, unpicked));
   } catch (error) {
-    log(`  ⚠ The plan critique failed (${error}). Building only the planner's first pick, #${picks[0]!.number}.`);
-    return picks.slice(0, 1);
+    log(`  ⚠ The plan critique failed (${error}). Building only the planner's first pick, #${firstPick.number}.`);
+    return [firstPick];
   }
 
   return applyVerdicts(picks, verdicts, github, log);
