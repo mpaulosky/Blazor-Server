@@ -16,7 +16,7 @@ These branches already have an open pull request:
 
 <open-pr-branches>
 
-!`gh pr list --state open --limit 100 --json headRefName --jq '.[].headRefName'`
+{{OPEN_PR_BRANCHES}}
 
 </open-pr-branches>
 
