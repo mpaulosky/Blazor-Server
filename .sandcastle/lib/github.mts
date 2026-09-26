@@ -86,6 +86,11 @@ export function addBlockedBy(issue: number, blocker: number): void {
   );
 }
 
-export function commentOnIssue(issue: number, body: string): void {
-  sh(process.cwd(), "gh", "issue", "comment", String(issue), "--body", body);
+export function commentOnIssue(issue: number, body: string, run: typeof execFileSync = execFileSync): void {
+  run("gh", ["issue", "comment", String(issue), "--body-file", "-"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "inherit"],
+    input: body,
+  });
 }
