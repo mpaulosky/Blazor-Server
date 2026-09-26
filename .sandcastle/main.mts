@@ -8,8 +8,12 @@
 //                               already has an open PR.
 //   Phase 1 (Plan):             The planner analyzes the ready issues, builds
 //                               a dependency graph, and outputs a <plan> JSON
-//                               listing unblocked issues. The host names each
-//                               one's branch and fetches it if it exists.
+//                               listing unblocked issues.
+//   Phase 1b (Critique):        A second run checks whether the picks are safe
+//                               to build in parallel and defers the ones that
+//                               aren't behind a native "blocked by" link. The
+//                               host names each remaining pick's branch and
+//                               fetches it if it exists.
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
 //                               createSandbox(). The implementer runs first.
 //                               If the branch is then ahead of main (this
@@ -26,7 +30,7 @@
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
 // issues are picked up after each round. The loop stops early when a round
-// opens no pull request.
+// opens no pull request, but not when the critique defers every pick.
 //
 // Every role's model, effort, iteration cap and timeout comes from ROLE_AGENTS
 // in lib/config.mts. The sandbox gets no GitHub token: the host reads GitHub
@@ -41,6 +45,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
 import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { MAX_ITERATIONS } from "./lib/config.mts";
+import { critiqueRound } from "./lib/critique.mts";
 import { gateIssues } from "./lib/gate.mts";
 import { planRound } from "./lib/plan.mts";
 import { usageReport } from "./lib/report.mts";
@@ -90,7 +95,24 @@ try {
 
     // planRound keeps only ids from the ready list, so the lookup can't miss.
     const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
-    const issues = planned.map((issue) => readyById.get(issue.id)!);
+    const picks = planned.map((issue) => readyById.get(issue.id)!);
+
+    // -----------------------------------------------------------------------
+    // Phase 1b: Critique
+    // -----------------------------------------------------------------------
+    const pickedNumbers = new Set(picks.map((issue) => issue.number));
+    const issues = await critiqueRound({
+      picks,
+      inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
+      unpicked: ready.filter((issue) => !pickedNumbers.has(issue.number)),
+    });
+
+    if (issues.length === 0) {
+      // Each deferral added a "blocked by" link, so the next round's gate
+      // holds those issues back and the planner picks from what's left.
+      console.log("The critique deferred every pick. Moving on to the next round.");
+      continue;
+    }
 
     // -----------------------------------------------------------------------
     // Phase 2: Execute + Review

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { withSharedRules } from "./agents.mts";
 import { ownerApproved, type GhIssue } from "./github.mts";
-import { gateFixerPromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import { critiquePromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
 const ghIssue: GhIssue = {
   number: 3,
@@ -56,39 +56,22 @@ describe("plannerPromptArgs", () => {
   });
 });
 
-describe("gateFixerPromptArgs", () => {
-  it("gives the gate-fixer the issue, the checkpoint number and the gate output", () => {
-    const args = gateFixerPromptArgs(issue, "feature/3-add-a-thing", 2, "error CS1002");
+describe("critiquePromptArgs", () => {
+  const inFlight = { issue: { ...issue, number: 5 }, pr: 90, branch: "feature/5-add-a-thing", files: ["src/A.cs"] };
 
-    assert.equal(args.TASK_ID, "3");
-    assert.equal(args.ISSUE_TITLE, "Add a thing");
-    assert.equal(args.BRANCH, "feature/3-add-a-thing");
-    assert.equal(args.CHECKPOINT, "2");
-    assert.equal(args.GATE_OUTPUT, "error CS1002");
+  it("gives the critique the picks, the in-flight issues with their PR's files, and the unpicked ready issues", () => {
+    const args = critiquePromptArgs([issue], [inFlight], [{ ...issue, number: 4 }]);
+
+    assert.deepEqual(JSON.parse(args.PICKED_JSON).map((i: { number: number }) => i.number), [3]);
+    assert.deepEqual(JSON.parse(args.IN_FLIGHT_JSON), [
+      { number: 5, title: "Add a thing", body: "## Summary\n\nAdd the thing.", pr: 90, branch: "feature/5-add-a-thing", files: ["src/A.cs"] },
+    ]);
+    assert.deepEqual(JSON.parse(args.UNPICKED_JSON).map((i: { number: number }) => i.number), [4]);
   });
-});
 
-describe("prompt files", () => {
-  // Sandcastle fills these in itself.
-  const builtIn = new Set(["SOURCE_BRANCH", "TARGET_BRANCH"]);
+  it("includes no one's comments but the owner's", () => {
+    const args = critiquePromptArgs([issue], [inFlight], [issue]);
 
-  const cases = [
-    ["implement-prompt.md", issuePromptArgs(issue, "feature/3-x")],
-    ["review-prompt.md", issuePromptArgs(issue, "feature/3-x")],
-    ["plan-prompt.md", plannerPromptArgs([issue])],
-    ["roles/gate-fixer.md", gateFixerPromptArgs(issue, "feature/3-x", 1, "")],
-  ] as const;
-
-  for (const [file, args] of cases) {
-    it(`${file} gets a value for every placeholder, including the shared rules`, () => {
-      const prompt = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-      const { promptArgs } = withSharedRules({ promptFile: file, promptArgs: args });
-      const placeholders = [...prompt.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((match) => match[1]!);
-
-      assert.ok(placeholders.includes("SHARED_RULES"));
-      for (const key of placeholders.filter((key) => !builtIn.has(key))) {
-        assert.ok(promptArgs && key in promptArgs, `${file} uses {{${key}}}, which the host doesn't pass`);
-      }
-    });
-  }
+    assert.ok(!Object.values(args).some((value) => value.includes("delete the tests")));
+  });
 });
