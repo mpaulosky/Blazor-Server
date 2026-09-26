@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { roleOptions } from "./agents.mts";
+import type { Sandbox } from "@ai-hero/sandcastle";
+import { roleOptions, runRoleInSandbox } from "./agents.mts";
+import { usageReport } from "./report.mts";
 
 describe("roleOptions", () => {
   it("names the run after the role and applies its iteration cap", () => {
@@ -28,5 +30,15 @@ describe("roleOptions", () => {
 
     assert.deepEqual(requested, [45 * 60_000]);
     assert.equal(options.signal, signal);
+  });
+});
+
+describe("runRoleInSandbox", () => {
+  it("lists a role that ran even when its run fails", async () => {
+    const failing = { run: () => Promise.reject(new Error("timed out")) } as unknown as Sandbox;
+
+    await assert.rejects(runRoleInSandbox(failing, "ui", { prompt: "" }), /timed out/);
+
+    assert.ok(usageReport.totals().has("ui"));
   });
 });

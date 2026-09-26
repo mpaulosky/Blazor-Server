@@ -1,7 +1,8 @@
 // The one place a role's agent is built. Every sandcastle.run() and
 // sandbox.run() goes through runRole or runRoleInSandbox, which apply the
 // role's model, effort, iteration cap and timeout from ROLE_AGENTS and record
-// the run's token usage.
+// the run's token usage. The role is recorded before the run starts, so one
+// that times out or fails still appears in the end-of-run report.
 
 import * as sandcastle from "@ai-hero/sandcastle";
 import { ROLE_AGENTS, type Role } from "./config.mts";
@@ -26,6 +27,7 @@ export function runRole<T>(
 ): Promise<sandcastle.RunResult & { output: T }>;
 export function runRole(role: Role, options: Omit<sandcastle.RunOptions, RoleFixed>): Promise<sandcastle.RunResult>;
 export async function runRole(role: Role, options: Omit<sandcastle.RunOptions, RoleFixed>): Promise<sandcastle.RunResult> {
+  usageReport.record(role, []);
   const result = await sandcastle.run({ ...options, ...roleOptions(role) });
   usageReport.record(role, result.iterations);
   return result;
@@ -36,6 +38,7 @@ export async function runRoleInSandbox(
   role: Role,
   options: Omit<sandcastle.SandboxRunOptions, RoleFixed>,
 ): Promise<sandcastle.SandboxRunResult> {
+  usageReport.record(role, []);
   const result = await sandbox.run({ ...options, ...roleOptions(role) });
   usageReport.record(role, result.iterations);
   return result;
