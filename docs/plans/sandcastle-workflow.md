@@ -251,8 +251,9 @@ A timeout is enforced with an `AbortSignal` on the run. Running out of iteration
 
 Decided in [How Sandcastle gives up on an issue and tells the human](https://github.com/mpaulosky/Blazor-Server/issues/63).
 
-**Build retry cap: 2 failed attempts.** A failed attempt is the gate still red after the gate-fixer's attempts (either checkpoint), a role run failing, or a role run timing out. Each
-failure posts an issue comment carrying `<!-- sandcastle:build-failed -->` with the attempt number and the tail of the gate output or error. The first is retried next round; the second
+**Build retry cap: 2 failed attempts.** A failed attempt is anything that stops the issue's pipeline (see **When a role fails**): the gate still red after the gate-fixer's attempts at either
+checkpoint, or an architect, tester, backend or UI run failing or timing out. A scribe or reviewer failure, and a gate-fixer run that fails but leaves attempts for a later one,
+don't count. Each failure posts an issue comment carrying `<!-- sandcastle:build-failed -->` with the attempt number and the tail of the gate output or error. The first is retried next round; the second
 adds `sandcastle:needs-human` with a fuller comment. The count is the marker comments posted since `needs-human` was last removed, so it survives restarts and a re-queue resets it.
 A usage-limit stop and the time-budget stop never count.
 
