@@ -129,10 +129,11 @@ jobs:
               const lastRemoval = events.findLast((event) => {
                 return event.event === "unlabeled" && event.label?.name === NEEDS_HUMAN;
               });
-              if (lastRemoval && lastRemoval.actor?.login !== owner) {
+              const remover = lastRemoval?.actor?.login;
+              if (lastRemoval && remover !== owner) {
                 core.info(
                   `Skipping PR #${pullNumber}: ${NEEDS_HUMAN} was last removed by ` +
-                  `@${lastRemoval.actor?.login ?? "unknown"}, not the repository owner @${owner}; ` +
+                  `@${remover ?? "unknown"}, not the repository owner @${owner}; ` +
                   "the owner has to re-add and remove it."
                 );
                 return;
