@@ -151,11 +151,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
       - name: Install pytest
         run: python -m pip install pytest
 
       - name: Run pytest
         run: python -m pytest .github/scripts/tests
+
+      - name: Run PR automerge Node tests
+        run: node --test .github/scripts/tests/pr-automerge.test.mjs
 
   discover-tests:
     if: ${{ github.actor != 'dependabot[bot]' }}

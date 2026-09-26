@@ -7,9 +7,14 @@ name: PR Auto-Merge
 # require its review, so merging on green alone would usually land a PR
 # before that review arrives. Each trigger below is a moment one of those
 # conditions can become true; the job re-checks all of them every time.
+#
+# A PR Sandcastle handed back with sandcastle:needs-human never merges while it
+# carries the label, or when someone other than the repository owner last
+# removed it (see "Giving up on a PR" in docs/plans/sandcastle-workflow.md).
 "on":
   pull_request:
-    types: [opened, ready_for_review, reopened, edited, synchronize]
+    # unlabeled: the owner removing sandcastle:needs-human can make a PR ready.
+    types: [opened, ready_for_review, reopened, edited, synchronize, unlabeled]
     branches: [main]
   pull_request_review:
     types: [submitted]
@@ -27,6 +32,7 @@ name: PR Auto-Merge
 
 permissions:
   contents: write
+  issues: read
   pull-requests: write
 
 jobs:
@@ -46,7 +52,11 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
 
-            async function mergeIfReady(pullNumber) {
+            // Sandcastle adds this label when it gives up on a PR and hands it
+            // back to a person, who removes it once the PR may merge again.
+            const NEEDS_HUMAN = "sandcastle:needs-human";
+
+            async function getPullRequestStatus(pullNumber) {
               const status = await github.graphql(
                 `query MergeReadiness(
                    $owner: String!,
@@ -78,15 +88,80 @@ jobs:
                          totalCount
                          nodes { isResolved }
                        }
+                       labels(first: 100) {
+                         totalCount
+                         nodes { name }
+                       }
                      }
                    }
                  }`,
                 { owner, repo, number: pullNumber }
               );
 
-              const pr = status.repository.pullRequest;
+              return status.repository.pullRequest;
+            }
+
+            async function isHandBackReadyToMerge(pullNumber, pr) {
+              if (!pr) {
+                core.info(`Skipping PR #${pullNumber}: it no longer exists.`);
+                return false;
+              }
+
+              // Past one page of labels the hand-back label could be missed,
+              // so leave the merge to a person.
+              if (pr.labels.totalCount > pr.labels.nodes.length) {
+                core.info(`Skipping PR #${pullNumber}: more labels than one page; merge it by hand.`);
+                return false;
+              }
+
+              if (pr.labels.nodes.some((label) => label.name === NEEDS_HUMAN)) {
+                core.info(`Skipping PR #${pullNumber}: labelled ${NEEDS_HUMAN}, so it waits for a person to remove the label.`);
+                return false;
+              }
+
+              // Someone with only triage access can remove the label too, and
+              // would get a merge in before Sandcastle puts it back. Trust a
+              // removal only from the repository owner. Events come newest
+              // first, and every page is read so that other label changes
+              // can't hide the latest removal.
+              const events = await github.paginate(github.rest.issues.listEvents, {
+                owner,
+                repo,
+                issue_number: pullNumber,
+                per_page: 100
+              });
+              const lastRemoval = events.find((event) => {
+                return event.event === "unlabeled" && event.label?.name === NEEDS_HUMAN;
+              });
+              const remover = lastRemoval?.actor?.login;
+              if (lastRemoval && remover !== owner) {
+                core.info(
+                  `Skipping PR #${pullNumber}: ${NEEDS_HUMAN} was last removed by ` +
+                  `@${remover ?? "unknown"}, not the repository owner @${owner}; ` +
+                  "the owner has to re-add and remove it."
+                );
+                return false;
+              }
+
+              return true;
+            }
+
+            async function mergeIfReady(pullNumber) {
+              const pr = await getPullRequestStatus(pullNumber);
               if (!pr || pr.state !== "OPEN" || pr.isDraft || pr.isCrossRepository || pr.baseRefName !== "main") {
                 core.info(`Skipping PR #${pullNumber}: not an open, non-draft, same-repo PR into main.`);
+                return;
+              }
+
+              if (!(await isHandBackReadyToMerge(pullNumber, pr))) {
+                return;
+              }
+
+              // Re-check the current hand-back state immediately before the
+              // merge call so a freshly added label, or a new non-owner
+              // removal, cannot slip through after the initial readiness check.
+              const latestPr = await getPullRequestStatus(pullNumber);
+              if (!(await isHandBackReadyToMerge(pullNumber, latestPr))) {
                 return;
               }
 
