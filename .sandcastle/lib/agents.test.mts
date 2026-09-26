@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import type { Sandbox } from "@ai-hero/sandcastle";
-import { roleOptions, runRoleInSandbox } from "./agents.mts";
+import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
+import { roleOptions, runRoleInSandbox, withSharedRules } from "./agents.mts";
 import { usageReport } from "./report.mts";
 
 describe("roleOptions", () => {
@@ -40,5 +41,33 @@ describe("runRoleInSandbox", () => {
     await assert.rejects(runRoleInSandbox(failing, "ui", { prompt: "" }), /timed out/);
 
     assert.ok(usageReport.totals().has("ui"));
+  });
+
+  it("gives the role's prompt the shared rules alongside its own arguments", async () => {
+    const runs: SandboxRunOptions[] = [];
+    const sandbox = {
+      run: async (options: SandboxRunOptions) => {
+        runs.push(options);
+        return { iterations: [], commits: [] };
+      },
+    } as unknown as Sandbox;
+
+    await runRoleInSandbox(sandbox, "reviewer", { promptFile: "./review.md", promptArgs: { TASK_ID: "3" } });
+
+    assert.deepEqual(runs[0]!.promptArgs, { TASK_ID: "3", SHARED_RULES: sharedRules });
+  });
+});
+
+const sharedRules = readFileSync(new URL("../roles/shared-rules.md", import.meta.url), "utf8");
+
+describe("withSharedRules", () => {
+  it("adds the shared rules to a prompt file's arguments", () => {
+    const options = withSharedRules({ promptFile: "./plan.md" });
+
+    assert.deepEqual(options.promptArgs, { SHARED_RULES: sharedRules });
+  });
+
+  it("leaves an inline prompt alone, since Sandcastle rejects arguments for one", () => {
+    assert.deepEqual(withSharedRules({ prompt: "Say hi" }), { prompt: "Say hi" });
   });
 });
