@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.49](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.49) | 2026-09-26 | feat(sandcastle): Run the gate at two checkpoints with a gate-fixer role | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-93-feat-sandcastle-run-the-gate-at-two-checkpoints-with-a-gate-fixer-role.md) |
 | [v0.0.48](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.48) | 2026-09-26 | feat(sandcastle): Critique each round's plan and defer picks that aren't safe in parallel | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-92-feat-sandcastle-critique-each-round-s-plan-and-defer-picks-that-aren-t-safe-in-parallel.md) |
 | [v0.0.47](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.47) | 2026-09-26 | feat(sandcastle): One gate script shared by the pre-push hook, the sandbox and people | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-89-feat-sandcastle-one-gate-script-shared-by-the-pre-push-hook-the-sandbox-and-people.md) |
 | [v0.0.46](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.46) | 2026-09-26 | feat(sandcastle): The host names branches and skips issues that already have a PR | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-88-feat-sandcastle-the-host-names-branches-and-skips-issues-that-already-have-a-pr.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.42](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.42) | 2026-09-25 | ci(release): Flag when release PRs fall back to GITHUB_TOKEN | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-48-ci-release-flag-when-release-prs-fall-back-to-github-token.md) |
 | [v0.0.41](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.41) | 2026-09-25 | fix(release): Remove the workflow dispatch loop that always fails with HTTP 403 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-46-fix-release-remove-the-workflow-dispatch-loop-that-always-fails-with-http-403.md) |
 | [v0.0.40](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.40) | 2026-09-25 | feat(release): Backfill blog posts for past releases | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-43-feat-release-backfill-blog-posts-for-past-releases.md) |
-| [v0.0.39](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.39) | 2026-09-25 | feat(release): Richer per-PR blog posts and a Pages index.html | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-33-feat-release-richer-per-pr-blog-posts-and-a-pages-index-html.md) |
 
 <!-- RELEASES_END -->
 
