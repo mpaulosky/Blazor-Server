@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-26 | [feat(sandcastle): The host names branches and skips issues that already have a PR](2026-09-26-pr-88-feat-sandcastle-the-host-names-branches-and-skips-issues-that-already-have-a-pr.md) | release,automation |
 | 2026-09-26 | [refactor(sandcastle): Split main.mts into modules and configure every role from one ROLE_AGENTS map](2026-09-26-pr-86-refactor-sandcastle-split-main-mts-into-modules-and-configure-every-role-from-one-role-agents-map.md) | release,automation |
 | 2026-09-26 | [docs(sandcastle): Spec the enhanced Sandcastle workflow](2026-09-26-pr-65-docs-sandcastle-spec-the-enhanced-sandcastle-workflow.md) | release,automation |
 | 2026-09-25 | [fix(ci): Merge same-repo PRs after Copilot review instead of never](2026-09-25-pr-50-fix-ci-merge-same-repo-prs-after-copilot-review-instead-of-never.md) | release,automation |
