@@ -18,6 +18,7 @@ function host(gateExitCodes: number[], { ahead = 1 } = {}) {
       return { iterations: [], commits: [{ sha: options.name! }] };
     },
     exec: async (command: string) => {
+      if (command.startsWith("git status")) return { stdout: "", stderr: "", exitCode: 0 };
       steps.push(`gate: ${command}`);
       const exitCode = gateExitCodes.shift();
       if (exitCode === undefined) throw new Error("the gate ran more often than the test expected");

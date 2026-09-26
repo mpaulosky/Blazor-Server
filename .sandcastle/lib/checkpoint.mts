@@ -22,10 +22,27 @@ export type CheckpointSteps = {
 const ansiEscape = /\u001b\[[0-9;]*[A-Za-z]/g;
 
 // Run the gate with stderr folded into stdout, so the output keeps the order
-// it was printed in.
+// it was printed in. A passing gate over a dirty worktree still fails: the gate
+// checks BASE..HEAD and publish() pushes only commits, so uncommitted edits
+// would be gated but never pushed.
 export async function runGate(sandbox: Pick<Sandbox, "exec">): Promise<GateRun> {
   const { stdout, exitCode } = await sandbox.exec("scripts/gate.sh 2>&1");
-  return { passed: exitCode === 0, output: stdout.replace(ansiEscape, "") };
+  const output = stdout.replace(ansiEscape, "");
+  if (exitCode !== 0) return { passed: false, output };
+
+  const status = await sandbox.exec("git status --porcelain 2>&1");
+  if (status.exitCode !== 0) {
+    return { passed: false, output: `${output}\n❌ git status failed, so the worktree can't be shown to be clean:\n${status.stdout}` };
+  }
+  if (status.stdout.trim()) {
+    return {
+      passed: false,
+      output:
+        `${output}\n❌ The gate passed, but the worktree has uncommitted changes. Commit them, or discard ` +
+        `them if they don't belong, so the pushed branch is exactly what the gate checked:\n${status.stdout}`,
+    };
+  }
+  return { passed: true, output };
 }
 
 // Run the gate, and the gate-fixer while it's red and attempts are left.

@@ -14,6 +14,7 @@ builds the solution in Release and runs every test project, stopping at the firs
 - The tester is exempt, because its tests are red on purpose. It still builds and lints the files it changed.
 - The architect is exempt too. It commits at most one ADR, and lints that file with `npx --no-install markdownlint-cli2 <file>`.
 - After you finish, the host runs the gate itself. Its exit code decides whether the branch is published, not what you report.
+- Leave the worktree clean: commit or discard every change before you finish. Only commits are pushed, so the host fails the gate when anything is left uncommitted.
 
 ## Commits
 

@@ -89,19 +89,51 @@ describe("runCheckpoint", () => {
 });
 
 describe("runGate", () => {
-  it("runs scripts/gate.sh with stderr folded into stdout, and passes on exit code 0", async () => {
+  // A sandbox whose gate exits with `gateExit` and whose git status prints `status`.
+  const sandbox = (gateExit: number, status = "", statusExit = 0) => {
     const commands: string[] = [];
-    const sandbox = {
+    return {
+      commands,
       exec: async (command: string) => {
         commands.push(command);
-        return { stdout: "Gate passed\n", stderr: "", exitCode: 0 };
+        return command.startsWith("git status")
+          ? { stdout: status, stderr: "", exitCode: statusExit }
+          : { stdout: "Gate passed\n", stderr: "", exitCode: gateExit };
       },
     };
+  };
 
-    const result = await runGate(sandbox);
+  it("runs scripts/gate.sh with stderr folded into stdout, and passes on exit code 0 with a clean worktree", async () => {
+    const s = sandbox(0);
 
-    assert.deepEqual(commands, ["scripts/gate.sh 2>&1"]);
+    const result = await runGate(s);
+
+    assert.deepEqual(s.commands, ["scripts/gate.sh 2>&1", "git status --porcelain 2>&1"]);
     assert.equal(result.passed, true);
+  });
+
+  it("fails a passing gate when the worktree has uncommitted changes, and names them", async () => {
+    const result = await runGate(sandbox(0, " M src/A.cs\n?? src/B.cs\n"));
+
+    assert.equal(result.passed, false);
+    assert.match(result.output, /uncommitted changes/);
+    assert.match(result.output, /src\/A\.cs/);
+    assert.match(result.output, /src\/B\.cs/);
+  });
+
+  it("fails a passing gate when git status can't run", async () => {
+    const result = await runGate(sandbox(0, "fatal: not a git repository", 128));
+
+    assert.equal(result.passed, false);
+    assert.match(result.output, /git status failed/);
+  });
+
+  it("doesn't check the worktree when the gate is already red", async () => {
+    const s = sandbox(1);
+
+    await runGate(s);
+
+    assert.deepEqual(s.commands, ["scripts/gate.sh 2>&1"]);
   });
 
   it("fails on any other exit code, whatever the output says", async () => {
