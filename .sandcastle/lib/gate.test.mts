@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bodyBlockers, unfinishedReason, type Blocker } from "./gate.mts";
+import { bodyBlockers, gateIssues, openPrReason, unfinishedReason, type Blocker, type GateGitHub } from "./gate.mts";
 
 describe("bodyBlockers", () => {
   it("reads issue numbers from lines that start with Blocked by or Depends on", () => {
@@ -59,5 +59,84 @@ describe("unfinishedReason", () => {
       unfinishedReason(blocker({ state_reason: "not_planned" })),
       "#5 was closed as not_planned, so its work never landed",
     );
+  });
+});
+
+describe("openPrReason", () => {
+  const prs = [
+    { number: 90, headRefName: "feature/28-other-slug" },
+    { number: 91, headRefName: "hotfix/7-fix-it" },
+    { number: 92, headRefName: "chore/28-tidy" },
+    { number: 93, headRefName: "feature/280-bigger" },
+  ];
+
+  it("names the open PR whose head is the issue's feature branch", () => {
+    assert.equal(openPrReason(28, prs), "PR #90 (feature/28-other-slug) is already open for it");
+  });
+
+  it("names the open PR whose head is the issue's hotfix branch", () => {
+    assert.equal(openPrReason(7, prs), "PR #91 (hotfix/7-fix-it) is already open for it");
+  });
+
+  it("ignores PRs from other branch kinds and issues whose numbers share a prefix", () => {
+    assert.equal(openPrReason(2, prs), undefined);
+    assert.equal(openPrReason(8, [{ number: 92, headRefName: "chore/8-tidy" }]), undefined);
+  });
+});
+
+describe("gateIssues", () => {
+  const sandcastleIssue = (number: number, body = "") => ({ number, title: `Issue ${number}`, body, labels: ["Sandcastle"], comments: [] });
+
+  const github = (overrides: Partial<GateGitHub>): GateGitHub & { lookedUp: number[] } => {
+    const lookedUp: number[] = [];
+    return {
+      lookedUp,
+      sandcastleIssues: () => [],
+      openPullRequests: () => [],
+      nativeBlockers: (number) => {
+        lookedUp.push(number);
+        return [];
+      },
+      blocker: (number) => ({ number, state: "closed", state_reason: "completed", merged_at: null, is_pr: false }),
+      ...overrides,
+    };
+  };
+
+  it("holds back an issue with an open PR, names the PR, and skips its blocker lookup", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(67), sandcastleIssue(68)],
+      openPullRequests: () => [{ number: 89, headRefName: "feature/67-one-gate-script" }],
+    });
+
+    const { ready, blocked } = gateIssues(gh);
+
+    assert.deepEqual(ready.map((i) => i.number), [68]);
+    assert.deepEqual(blocked.map((b) => [b.issue.number, b.reasons]), [
+      [67, ["PR #89 (feature/67-one-gate-script) is already open for it"]],
+    ]);
+    assert.deepEqual(gh.lookedUp, [68]);
+  });
+
+  it("holds back an issue whose body blocker is still open", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(70, "Blocked by #69")],
+      blocker: (number) => ({ number, state: "open", state_reason: null, merged_at: null, is_pr: false }),
+    });
+
+    const { ready, blocked } = gateIssues(gh);
+
+    assert.deepEqual(ready, []);
+    assert.deepEqual(blocked[0]!.reasons, ["#69 is still open"]);
+  });
+
+  it("holds back an issue whose blocked-by links can't be read", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(71)],
+      nativeBlockers: () => {
+        throw new Error("network");
+      },
+    });
+
+    assert.deepEqual(gateIssues(gh).blocked[0]!.reasons, ['its GitHub "blocked by" links couldn\'t be read']);
   });
 });
