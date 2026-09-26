@@ -1,4 +1,4 @@
-Every Sandcastle role follows these rules.
+# Shared role rules
 
 ## Build and tests
 
