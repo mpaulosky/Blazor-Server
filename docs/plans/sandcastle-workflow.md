@@ -64,8 +64,8 @@ issues the owner approved (see **Labels**).
 
 ### Early exit
 
-Before building the Docker image or calling Claude, the host checks whether there is any work: an open, un-judged issue for intake, a ready unblocked issue for the build, or a settled PR
-for follow-up. With none, the run exits 0 at once. Scheduled and event triggers are therefore cheap when there's nothing to do.
+Before building the Docker image or calling Claude, the host checks whether there is any work: an open, un-judged issue for intake (not handed back), a ready unblocked issue for the build, or a
+settled PR for follow-up. With none, the run exits 0 at once. Scheduled and event triggers are therefore cheap when there's nothing to do.
 
 ## Phase 1: Follow-up sweep
 
@@ -73,7 +73,9 @@ Decided in [How Sandcastle follows up on an open PR until it can merge](https://
 [GitHub APIs for automated PR review follow-up](https://github.com/mpaulosky/Blazor-Server/issues/55).
 
 **Scope.** Open, non-draft, same-repo PRs into `main` whose head is `feature/{n}-…` or `hotfix/{n}-…`, where `#n` is an open issue in scope. PRs labelled `sandcastle:needs-human` are
-skipped.
+skipped. A PR is Sandcastle's only when the repository owner opened it (the host publishes with the owner's PAT) and its body carries the `<!-- sandcastle:pr -->` marker the host
+writes when it publishes, so a collaborator's PR on a matching branch is never swept. The Copilot-review and CI-completion triggers only start a run; this check decides which PRs it
+touches.
 
 **Settled.** A PR gets a pass only when every check run on its head has completed and Copilot has reviewed the head (a Copilot review with `commit.oid == headRefOid`, and Copilot not in
 `reviewRequests`). If CI has been settled for about an hour with no Copilot review and no pending request, the host re-requests one with `requestReviewsByLogin` (once per head).
@@ -127,8 +129,8 @@ Decided in [What makes a Sandcastle issue ready to build, and what happens when 
 
 Intake never invents any of these, because they are the author's intent, and it never edits the issue body.
 
-**Shape.** One intake `run()` with structured output (`Output.object`, `maxIterations: 1`) runs before the blocker gate, over every open in-scope issue that has neither
-`sandcastle:ready` nor `sandcastle:needs-info`, including blocked ones, so questions reach the human while a blocker is still in flight. It returns one verdict per issue:
+**Shape.** One intake `run()` with structured output (`Output.object`, `maxIterations: 1`) runs before the blocker gate, over every open in-scope issue that has none of
+`sandcastle:ready`, `sandcastle:needs-info` and `sandcastle:needs-human`, including blocked ones, so questions reach the human while a blocker is still in flight. It returns one verdict per issue:
 
 - `ready`: the host adds `sandcastle:ready`.
 - `needs-info` with numbered questions tied to the unmet requirements: the host posts one comment and adds `sandcastle:needs-info`. The issue keeps `Sandcastle`; the gate skips and logs

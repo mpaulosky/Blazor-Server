@@ -1,8 +1,9 @@
 # Sandcastle runs unattended on a GitHub-hosted runner with a PAT that can't change workflows
 
 Sandcastle, the agent pipeline in `.sandcastle/`, runs from a `sandcastle.yml` workflow on a GitHub-hosted `ubuntu-24.04` runner, triggered by label changes, Copilot reviews, CI
-completions and a 2-hourly schedule. It isn't run by a developer at a terminal. Nobody approves its plans or merges; a human steps in only when it hands an issue or PR back with a
-`sandcastle:needs-*` label.
+completions and a 2-hourly schedule. It isn't run by a developer at a terminal. Nobody approves its plans or merges. A human steps in when it hands an issue or PR back with a
+`sandcastle:needs-*` label, or when they choose to join a PR's review: `pr-automerge.yml` merges only once every thread is resolved, so a thread the owner opens holds the merge until
+they resolve it.
 
 It pushes, comments and labels with `SANDCASTLE_GH_TOKEN`, a fine-grained personal access token scoped to this repository with Contents, Issues, Pull requests and Actions read/write
 and **no Workflows permission**. So Sandcastle can never change CI, the automerge workflow or its own trigger. An issue whose fix needs a `.github/workflows/**` change gets pushed,
