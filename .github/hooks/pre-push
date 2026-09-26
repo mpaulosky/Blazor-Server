@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-push gate: branch naming, YAML/Markdown lint, and tests
+# Pre-push gate: branch naming, then scripts/gate.sh (lint, build and tests)
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -54,7 +54,7 @@ if [[ -n "$PUSH_REFS" ]]; then
   done <<< "$PUSH_REFS"
 
   if [[ "$UPDATES_BRANCH" == false ]]; then
-    echo -e "${GREEN}✅ No branch updates — skipping lint and tests.${RESET}"
+    echo -e "${GREEN}✅ No branch updates — skipping the gate.${RESET}"
     exit 0
   fi
 else
@@ -62,117 +62,8 @@ else
   check_branch_name "$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
 fi
 
-# Lint and tests run against the working tree. Sandcastle pushes from the
-# issue worktree, which has the pushed branch checked out.
-UPSTREAM=""
-if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-  UPSTREAM="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}')"
-fi
-
-if [[ -n "$UPSTREAM" ]]; then
-  mapfile -t CHANGED_YAML < <(git diff --name-only "${UPSTREAM}...HEAD" -- '*.yml' '*.yaml')
-  mapfile -t CHANGED_MD < <(git diff --name-only "${UPSTREAM}...HEAD" -- '*.md')
-else
-  mapfile -t CHANGED_YAML < <(git diff --name-only HEAD~1..HEAD -- '*.yml' '*.yaml' 2>/dev/null || true)
-  mapfile -t CHANGED_MD < <(git diff --name-only HEAD~1..HEAD -- '*.md' 2>/dev/null || true)
-fi
-
-if [[ ${#CHANGED_YAML[@]} -gt 0 ]]; then
-  echo -e "\n${CYAN}🧩 YAML lint on changed workflow files...${RESET}"
-
-  EXISTING_CHANGED_YAML=()
-  for yaml_file in "${CHANGED_YAML[@]}"; do
-    if [[ -f "$yaml_file" ]]; then
-      EXISTING_CHANGED_YAML+=("$yaml_file")
-    fi
-  done
-
-  if [[ ${#EXISTING_CHANGED_YAML[@]} -gt 0 ]]; then
-    YAML_CONFIG_FILE="$(mktemp)"
-    cat > "$YAML_CONFIG_FILE" <<'EOF'
-extends: default
-rules:
-  line-length:
-    max: 200
-    allow-non-breakable-inline-mappings: true
-  truthy:
-    allowed-values: ['true', 'false', 'on']
-  brackets:
-    min-spaces-inside: 0
-    max-spaces-inside: 1
-EOF
-
-    if command -v yamllint >/dev/null 2>&1; then
-      yamllint -c "$YAML_CONFIG_FILE" "${EXISTING_CHANGED_YAML[@]}"
-    elif command -v docker >/dev/null 2>&1; then
-      docker run --rm \
-        -v "$ROOT:/work" \
-        -v "$YAML_CONFIG_FILE:/tmp/yamllint.yml:ro" \
-        -w /work \
-        cytopia/yamllint:latest \
-        -c /tmp/yamllint.yml "${EXISTING_CHANGED_YAML[@]}"
-    else
-      echo -e "${RED}❌ yamllint is not available.${RESET}"
-      rm -f "$YAML_CONFIG_FILE"
-      exit 1
-    fi
-    rm -f "$YAML_CONFIG_FILE"
-    echo -e "${GREEN}✅ YAML lint OK.${RESET}"
-  else
-    echo -e "${GREEN}✅ No existing YAML files to lint.${RESET}"
-  fi
-else
-  echo -e "\n${GREEN}✅ No changed YAML files to lint.${RESET}"
-fi
-
-if [[ ${#CHANGED_MD[@]} -gt 0 ]]; then
-  echo -e "\n${CYAN}📝 Markdown lint on changed docs...${RESET}"
-  npx --yes markdownlint-cli2 "${CHANGED_MD[@]}"
-  echo -e "${GREEN}✅ Markdown lint OK.${RESET}"
-else
-  echo -e "\n${GREEN}✅ No changed Markdown files to lint.${RESET}"
-fi
-
-echo -e "\n${CYAN}🧪 Running test suite...${RESET}"
-# Discover each test project explicitly. The repo uses Microsoft Testing Platform
-# for .NET 10, and running the solution file directly can report "Zero tests ran"
-# even while the project-level test runs pass. Under MTP, `dotnet test` takes the
-# project through --project and rejects VSTest-only flags such as --nologo.
-TEST_PROJECTS=()
-if [[ -d "$ROOT/tests" ]]; then
-  mapfile -d '' -t TEST_PROJECTS < <(find "$ROOT/tests" -type f -name '*.csproj' -print0 | sort -z)
-fi
-
-if [[ ${#TEST_PROJECTS[@]} -eq 0 ]]; then
-  # Expected while the repo is being bootstrapped; CI skips tests the same way.
-  echo -e "${YELLOW}⚠️  No test projects found under tests/ — skipping test gate.${RESET}"
-fi
-
-for project_file in "${TEST_PROJECTS[@]}"; do
-  project_name="$(basename "${project_file%.*}")"
-  assembly_path="$(dirname "$project_file")/bin/Release/net10.0/${project_name}.dll"
-  echo -e "${CYAN}▶ Testing ${project_file#"$ROOT"/}...${RESET}"
-
-  if env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_PREFIX \
-    dotnet test --project "$project_file" --configuration Release --verbosity minimal \
-    --results-directory "$ROOT/.tmp-test-results" --report-xunit-trx \
-    --report-xunit-trx-filename "${project_name}.trx"; then
-    continue
-  fi
-
-  if [[ -f "$assembly_path" ]]; then
-    echo -e "${YELLOW}⚠️ dotnet test reported a runner issue for ${project_name}; falling back to the built test assembly.${RESET}"
-    if ! env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_PREFIX \
-      dotnet "$assembly_path"; then
-      echo -e "${RED}❌ Tests failed for '${project_file#"$ROOT"/}' using the direct runner fallback.${RESET}"
-      exit 1
-    fi
-    continue
-  fi
-
-  echo -e "${RED}❌ Tests failed for '${project_file#"$ROOT"/}'.${RESET}"
-  exit 1
-done
-echo -e "${GREEN}✅ Test suite OK.${RESET}"
+# The gate runs against the working tree. Sandcastle pushes from the issue
+# worktree, which has the pushed branch checked out.
+"$ROOT/scripts/gate.sh"
 
 echo -e "\n${GREEN}━━━ All gates passed — pushing ✅ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"

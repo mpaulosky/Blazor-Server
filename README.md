@@ -69,6 +69,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
    - The .NET SDK `10.0.401`, as pinned in [global.json](https://github.com/mpaulosky/Blazor-Server/blob/main/global.json) (later 10.0 feature bands are accepted).
    - Node.js and npm, used by the git hooks and the lint tools.
+   - [yamllint](https://yamllint.readthedocs.io/), which the pre-push hook runs on changed YAML files.
 
 3. Install the npm packages, then build and test:
 
@@ -78,11 +79,14 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
    dotnet test --solution Blazor-Server.slnx
    ```
 
-4. Optionally enable the git hooks in `.github/hooks` (markdownlint on commit, build and tests on push):
+4. Optionally enable the git hooks in `.github/hooks` (markdownlint on commit, and `scripts/gate.sh` on push):
 
    ```bash
    git config core.hooksPath .github/hooks
    ```
+
+   `scripts/gate.sh` lints the files changed since the branch left `origin/main`, then builds and tests the solution in Release. Run it by hand to
+   check a branch before pushing.
 
 ## After generating your app
 
