@@ -114,11 +114,11 @@ waits for a later sweep.
 `main.mts` already fetches `origin/main` once per round). Then passes for different PRs run with `Promise.allSettled`. The build phase starts after the sweep. The reviewer role doesn't run
 on passes, because Copilot re-reviews the push.
 
-**Giving up on a PR.** Three passes per PR, counted as follow-up marker comments since `sandcastle:needs-human` was last removed from it. It gives up at once when the gate-fixer runs
-out of attempts, a conflict can't be resolved to a green gate, a re-run check stays red, or an agent run fails. Giving up adds `sandcastle:needs-human` to the **PR** with one comment
-quoting or linking the last gate or CI output. `pr-automerge.yml` skips PRs labelled `sandcastle:needs-human`, so a handed-back PR never merges until the human removes
-the label. Open human threads never count as giving up: the human who opened them is already involved, and the job summary lists PRs waiting
-on them.
+**Giving up on a PR.** Three passes per PR, counted as follow-up marker comments since `sandcastle:needs-human` was last removed from it. It gives up at once when the gate-fixer runs out of
+attempts, a conflict can't be resolved to a green gate, a re-run check stays red, or an agent run fails. Giving up adds `sandcastle:needs-human` to the **PR** with one comment quoting or
+linking the last gate or CI output. `pr-automerge.yml` skips PRs labelled `sandcastle:needs-human`, so a handed-back PR never merges until the human removes the label. It also skips a PR
+whose most recent `needs-human` removal wasn't the owner's, so someone with triage access can't clear a hand-back to get a merge before the host puts the label back. Open human threads never
+count as giving up: the human who opened them is already involved, and the job summary lists PRs waiting on them.
 
 **Closed PRs.** If a PR closes without merging while its issue is open, the host adds `sandcastle:needs-human` to the issue with the comment "PR #x was closed without merging; remove the
 label to rebuild". The next build of that issue starts fresh from `main`: the host deletes the old remote branch before `createSandbox()`.
@@ -301,11 +301,11 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 [Where an automatic Sandcastle trigger could run](https://github.com/mpaulosky/Blazor-Server/issues/54). The reasoning for the runner and token is in
 [ADR 0002](../adr/0002-unattended-sandcastle-on-a-hosted-runner.md).
 
-**Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` with `SANDCASTLE_GH_TOKEN` (never the event's ref), sets up Node 22, runs
-`npm ci` to install the locked dependencies (including the `tsx` devDependency), and then runs `npx --no-install tsx .sandcastle/main.mts` with `GH_TOKEN` set to
-`SANDCASTLE_GH_TOKEN`. Checkout only gives git the token; the `gh` CLI the host calls for labels, comments, PRs and threads reads `GH_TOKEN`. The step also passes
-`ANTHROPIC_API_KEY` when that secret is set and `CLAUDE_CODE_OAUTH_TOKEN` otherwise, and an earlier step fails the job with a clear message when `SANDCASTLE_GH_TOKEN` or both
-Claude secrets are missing. Triggers:
+**Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` (never the event's ref) with `persist-credentials: false`, sets up Node 22, runs `npm ci` to
+install the locked dependencies (including the `tsx` devDependency), and then runs `npx --no-install tsx .sandcastle/main.mts` with `GH_TOKEN` set to `SANDCASTLE_GH_TOKEN`. The `gh` CLI
+reads `GH_TOKEN`, and the host's own git fetches and pushes authenticate through `gh auth setup-git`, a credential helper in the runner's global git config that reads `GH_TOKEN` from the
+host's environment. Nothing in the repository's `.git` holds the token, so the worktree and git metadata the sandbox mounts carry no credential. The step also passes `ANTHROPIC_API_KEY` when
+that secret is set and `CLAUDE_CODE_OAUTH_TOKEN` otherwise, and an earlier step fails the job with a clear message when `SANDCASTLE_GH_TOKEN` or both Claude secrets are missing. Triggers:
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
