@@ -16,21 +16,17 @@ export function repoOwner(): string {
   return repoName().split("/")[0]!;
 }
 
-export type SandcastleIssue = {
-  number: number;
-  title: string;
-  body: string;
-  labels: string[];
-  // Only the repository owner's comments; see ownerApproved.
-  comments: string[];
-};
-
 export type GhIssue = {
   number: number;
   title: string;
   body: string;
   labels: string[];
   comments: { author: string; body: string }[];
+};
+
+export type SandcastleIssue = Omit<GhIssue, "comments"> & {
+  // Only the repository owner's comments; see ownerApproved.
+  comments: string[];
 };
 
 // Keep only the owner's comments, so text from anyone else never reaches a

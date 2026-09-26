@@ -15,7 +15,7 @@ import { sh } from "./shell.mts";
 // Push an issue branch from its worktree and open (or reuse) the PR that closes
 // the issue. Pushing from the worktree matters: the pre-push hook checks the
 // checked-out branch's name and runs lint and tests against that tree.
-export function publish(
+function publish(
   issue: { id: string; title: string; branch: string },
   worktreePath: string,
   reviewed: boolean,
@@ -52,10 +52,12 @@ export async function buildIssue(
     copyToWorktree,
   });
 
+  const promptArgs = issuePromptArgs(issue, planned.branch);
+
   try {
     const implement = await runRoleInSandbox(sandbox, "implementer", {
       promptFile: "./.sandcastle/implement-prompt.md",
-      promptArgs: issuePromptArgs(issue, planned.branch),
+      promptArgs,
     });
 
     // Review and publish whenever the branch holds work that main doesn't,
@@ -70,7 +72,7 @@ export async function buildIssue(
     try {
       const review = await runRoleInSandbox(sandbox, "reviewer", {
         promptFile: "./.sandcastle/review-prompt.md",
-        promptArgs: issuePromptArgs(issue, planned.branch),
+        promptArgs,
       });
       reviewCommits = review.commits;
     } catch (error) {
