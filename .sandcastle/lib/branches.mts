@@ -6,6 +6,9 @@ import { sh } from "./shell.mts";
 
 const maxSlugLength = 50;
 
+// The parts of an issue its branch name depends on.
+type BranchIssue = Pick<SandcastleIssue, "number" | "title" | "labels">;
+
 // The issue title as a branch slug: no conventional-commit prefix, lower case,
 // apostrophes dropped so "haven't" stays one word, and runs of ASCII letters
 // and digits joined with "-", cut to 50 characters at a "-" boundary.
@@ -33,10 +36,7 @@ export function isIssueBranch(branch: string, issueNumber: number): boolean {
 // remote when there is one, even if the title or labels have changed since, so
 // earlier work is built on rather than redone. Otherwise hotfix/{n}-{slug} for
 // a bug and feature/{n}-{slug} for everything else.
-export function branchFor(
-  issue: Pick<SandcastleIssue, "number" | "title" | "labels">,
-  remoteBranches: readonly string[] = remoteIssueBranches(),
-): string {
+export function branchFor(issue: BranchIssue, remoteBranches: readonly string[]): string {
   const existing = remoteBranches
     .filter((branch) => isIssueBranch(branch, issue.number))
     .sort()[0];
@@ -47,7 +47,7 @@ export function branchFor(
 }
 
 // The feature/* and hotfix/* branches on origin, without the refs/heads/ prefix.
-export function remoteIssueBranches(): string[] {
+function remoteIssueBranches(): string[] {
   return sh(process.cwd(), "git", "ls-remote", "--heads", "origin", "refs/heads/feature/*", "refs/heads/hotfix/*")
     .split("\n")
     .filter(Boolean)
@@ -70,13 +70,13 @@ export function fetchMain(): void {
 // origin/<branch>. Without the fetch, Sandcastle finds no such branch and
 // silently starts a fresh one from main. The fetches run serially, before the
 // pipelines start, for the same reason as fetchMain.
-export function prepareBranches(issues: Pick<SandcastleIssue, "number" | "title" | "labels">[]): string[] {
+export function prepareBranches<T extends BranchIssue>(issues: T[]): { issue: T; branch: string }[] {
   const remoteBranches = remoteIssueBranches();
   return issues.map((issue) => {
     const branch = branchFor(issue, remoteBranches);
     if (remoteBranches.includes(branch)) {
       sh(process.cwd(), "git", "fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
     }
-    return branch;
+    return { issue, branch };
   });
 }

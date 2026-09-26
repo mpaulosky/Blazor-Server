@@ -93,31 +93,31 @@ try {
     // Promise.allSettled means one failing pipeline doesn't cancel the others.
     // -----------------------------------------------------------------------
     fetchMain();
-    const branches = prepareBranches(issues);
+    const work = prepareBranches(issues);
 
     console.log(
-      `Planning complete. ${issues.length} issue(s) to work in parallel:`,
+      `Planning complete. ${work.length} issue(s) to work in parallel:`,
     );
-    for (const [i, issue] of issues.entries()) {
-      console.log(`  #${issue.number}: ${issue.title} → ${branches[i]}`);
+    for (const { issue, branch } of work) {
+      console.log(`  #${issue.number}: ${issue.title} → ${branch}`);
     }
 
     const settled = await Promise.allSettled(
-      issues.map((issue, i) => buildIssue(issue, branches[i]!)),
+      work.map(({ issue, branch }) => buildIssue(issue, branch)),
     );
 
     // Log any agents that threw (network error, sandbox crash, timeout, etc.).
     for (const [i, outcome] of settled.entries()) {
       if (outcome.status === "rejected") {
         console.error(
-          `  ✗ #${issues[i]!.number} (${branches[i]}) failed: ${outcome.reason}`,
+          `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
         );
       }
     }
 
     const published = settled.flatMap((outcome, i) =>
       outcome.status === "fulfilled" && outcome.value.prUrl
-        ? [{ issue: issues[i]!, branch: branches[i]!, prUrl: outcome.value.prUrl }]
+        ? [{ ...work[i]!, prUrl: outcome.value.prUrl }]
         : [],
     );
 
