@@ -56,7 +56,7 @@ jobs:
             // back to a person, who removes it once the PR may merge again.
             const NEEDS_HUMAN = "sandcastle:needs-human";
 
-            async function mergeIfReady(pullNumber) {
+            async function getPullRequestStatus(pullNumber) {
               const status = await github.graphql(
                 `query MergeReadiness(
                    $owner: String!,
@@ -98,22 +98,25 @@ jobs:
                 { owner, repo, number: pullNumber }
               );
 
-              const pr = status.repository.pullRequest;
-              if (!pr || pr.state !== "OPEN" || pr.isDraft || pr.isCrossRepository || pr.baseRefName !== "main") {
-                core.info(`Skipping PR #${pullNumber}: not an open, non-draft, same-repo PR into main.`);
-                return;
+              return status.repository.pullRequest;
+            }
+
+            async function isHandBackReadyToMerge(pullNumber, pr) {
+              if (!pr) {
+                core.info(`Skipping PR #${pullNumber}: it no longer exists.`);
+                return false;
               }
 
               // Past one page of labels the hand-back label could be missed,
               // so leave the merge to a person.
               if (pr.labels.totalCount > pr.labels.nodes.length) {
                 core.info(`Skipping PR #${pullNumber}: more labels than one page; merge it by hand.`);
-                return;
+                return false;
               }
 
               if (pr.labels.nodes.some((label) => label.name === NEEDS_HUMAN)) {
                 core.info(`Skipping PR #${pullNumber}: labelled ${NEEDS_HUMAN}, so it waits for a person to remove the label.`);
-                return;
+                return false;
               }
 
               // Someone with only triage access can remove the label too, and
@@ -137,6 +140,28 @@ jobs:
                   `@${remover ?? "unknown"}, not the repository owner @${owner}; ` +
                   "the owner has to re-add and remove it."
                 );
+                return false;
+              }
+
+              return true;
+            }
+
+            async function mergeIfReady(pullNumber) {
+              const pr = await getPullRequestStatus(pullNumber);
+              if (!pr || pr.state !== "OPEN" || pr.isDraft || pr.isCrossRepository || pr.baseRefName !== "main") {
+                core.info(`Skipping PR #${pullNumber}: not an open, non-draft, same-repo PR into main.`);
+                return;
+              }
+
+              if (!(await isHandBackReadyToMerge(pullNumber, pr))) {
+                return;
+              }
+
+              // Re-check the current hand-back state immediately before the
+              // merge call so a freshly added label, or a new non-owner
+              // removal, cannot slip through after the initial readiness check.
+              const latestPr = await getPullRequestStatus(pullNumber);
+              if (!(await isHandBackReadyToMerge(pullNumber, latestPr))) {
                 return;
               }
 

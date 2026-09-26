@@ -66,6 +66,9 @@ async function evaluate(pr, events = []) {
   const merges = [];
   const logs = [];
   const eventRequests = [];
+  let graphqlRequests = 0;
+  const pullRequests = Array.isArray(pr) ? [...pr] : [pr];
+  const eventSets = Array.isArray(events[0]) ? [...events] : [events];
   const rest = {
     pulls: {
       merge: async (params) => {
@@ -80,11 +83,13 @@ async function evaluate(pr, events = []) {
   };
   const github = {
     rest,
-    graphql: async () => ({ repository: { pullRequest: pr } }),
+    graphql: async () => ({
+      repository: { pullRequest: pullRequests[Math.min(graphqlRequests++, pullRequests.length - 1)] }
+    }),
     paginate: async (method, params) => {
       if (method === rest.issues.listEvents) {
         eventRequests.push(params);
-        return events;
+        return eventSets[Math.min(eventRequests.length - 1, eventSets.length - 1)];
       }
       throw new Error("unexpected paginate call");
     }
@@ -129,7 +134,10 @@ test("merges once the owner removes sandcastle:needs-human", async () => {
   const { merges, eventRequests } = await evaluate(readyPr(), events);
 
   assert.equal(merges.length, 1);
-  assert.deepEqual(eventRequests, [{ owner: OWNER, repo: "demo", issue_number: 7, per_page: 100 }]);
+  assert.deepEqual(eventRequests, [
+    { owner: OWNER, repo: "demo", issue_number: 7, per_page: 100 },
+    { owner: OWNER, repo: "demo", issue_number: 7, per_page: 100 }
+  ]);
 });
 
 test("skips a PR whose sandcastle:needs-human someone else removed and says who", async () => {
@@ -171,4 +179,24 @@ test("ignores other labels' removals", async () => {
   const { merges } = await evaluate(readyPr(), events);
 
   assert.equal(merges.length, 1);
+});
+
+test("re-checks sandcastle:needs-human immediately before merging", async () => {
+  const latestPr = readyPr({ labels: labelled("enhancement", NEEDS_HUMAN) });
+  const { merges, logs } = await evaluate([readyPr(), latestPr]);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("PR #7") && line.includes(NEEDS_HUMAN)), logs.join("\n"));
+});
+
+test("re-checks the latest sandcastle:needs-human removal before merging", async () => {
+  const initialEvents = [unlabeledEvent(NEEDS_HUMAN, OWNER)];
+  const latestEvents = [unlabeledEvent(NEEDS_HUMAN, "triager")];
+  const { merges, logs } = await evaluate([readyPr(), readyPr()], [initialEvents, latestEvents]);
+
+  assert.deepEqual(merges, []);
+  assert.ok(
+    logs.some((line) => line.includes("PR #7") && line.includes(NEEDS_HUMAN) && line.includes("triager")),
+    logs.join("\n")
+  );
 });
