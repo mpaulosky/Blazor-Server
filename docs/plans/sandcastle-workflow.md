@@ -13,6 +13,10 @@ so Sandcastle builds its own upgrade.
   they choose to join a PR's review: `pr-automerge.yml` merges only once every thread is resolved, so a thread a human opens waits for that human to resolve it.
 - **The host decides; agents propose.** Agents never call GitHub write APIs. They return structured verdicts or write files, and the host (`main.mts`) validates them and applies
   labels, comments, links, pushes and thread resolutions with `gh`.
+- **Trust boundary.** Anyone with write access is trusted like the owner: they can already push to any branch, dispatch workflows and change what Sandcastle would build. Today the owner is
+  the only collaborator. The defences in this spec target everyone else: issue authors, commenters, people with only triage access, and fork PRs. Content from them never reaches an agent
+  unless the owner approved it. Anything that can only be done with write access (reusing a branch, `workflow_dispatch`) isn't guarded further. Granting someone write access means trusting
+  them with Sandcastle too.
 - **Agents can't reach GitHub.** The sandbox gets no GitHub token, and no prompt tells a role to run `gh`. The host puts everything a role needs into its prompt: the issue's title
   and body, the owner's comments, the design note, and the review threads it may act on. What a role sees is exactly what the host chose to give it.
 - **Anything that must be stable is host code.** Branch names, retry counts and gate results come from code, never from a model.
@@ -106,7 +110,9 @@ thread open.
 re-runs the failed jobs once as flaky. If a check the gate doesn't cover (CodeQL) is red, its `gh run view --log-failed` output goes to the follow-up role. Pending checks mean the PR
 waits for a later sweep.
 
-**Parallelism.** Passes for different PRs run with `Promise.allSettled`. The build phase starts after the sweep. The reviewer role doesn't run on passes, because Copilot re-reviews the push.
+**Parallelism.** The host fetches every PR branch it will pass on serially, in one step before any pass starts, because concurrent fetches contend on the shared git ref lock (the reason
+`main.mts` already fetches `origin/main` once per round). Then passes for different PRs run with `Promise.allSettled`. The build phase starts after the sweep. The reviewer role doesn't run
+on passes, because Copilot re-reviews the push.
 
 **Giving up on a PR.** Three passes per PR, counted as follow-up marker comments since `sandcastle:needs-human` was last removed from it. It gives up at once when the gate-fixer runs
 out of attempts, a conflict can't be resolved to a green gate, a re-run check stays red, or an agent run fails. Giving up adds `sandcastle:needs-human` to the **PR** with one comment
@@ -209,7 +215,8 @@ picked role runs again on the existing branch and builds on earlier work; the ar
 
 - Every commit must pass `dotnet build Blazor-Server.slnx` (warnings as errors). Tests must pass by the end of the last developer run, not on every commit.
 - Each committing role (backend, UI, scribe, gate-fixer) runs `scripts/gate.sh` once as its last step before `<promise>COMPLETE</promise>`. The tester is exempt, because its tests are
-  red on purpose; it still builds and lints its own files.
+  red on purpose; it still builds and lints its own files. The architect is exempt too: it commits at most one ADR (Markdown only), lints that file, and checkpoint 1 gates it with
+  the rest of the tree.
 - Commit format follows the repository's conventional-commit style. Agents never push, never run `gh`, and never write to GitHub.
 
 ## The gate

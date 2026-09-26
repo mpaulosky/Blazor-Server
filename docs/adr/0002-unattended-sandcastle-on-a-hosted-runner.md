@@ -12,7 +12,8 @@ rejected, and handed back with `sandcastle:needs-human`. A person makes that cha
 Only the repository owner queues work, and only what they approved reaches an agent. The workflow starts on label events only when the owner made them. The host skips any issue whose
 `Sandcastle` label someone else added, or whose title or body someone else edited afterwards, and passes roles only the owner's comments and review threads. It also trusts
 `sandcastle:ready` and the removal of a hand-back label only when the owner made them. The sandbox itself gets no GitHub token, so a role sees only what the host put in its prompt. So
-neither a collaborator nor a passing commenter can feed text to an agent whose work is pushed with a write token.
+nobody without write access can feed text to an agent whose work is pushed with a write token. People with write access are trusted like the owner, since they could already push
+branches and run workflows directly.
 
 Because the token belongs to the repository owner, GitHub doesn't notify them about Sandcastle's own labels and comments. A run that hands anything back therefore ends red so that
 Actions emails them.
