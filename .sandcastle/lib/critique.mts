@@ -207,11 +207,17 @@ export function applyVerdicts(
   return picks.filter((issue) => !deferred.has(issue.number));
 }
 
+// The picks the critique gave no verdict on, as "#N" references.
+function unjudged(picks: SandcastleIssue[], verdicts: CritiqueVerdict[]): string[] {
+  const judged = new Set(verdicts.map((verdict) => verdict.id));
+  return picks.filter((issue) => !judged.has(String(issue.number))).map((issue) => `#${issue.number}`);
+}
+
 // Critique the round's picks and return the ones to build. The critique is
 // skipped when there's nothing to compare. When it fails (the run throws, its
-// tag is missing, its output doesn't match the schema, or a PR's files can't
-// be read), only the planner's first pick is built, since a lone pick can't
-// collide with another pick.
+// tag is missing, its output doesn't match the schema, it leaves a pick
+// without a verdict, or a PR's files can't be read), only the planner's first
+// pick is built, since a lone pick can't collide with another pick.
 export async function critiqueRound(
   { picks, inFlight, unpicked }: CritiqueInput,
   run: CritiqueRun = runCritique,
@@ -232,6 +238,8 @@ export async function critiqueRound(
       files: github.pullRequestFiles(pr.number),
     }));
     verdicts = await run(critiquePromptArgs(picks, inFlightWithFiles, unpicked));
+    const missing = unjudged(picks, verdicts);
+    if (missing.length > 0) throw new Error(`it gave no verdict on ${missing.join(", ")}`);
   } catch (error) {
     log(`  ⚠ The plan critique failed (${error}). Building only the planner's first pick, #${firstPick.number}.`);
     return [firstPick];

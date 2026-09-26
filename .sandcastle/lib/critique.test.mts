@@ -309,6 +309,36 @@ describe("critiqueRound", () => {
     assert.ok(lines.some((line) => line.includes("⚠") && line.includes("#4")));
   });
 
+  it("builds only the planner's first pick when the critique leaves a pick without a verdict", async () => {
+    const gh = github();
+    const { lines, log } = capture();
+
+    const kept = await critiqueRound(
+      { picks: [issue(4), issue(2), issue(3)], inFlight: [], unpicked: [] },
+      async () => [{ id: "4", verdict: "keep", reason: "no overlap" }],
+      gh.stub,
+      log,
+    );
+
+    assert.deepEqual(kept.map((i) => i.number), [4]);
+    assert.deepEqual(gh.links, []);
+    assert.ok(lines.some((line) => line.includes("⚠") && line.includes("#2, #3")));
+  });
+
+  it("builds only the planner's first pick when the critique returns no verdicts", async () => {
+    const gh = github();
+    const { log } = capture();
+
+    const kept = await critiqueRound(
+      { picks: [issue(4), issue(2)], inFlight: [], unpicked: [] },
+      async () => [],
+      gh.stub,
+      log,
+    );
+
+    assert.deepEqual(kept.map((i) => i.number), [4]);
+  });
+
   it("treats a failure to read an in-flight PR's files as a failed critique", async () => {
     const gh = github({
       pullRequestFiles: () => {
