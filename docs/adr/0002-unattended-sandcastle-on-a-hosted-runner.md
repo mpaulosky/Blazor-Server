@@ -8,8 +8,9 @@ It pushes, comments and labels with `SANDCASTLE_GH_TOKEN`, a fine-grained person
 and **no Workflows permission**. So Sandcastle can never change CI, the automerge workflow or its own trigger. An issue whose fix needs a `.github/workflows/**` change gets pushed,
 rejected, and handed back with `sandcastle:needs-human`. A person makes that change.
 
-Only the repository owner queues work. The workflow starts on label events only when the owner made them, and the host skips any issue whose `Sandcastle` label someone
-else added, so a collaborator with triage access can't feed issue text to an agent holding a write token.
+Only the repository owner queues work, and only what they approved reaches an agent. The workflow starts on label events only when the owner made them. The host skips any
+issue whose `Sandcastle` label someone else added, or whose title or body someone else edited afterwards, and passes roles only the owner's comments and review threads. So neither a
+collaborator nor a passing commenter can feed text to an agent holding a write token.
 
 Because the token belongs to the repository owner, GitHub doesn't notify them about Sandcastle's own labels and comments. A run that hands anything back therefore ends red so that
 Actions emails them.

@@ -28,10 +28,16 @@ so Sandcastle builds its own upgrade.
 
 The host creates any missing `sandcastle:*` label at startup. The wayfinder map and its tickets must never carry `Sandcastle`.
 
-**Only the repository owner queues work.** Anyone with triage access can add a label, and a queued issue's text goes to an unattended agent holding a write token. So the host treats an
-issue as queued only when the most recent `labeled` event adding `Sandcastle` in its issue events was made by the repository owner. The PAT is the owner's, so the labels the host adds
-to split children pass. An issue labelled by anyone else is skipped and logged, without a comment. The workflow applies the same rule to the label events that start it (see
-**Trigger and run environment**), and the host check covers scheduled, manual and local runs.
+**Only the repository owner queues work, and only what they approved reaches an agent.** Anyone with triage access can add a label or edit an issue, anyone can comment on a public
+repository, and an agent holding a write token acts on what it reads. So when the host loads the queue, before intake and the early exit, it keeps an issue only when:
+
+- the most recent `labeled` event adding `Sandcastle` in its issue events was made by the repository owner, and
+- nobody but the owner has changed its title (`renamed` events) or body (the GraphQL `userContentEdits` editors) since that event.
+
+The PAT is the owner's, so the labels the host adds to split children pass. Any other issue is skipped and logged, without a comment. The owner re-approves an edited issue by removing
+and re-adding `Sandcastle`. Only the owner's comments reach a role; comments by anyone else are dropped before a prompt is built. On PRs, follow-up acts only on bot threads and the
+owner's threads (see **Thread rules**). The workflow applies the label rule to the events that start it (see **Trigger and run environment**), and the host checks cover scheduled,
+manual and local runs.
 
 Saved search for everything waiting on a human: `is:open label:sandcastle:needs-human,sandcastle:needs-info`.
 
@@ -47,7 +53,8 @@ Saved search for everything waiting on a human: `is:open label:sandcastle:needs-
 6. **Build**: one sandbox per picked issue runs the role team, the gate and publishes a PR.
 
 The queue is the `Sandcastle` label in Actions. A local run must name its scope, either an issue number or a dev label such as `Sandcastle:dev` through an environment variable, so it
-never competes with Actions for work ([trigger decision](https://github.com/mpaulosky/Blazor-Server/issues/61)). Every phase works only on issues and PRs in that scope.
+never competes with Actions for work ([trigger decision](https://github.com/mpaulosky/Blazor-Server/issues/61)). Every phase works only on issues and PRs in that scope, and only on
+issues the owner approved (see **Labels**).
 
 ### Early exit
 
@@ -81,9 +88,10 @@ that human resolves them. That is deliberate: a human who comments has joined th
 5. The host checks the JSON against the PR's real open thread ids, ignoring unknown ones. It posts each reply, resolves **bot threads only** (`ADDRESSED`, `WONT_FIX` or `INVALID`), and
    posts one pass-summary PR comment carrying `<!-- sandcastle:follow-up -->`.
 
-**Thread rules.** Follow-up acts on bot threads (Copilot, CodeQL) and human threads, but resolves only bot threads: a human resolving their own thread is their sign-off. It may decline a
+**Thread rules.** Follow-up acts on bot threads (Copilot, CodeQL) and the repository owner's threads, but resolves only bot threads. Threads anyone else opens never reach the role; they
+stay open for the owner, and the job summary lists them. The owner resolves their own threads, because that's their sign-off. It may decline a
 bot thread without a change only because the suggestion contradicts the issue's acceptance criteria or `CODING_STANDARDS.md`, is factually wrong (the reply cites the code), or is out of
-the issue's scope. Outdated threads whose concern the current code handles are resolved `ADDRESSED`. When it disagrees with a human thread, it replies with its reasoning and leaves the
+the issue's scope. Outdated threads whose concern the current code handles are resolved `ADDRESSED`. When it disagrees with an owner thread, it replies with its reasoning and leaves the
 thread open.
 
 **Red CI.** The gate decides. If `scripts/gate.sh` is red on the head, the gate-fixer takes it. If the gate is green but a gate-covered CI check (build, test, lint) is red, the host
@@ -129,8 +137,8 @@ concerns belong to the critique.
 ## Phase 3: Blocker gate
 
 Unchanged: an issue is blocked while any issue it depends on (native "blocked by" links and `Blocked by #N` / `Depends on #N` lines) hasn't closed as completed or merged. It now also
-drops, in code, issues labelled `sandcastle:needs-info` or `sandcastle:needs-human`, issues without `sandcastle:ready`, issues with an open PR (labelled or not), and issues whose
-`Sandcastle` label wasn't added by the repository owner, logging each reason.
+drops, in code, issues labelled `sandcastle:needs-info` or `sandcastle:needs-human`, issues without `sandcastle:ready`, and issues with an open PR (labelled or not), logging each reason.
+Issues the owner didn't approve never get this far: the host drops them when it loads the queue.
 The "skip issues with an open PR" rule leaves `plan-prompt.md`.
 
 ## Phase 4: Plan
@@ -253,7 +261,8 @@ Decided in [How Sandcastle gives up on an issue and tells the human](https://git
 
 **Build retry cap: 2 failed attempts.** A failed attempt is anything that stops the issue's pipeline (see **When a role fails**): the gate still red after the gate-fixer's attempts at either
 checkpoint, or an architect, tester, backend or UI run failing or timing out. A scribe or reviewer failure, and a gate-fixer run that fails but leaves attempts for a later one,
-don't count. Each failure posts an issue comment carrying `<!-- sandcastle:build-failed -->` with the attempt number and the tail of the gate output or error. The first is retried next round; the second
+don't count. Each failure posts an issue comment carrying `<!-- sandcastle:build-failed -->` with the attempt
+number and the tail of the gate output or error. The first is retried next round; the second
 adds `sandcastle:needs-human` with a fuller comment. The count is the marker comments posted since `needs-human` was last removed, so it survives restarts and a re-queue resets it.
 A usage-limit stop and the time-budget stop never count.
 
