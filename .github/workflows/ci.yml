@@ -56,22 +56,27 @@ env:
 
   # Aspire parameter bindings for E2E.Tests
   # (Parameters: auth0MgmtClientId/Secret)
-  Auth0__Domain: ${{ secrets.AUTH0_DOMAIN }}
-  Auth0__ClientId: ${{ secrets.AUTH0_CLIENT_ID }}
-  Auth0__ClientSecret: ${{ secrets.AUTH0_CLIENT_SECRET }}
-  Auth0Management__ClientId: ${{ secrets.AUTH0_MANAGEMENT_CLIENT_ID }}
-  Auth0Management__ClientSecret: ${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET }}
-  Auth0Management__Domain: ${{ secrets.AUTH0_DOMAIN }}
-  Auth0Management__Audience: https://${{ secrets.AUTH0_DOMAIN }}/api/v2/
-  Parameters__auth0MgmtClientId: ${{ secrets.AUTH0_MANAGEMENT_CLIENT_ID }}
+  # Every secret below is withheld from runs of a dependabot/* branch, however
+  # they were triggered (the PR's head branch, or the ref of a manual run): a
+  # maintainer re-running, reopening, updating or dispatching one would
+  # otherwise hand the real Auth0 credentials to unreviewed dependency code
+  # (restore, build and every test job can read this env).
+  Auth0__Domain: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}
+  Auth0__ClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_CLIENT_ID || '' }}
+  Auth0__ClientSecret: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_CLIENT_SECRET || '' }}
+  Auth0Management__ClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
+  Auth0Management__ClientSecret: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
+  Auth0Management__Domain: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}
+  Auth0Management__Audience: https://${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}/api/v2/
+  Parameters__auth0MgmtClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
   Parameters__auth0MgmtClientSecret: >-
-    ${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET }}
+    ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
 
   # Role test-user credentials for UI.Tests.E2E's authenticated Playwright fixtures
-  Auth0__E2E__Admin__Username: ${{ secrets.AUTH0_ADMIN_USERNAME }}
-  Auth0__E2E__Admin__Password: ${{ secrets.AUTH0_ADMIN_PASSWORD }}
-  Auth0__E2E__User__Username: ${{ secrets.AUTH0_USER_USERNAME }}
-  Auth0__E2E__User__Password: ${{ secrets.AUTH0_USER_PASSWORD }}
+  Auth0__E2E__Admin__Username: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_ADMIN_USERNAME || '' }}
+  Auth0__E2E__Admin__Password: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_ADMIN_PASSWORD || '' }}
+  Auth0__E2E__User__Username: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_USER_USERNAME || '' }}
+  Auth0__E2E__User__Password: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_USER_PASSWORD || '' }}
 
 jobs:
   build:
@@ -165,8 +170,13 @@ jobs:
       - name: Run PR automerge Node tests
         run: node --test .github/scripts/tests/pr-automerge.test.mjs
 
+  # Dependabot PRs run the test suite too: a dependency bump is exactly the
+  # change the tests must vet. The one exception is the Playwright (E2E)
+  # projects, which log in to Auth0 with real credentials. dependabot/*
+  # branches get no secrets (see env above), so discovery leaves those projects
+  # out there, and they run on main once the bump merges. No other test reads
+  # a secret.
   discover-tests:
-    if: ${{ github.actor != 'dependabot[bot]' }}
     name: Discover Test Projects
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -182,9 +192,13 @@ jobs:
 
       - name: Discover test projects
         id: discover
+        env:
+          # The branch, not the actor: see the env comment at the top.
+          DEPENDABOT: ${{ startsWith(github.head_ref || github.ref_name, 'dependabot/') }}
         run: |
           matrix_json=$(python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           projects = []
@@ -195,6 +209,9 @@ jobs:
               is_e2e = "e2e" in lowered
               csproj_text = csproj.read_text()
               uses_playwright = "Microsoft.Playwright" in csproj_text
+              if uses_playwright and os.environ.get("DEPENDABOT") == "true":
+                  # Credentialed E2E: never on an unreviewed Dependabot bump.
+                  continue
               # Playwright projects must be built before browsers can be installed.
               prebuild = is_e2e or uses_playwright
               projects.append(
@@ -231,9 +248,7 @@ jobs:
           fi
 
   test:
-    if: >-
-      ${{ github.actor != 'dependabot[bot]' &&
-      needs.discover-tests.outputs.has_tests == 'true' }}
+    if: ${{ needs.discover-tests.outputs.has_tests == 'true' }}
     name: "Tests: ${{ matrix.test_name }}"
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -346,8 +361,7 @@ jobs:
 
   coverage:
     if: >-
-      ${{ always() && github.actor != 'dependabot[bot]' &&
-      needs.discover-tests.outputs.has_tests == 'true' }}
+      ${{ always() && needs.discover-tests.outputs.has_tests == 'true' }}
     name: Coverage Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -430,7 +444,7 @@ jobs:
           verbose: true
 
   report:
-    if: ${{ always() && github.actor != 'dependabot[bot]' }}
+    if: ${{ always() }}
     name: Test Report Summary
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -447,9 +461,14 @@ jobs:
         with:
           path: all-test-results
 
+      # Dependabot runs get a read-only token whatever the job asks for, so the
+      # check run and PR comment this writes can't be published there. The
+      # status step below still fails the job when a test did.
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2.24.0
-        if: ${{ always() && needs.discover-tests.outputs.has_tests == 'true' }}
+        if: >-
+          ${{ always() && needs.discover-tests.outputs.has_tests == 'true' &&
+          github.actor != 'dependabot[bot]' }}
         with:
           files: |
             all-test-results/**/*.trx
