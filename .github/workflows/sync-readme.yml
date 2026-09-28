@@ -24,15 +24,21 @@ env:
 
 jobs:
   sync:
+    # Publishes a PR into main, so a manual run from a branch (which would
+    # read that branch's README) doesn't sync anything.
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # zizmor: ignore[artipacked] this job pushes with the checkout's credential.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # A PAT when set, as in release.yml: GITHUB_TOKEN can't open PRs
+          # unless Actions is allowed to in the repository settings.
+          token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Prepare synced docs README
         id: prepare_sync_readme
@@ -73,14 +79,17 @@ jobs:
           fi
 
           git add docs/README.md
-          git commit -m "docs: sync README.md -> docs/README.md [skip ci]"
+          # No skip-CI marker: main's required checks must run on this commit,
+          # or the sync PR can never merge.
+          git commit -m "docs: sync README.md -> docs/README.md [skip-release]"
           git push --force-with-lease origin HEAD
           echo "committed=true" >> "$GITHUB_OUTPUT"
 
       - name: Create or reuse README sync PR to main
         if: steps.commit_sync_readme.outputs.committed == 'true'
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
+          github-token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const mainBranch = process.env.MAIN_BRANCH;
@@ -107,7 +116,9 @@ jobs:
               repo,
               base: mainBranch,
               head: 'automation/sync-readme',
-              title: 'docs: sync README.md -> docs/README.md',
+              // [skip-release] keeps release.yml from tagging a release
+              // for this automated sync when it merges.
+              title: 'docs: sync README.md -> docs/README.md [skip-release]',
               body: [
                 'Automated README sync PR for protected main.',
                 '',

@@ -11,7 +11,10 @@ name: PR Auto-Merge
 # A PR Sandcastle handed back with sandcastle:needs-human never merges while it
 # carries the label, or when someone other than the repository owner last
 # removed it (see "Giving up on a PR" in docs/plans/sandcastle-workflow.md).
-"on":
+# zizmor flags workflow_run as dangerous because it runs with write access
+# after a PR's workflows finish. That is safe here: the job never checks out
+# or executes PR code; it only reads PR state and merges through the API.
+"on":  # zizmor: ignore[dangerous-triggers]
   pull_request:
     # unlabeled: the owner removing sandcastle:needs-human can make a PR ready.
     types: [opened, ready_for_review, reopened, edited, synchronize, unlabeled]
@@ -41,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Squash-merge when ready
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
         env:
           HAS_RELEASE_PR_PAT: ${{ secrets.RELEASE_PR_PAT != '' }}
         with:

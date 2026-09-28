@@ -3,9 +3,11 @@
 # Sandcastle sandbox and people. Stops at the first failing step:
 #   1. yamllint on changed YAML files
 #   2. markdownlint-cli2 on changed Markdown files
-#   3. the Sandcastle TypeScript check when .sandcastle/ or package*.json changed
-#   4. a Release build of the solution
-#   5. each test project under tests/, in Release
+#   3. actionlint and zizmor when workflows or dependabot.yml changed
+#   4. shellcheck on changed shell scripts and git hooks
+#   5. the Sandcastle TypeScript check when .sandcastle/ or package*.json changed
+#   6. a Release build of the solution
+#   7. each test project under tests/, in Release
 # "Changed" means added or modified since the branch left origin/main, so a
 # branch with no upstream is linted in full, not just its last commit.
 # Usage: scripts/gate.sh
@@ -35,6 +37,15 @@ changed_files() {
 
 mapfile -d '' -t CHANGED_YAML < <(changed_files '*.yml' '*.yaml')
 mapfile -d '' -t CHANGED_MD < <(changed_files '*.md')
+mapfile -d '' -t CHANGED_WORKFLOWS < <(
+  changed_files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/dependabot.yml'
+)
+# Shell scripts, plus extensionless scripts and git hooks. Keep in step with
+# the shellcheck job in .github/workflows/lint-actions.yml.
+mapfile -t CHANGED_SHELL < <(
+  changed_files | tr '\0' '\n' \
+    | grep -E '\.sh$|^scripts/[^/.]+$|^\.github/hooks/((pre|post)-[a-z-]+|(prepare-)?commit-msg)$' || true
+)
 # Deletions count here: removing a module can break the code that imports it.
 mapfile -d '' -t CHANGED_SANDCASTLE < <(
   git diff -z --name-only --no-renames "$BASE" HEAD -- .sandcastle ':(glob)package*.json'
@@ -58,6 +69,54 @@ if [[ ${#CHANGED_MD[@]} -gt 0 ]]; then
   echo -e "${GREEN}✅ Markdown lint OK.${RESET}"
 else
   echo -e "\n${GREEN}✅ No changed Markdown files to lint.${RESET}"
+fi
+
+# The workflow and shell linters, at the versions .github/workflows/lint-actions.yml
+# pins. An installed tool is preferred; otherwise docker or uvx runs the pinned
+# version; with neither, the check is skipped here (CI still runs it).
+ACTIONLINT_VERSION="1.7.12"
+ZIZMOR_VERSION="1.30.1"
+SHELLCHECK_VERSION="v0.11.0"
+have_docker() { docker info &>/dev/null; }
+have_uvx() { command -v uvx &>/dev/null; }
+
+# run_tool <name> <install hint> <probe> <fallback command...> -- <args...>
+run_tool() {
+  local name="$1" hint="$2" probe="$3"; shift 3
+  local fallback=()
+  while [[ $# -gt 0 && "$1" != "--" ]]; do fallback+=("$1"); shift; done
+  shift
+  if command -v "$name" &>/dev/null; then
+    "$name" "$@"
+  elif "$probe"; then
+    "${fallback[@]}" "$@"
+  else
+    echo -e "${YELLOW}⚠️  ${name} not found — skipping. CI's Lint Actions workflow still runs it.${RESET}"
+    echo -e "   To enable: ${CYAN}${hint}${RESET}"
+  fi
+}
+
+if [[ ${#CHANGED_WORKFLOWS[@]} -gt 0 ]]; then
+  echo -e "\n${CYAN}⚙️  Workflow lint (actionlint, zizmor)...${RESET}"
+  # No file arguments: actionlint finds every workflow, and zizmor audits the
+  # whole repo, as CI does. --offline: no GitHub token needed locally.
+  run_tool actionlint "install actionlint (github.com/rhysd/actionlint), or Docker" have_docker \
+    docker run --rm -v "$ROOT:/repo" -w /repo "rhysd/actionlint:${ACTIONLINT_VERSION}" --
+  run_tool zizmor "pipx install zizmor, or install uv" have_uvx \
+    uvx "zizmor@${ZIZMOR_VERSION}" -- --offline --min-severity medium .
+  echo -e "${GREEN}✅ Workflow lint OK.${RESET}"
+else
+  echo -e "\n${GREEN}✅ No changed workflows to lint.${RESET}"
+fi
+
+if [[ ${#CHANGED_SHELL[@]} -gt 0 ]]; then
+  echo -e "\n${CYAN}🐚 Shell lint on changed scripts...${RESET}"
+  run_tool shellcheck "install shellcheck, or Docker" have_docker \
+    docker run --rm -v "$ROOT:/mnt" -w /mnt "koalaman/shellcheck:${SHELLCHECK_VERSION}" \
+    -- "${CHANGED_SHELL[@]}"
+  echo -e "${GREEN}✅ Shell lint OK.${RESET}"
+else
+  echo -e "\n${GREEN}✅ No changed shell scripts to lint.${RESET}"
 fi
 
 if [[ ${#CHANGED_SANDCASTLE[@]} -gt 0 ]]; then
