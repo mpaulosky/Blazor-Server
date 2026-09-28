@@ -165,10 +165,11 @@ jobs:
       - name: Run PR automerge Node tests
         run: node --test .github/scripts/tests/pr-automerge.test.mjs
 
-  # Dependabot PRs run the full test suite: a dependency bump is exactly the
-  # change the tests must vet. Dependabot runs can't read Actions secrets, so
-  # the Auth0 secrets above must also be set as Dependabot secrets for the E2E
-  # tests to log in; without them those tests fail and block the merge.
+  # Dependabot PRs run the test suite too: a dependency bump is exactly the
+  # change the tests must vet. The one exception is the Playwright (E2E)
+  # projects, which log in to Auth0 with real credentials: an unreviewed bump
+  # must not run with those, so discovery leaves them out for Dependabot and
+  # they run on main once the bump merges. No other test reads a secret.
   discover-tests:
     name: Discover Test Projects
     runs-on: ubuntu-latest
@@ -185,9 +186,12 @@ jobs:
 
       - name: Discover test projects
         id: discover
+        env:
+          DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
         run: |
           matrix_json=$(python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           projects = []
@@ -198,6 +202,9 @@ jobs:
               is_e2e = "e2e" in lowered
               csproj_text = csproj.read_text()
               uses_playwright = "Microsoft.Playwright" in csproj_text
+              if uses_playwright and os.environ.get("DEPENDABOT") == "true":
+                  # Credentialed E2E: never on an unreviewed Dependabot bump.
+                  continue
               # Playwright projects must be built before browsers can be installed.
               prebuild = is_e2e or uses_playwright
               projects.append(
