@@ -295,13 +295,16 @@ for branch in "${ELIGIBLE[@]}"; do
 		echo -e "  ${RED}kept local $branch: still checked out in a worktree${RESET}"
 		continue
 	fi
+	# Test the delete in the `if` itself: under set -e, a refused delete
+	# (e.g. `git branch -d` on an unmerged orphan) must be reported, not
+	# abort the run before the remote deletions.
 	if [[ "$FORCE_LOCAL" == "true" || -n "${PR_VERIFIED[$branch]:-}" ]]; then
 		# update-ref with an old value only deletes if the tip is still the one checked.
-		deleted=$(git update-ref -d "refs/heads/$branch" "$expected" 2>/dev/null && echo yes)
+		DELETE_LOCAL=(git update-ref -d "refs/heads/$branch" "$expected")
 	else
-		deleted=$(git branch -d "$branch" >/dev/null 2>&1 && echo yes)
+		DELETE_LOCAL=(git branch -d "$branch")
 	fi
-	if [[ "$deleted" == "yes" ]]; then
+	if "${DELETE_LOCAL[@]}" >/dev/null 2>&1; then
 		echo -e "  ${GREEN}deleted local $branch${RESET}"
 	else
 		echo -e "  ${RED}failed to delete local $branch (use --force-local for unmerged branches)${RESET}"
