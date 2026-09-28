@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-28 | [ci: Run the test suite on Dependabot PRs](2026-09-28-pr-106-ci-run-the-test-suite-on-dependabot-prs.md) | release,automation |
 | 2026-09-28 | [chore(deps): Fix Dependabot config](2026-09-28-pr-105-chore-deps-fix-dependabot-config.md) | release,automation |
 | 2026-09-28 | [fix(scripts): Keep squad cleanup going when a local delete is refused](2026-09-28-pr-103-fix-scripts-keep-squad-cleanup-going-when-a-local-delete-is-refused.md) | release,automation |
 | 2026-09-28 | [fix(scripts): Update squad branch cleanup to the fail-safe version](2026-09-28-pr-101-fix-scripts-update-squad-branch-cleanup-to-the-fail-safe-version.md) | release,automation |

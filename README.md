@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.55](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.55) | 2026-09-28 | ci: Run the test suite on Dependabot PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-106-ci-run-the-test-suite-on-dependabot-prs.md) |
 | [v0.0.54](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.54) | 2026-09-28 | chore(deps): Fix Dependabot config | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-105-chore-deps-fix-dependabot-config.md) |
 | [v0.0.53](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.53) | 2026-09-28 | fix(scripts): Keep squad cleanup going when a local delete is refused | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-103-fix-scripts-keep-squad-cleanup-going-when-a-local-delete-is-refused.md) |
 | [v0.0.52](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.52) | 2026-09-28 | fix(scripts): Update squad branch cleanup to the fail-safe version | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-101-fix-scripts-update-squad-branch-cleanup-to-the-fail-safe-version.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.48](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.48) | 2026-09-26 | feat(sandcastle): Critique each round's plan and defer picks that aren't safe in parallel | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-92-feat-sandcastle-critique-each-round-s-plan-and-defer-picks-that-aren-t-safe-in-parallel.md) |
 | [v0.0.47](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.47) | 2026-09-26 | feat(sandcastle): One gate script shared by the pre-push hook, the sandbox and people | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-89-feat-sandcastle-one-gate-script-shared-by-the-pre-push-hook-the-sandbox-and-people.md) |
 | [v0.0.46](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.46) | 2026-09-26 | feat(sandcastle): The host names branches and skips issues that already have a PR | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-88-feat-sandcastle-the-host-names-branches-and-skips-issues-that-already-have-a-pr.md) |
-| [v0.0.45](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.45) | 2026-09-26 | refactor(sandcastle): Split main.mts into modules and configure every role from one ROLE_AGENTS map | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-86-refactor-sandcastle-split-main-mts-into-modules-and-configure-every-role-from-one-role-agents-map.md) |
 
 <!-- RELEASES_END -->
 
