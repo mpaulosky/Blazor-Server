@@ -99,7 +99,7 @@ def commit_subject(commit):
 
 
 def render_commits(commits):
-    lines = ["### Commits", ""]
+    lines = ["## Commits", ""]
     if not commits:
         lines.append("No commits were found.")
     for commit in commits:
@@ -116,13 +116,13 @@ def render_files(files):
     for file in files:
         groups.setdefault(area_of(file["filename"]), []).append(file)
 
-    lines = ["### Files changed", ""]
+    lines = ["## Files changed", ""]
     if not files:
         lines.append("No files were changed.")
     for area in AREAS + [OTHER_AREA]:
         if area not in groups:
             continue
-        lines += [f"#### {area}", ""]
+        lines += [f"### {area}", ""]
         for file in sorted(groups[area], key=lambda f: f["filename"]):
             lines.append(f"- `{file['filename']}` (+{file.get('additions', 0)} / -{file.get('deletions', 0)})")
         lines.append("")
@@ -230,14 +230,14 @@ def render_post(pr, title_line, tag, merged_date, commits, files, summary, model
         ]
     )
     sections = [
-        f"## {title_line}\n\n"
+        f"# {title_line}\n\n"
         f"- **Release tag:** `{tag}`\n"
         f"- **Source PR:** [#{number}]({pr.get('html_url') or ''})\n"
     ]
     if summary:
-        sections.append(f"### Summary\n\n{summary}\n")
+        sections.append(f"## Summary\n\n{summary}\n")
     body = (pr.get("body") or "").strip() or "No PR description was provided."
-    sections.append(f"### PR description\n\n{body}\n")
+    sections.append(f"## PR description\n\n{body}\n")
     sections.append(render_commits(commits))
     sections.append(render_files(files))
     return front_matter + "\n".join(sections)
