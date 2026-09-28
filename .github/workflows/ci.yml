@@ -56,26 +56,27 @@ env:
 
   # Aspire parameter bindings for E2E.Tests
   # (Parameters: auth0MgmtClientId/Secret)
-  # Every secret below is withheld from PRs Dependabot authored, whoever
-  # triggered the run: a maintainer re-running, reopening or updating such a
-  # PR would otherwise hand the real Auth0 credentials to unreviewed
-  # dependency code (restore, build and every test job can read this env).
-  Auth0__Domain: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_DOMAIN || '' }}
-  Auth0__ClientId: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_CLIENT_ID || '' }}
-  Auth0__ClientSecret: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_CLIENT_SECRET || '' }}
-  Auth0Management__ClientId: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
-  Auth0Management__ClientSecret: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
-  Auth0Management__Domain: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_DOMAIN || '' }}
-  Auth0Management__Audience: https://${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_DOMAIN || '' }}/api/v2/
-  Parameters__auth0MgmtClientId: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
+  # Every secret below is withheld from runs of a dependabot/* branch, however
+  # they were triggered (the PR's head branch, or the ref of a manual run): a
+  # maintainer re-running, reopening, updating or dispatching one would
+  # otherwise hand the real Auth0 credentials to unreviewed dependency code
+  # (restore, build and every test job can read this env).
+  Auth0__Domain: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}
+  Auth0__ClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_CLIENT_ID || '' }}
+  Auth0__ClientSecret: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_CLIENT_SECRET || '' }}
+  Auth0Management__ClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
+  Auth0Management__ClientSecret: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
+  Auth0Management__Domain: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}
+  Auth0Management__Audience: https://${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}/api/v2/
+  Parameters__auth0MgmtClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
   Parameters__auth0MgmtClientSecret: >-
-    ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
+    ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
 
   # Role test-user credentials for UI.Tests.E2E's authenticated Playwright fixtures
-  Auth0__E2E__Admin__Username: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_ADMIN_USERNAME || '' }}
-  Auth0__E2E__Admin__Password: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_ADMIN_PASSWORD || '' }}
-  Auth0__E2E__User__Username: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_USER_USERNAME || '' }}
-  Auth0__E2E__User__Password: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && secrets.AUTH0_USER_PASSWORD || '' }}
+  Auth0__E2E__Admin__Username: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_ADMIN_USERNAME || '' }}
+  Auth0__E2E__Admin__Password: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_ADMIN_PASSWORD || '' }}
+  Auth0__E2E__User__Username: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_USER_USERNAME || '' }}
+  Auth0__E2E__User__Password: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_USER_PASSWORD || '' }}
 
 jobs:
   build:
@@ -171,10 +172,10 @@ jobs:
 
   # Dependabot PRs run the test suite too: a dependency bump is exactly the
   # change the tests must vet. The one exception is the Playwright (E2E)
-  # projects, which log in to Auth0 with real credentials. Dependabot PRs get
-  # no secrets (see env above), so discovery leaves those projects out for PRs
-  # Dependabot authored, and they run on main once the bump merges. No other
-  # test reads a secret.
+  # projects, which log in to Auth0 with real credentials. dependabot/*
+  # branches get no secrets (see env above), so discovery leaves those projects
+  # out there, and they run on main once the bump merges. No other test reads
+  # a secret.
   discover-tests:
     name: Discover Test Projects
     runs-on: ubuntu-latest
@@ -192,8 +193,8 @@ jobs:
       - name: Discover test projects
         id: discover
         env:
-          # The PR author, not the actor: see the env comment at the top.
-          DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+          # The branch, not the actor: see the env comment at the top.
+          DEPENDABOT: ${{ startsWith(github.head_ref || github.ref_name, 'dependabot/') }}
         run: |
           matrix_json=$(python - <<'PY'
           import json
