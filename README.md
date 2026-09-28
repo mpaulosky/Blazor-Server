@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.51](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.51) | 2026-09-28 | ci: Add nightly squad branch and worktree cleanup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-99-ci-add-nightly-squad-branch-and-worktree-cleanup.md) |
 | [v0.0.50](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.50) | 2026-09-26 | ci(sandcastle): Keep pr-automerge.yml from merging PRs handed back to a human | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-94-ci-sandcastle-keep-pr-automerge-yml-from-merging-prs-handed-back-to-a-human.md) |
 | [v0.0.49](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.49) | 2026-09-26 | feat(sandcastle): Run the gate at two checkpoints with a gate-fixer role | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-93-feat-sandcastle-run-the-gate-at-two-checkpoints-with-a-gate-fixer-role.md) |
 | [v0.0.48](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.48) | 2026-09-26 | feat(sandcastle): Critique each round's plan and defer picks that aren't safe in parallel | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-92-feat-sandcastle-critique-each-round-s-plan-and-defer-picks-that-aren-t-safe-in-parallel.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.44](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.44) | 2026-09-26 | docs(sandcastle): Spec the enhanced Sandcastle workflow | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-65-docs-sandcastle-spec-the-enhanced-sandcastle-workflow.md) |
 | [v0.0.43](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.43) | 2026-09-25 | fix(ci): Merge same-repo PRs after Copilot review instead of never | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-50-fix-ci-merge-same-repo-prs-after-copilot-review-instead-of-never.md) |
 | [v0.0.42](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.42) | 2026-09-25 | ci(release): Flag when release PRs fall back to GITHUB_TOKEN | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-48-ci-release-flag-when-release-prs-fall-back-to-github-token.md) |
-| [v0.0.41](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.41) | 2026-09-25 | fix(release): Remove the workflow dispatch loop that always fails with HTTP 403 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-46-fix-release-remove-the-workflow-dispatch-loop-that-always-fails-with-http-403.md) |
 
 <!-- RELEASES_END -->
 
