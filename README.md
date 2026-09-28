@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.52](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.52) | 2026-09-28 | fix(scripts): Update squad branch cleanup to the fail-safe version | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-101-fix-scripts-update-squad-branch-cleanup-to-the-fail-safe-version.md) |
 | [v0.0.51](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.51) | 2026-09-28 | ci: Add nightly squad branch and worktree cleanup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-99-ci-add-nightly-squad-branch-and-worktree-cleanup.md) |
 | [v0.0.50](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.50) | 2026-09-26 | ci(sandcastle): Keep pr-automerge.yml from merging PRs handed back to a human | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-94-ci-sandcastle-keep-pr-automerge-yml-from-merging-prs-handed-back-to-a-human.md) |
 | [v0.0.49](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.49) | 2026-09-26 | feat(sandcastle): Run the gate at two checkpoints with a gate-fixer role | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-93-feat-sandcastle-run-the-gate-at-two-checkpoints-with-a-gate-fixer-role.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.45](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.45) | 2026-09-26 | refactor(sandcastle): Split main.mts into modules and configure every role from one ROLE_AGENTS map | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-86-refactor-sandcastle-split-main-mts-into-modules-and-configure-every-role-from-one-role-agents-map.md) |
 | [v0.0.44](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.44) | 2026-09-26 | docs(sandcastle): Spec the enhanced Sandcastle workflow | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-65-docs-sandcastle-spec-the-enhanced-sandcastle-workflow.md) |
 | [v0.0.43](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.43) | 2026-09-25 | fix(ci): Merge same-repo PRs after Copilot review instead of never | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-50-fix-ci-merge-same-repo-prs-after-copilot-review-instead-of-never.md) |
-| [v0.0.42](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.42) | 2026-09-25 | ci(release): Flag when release PRs fall back to GITHUB_TOKEN | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-25-pr-48-ci-release-flag-when-release-prs-fall-back-to-github-token.md) |
 
 <!-- RELEASES_END -->
 
