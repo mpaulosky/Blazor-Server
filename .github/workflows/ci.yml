@@ -165,8 +165,11 @@ jobs:
       - name: Run PR automerge Node tests
         run: node --test .github/scripts/tests/pr-automerge.test.mjs
 
+  # Dependabot PRs run the full test suite: a dependency bump is exactly the
+  # change the tests must vet. Dependabot runs can't read Actions secrets, so
+  # the Auth0 secrets above must also be set as Dependabot secrets for the E2E
+  # tests to log in; without them those tests fail and block the merge.
   discover-tests:
-    if: ${{ github.actor != 'dependabot[bot]' }}
     name: Discover Test Projects
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -231,9 +234,7 @@ jobs:
           fi
 
   test:
-    if: >-
-      ${{ github.actor != 'dependabot[bot]' &&
-      needs.discover-tests.outputs.has_tests == 'true' }}
+    if: ${{ needs.discover-tests.outputs.has_tests == 'true' }}
     name: "Tests: ${{ matrix.test_name }}"
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -346,8 +347,7 @@ jobs:
 
   coverage:
     if: >-
-      ${{ always() && github.actor != 'dependabot[bot]' &&
-      needs.discover-tests.outputs.has_tests == 'true' }}
+      ${{ always() && needs.discover-tests.outputs.has_tests == 'true' }}
     name: Coverage Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -430,7 +430,7 @@ jobs:
           verbose: true
 
   report:
-    if: ${{ always() && github.actor != 'dependabot[bot]' }}
+    if: ${{ always() }}
     name: Test Report Summary
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -447,9 +447,14 @@ jobs:
         with:
           path: all-test-results
 
+      # Dependabot runs get a read-only token whatever the job asks for, so the
+      # check run and PR comment this writes can't be published there. The
+      # status step below still fails the job when a test did.
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2.24.0
-        if: ${{ always() && needs.discover-tests.outputs.has_tests == 'true' }}
+        if: >-
+          ${{ always() && needs.discover-tests.outputs.has_tests == 'true' &&
+          github.actor != 'dependabot[bot]' }}
         with:
           files: |
             all-test-results/**/*.trx
