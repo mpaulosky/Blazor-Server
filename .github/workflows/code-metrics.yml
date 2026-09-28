@@ -32,15 +32,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        # zizmor: ignore[artipacked] create-pull-request pushes with the checkout's credential.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
       - name: "Print manual run reason"
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        # Free text from the dispatcher: read from env, never interpolated.
+        env:
+          REASON: ${{ github.event.inputs.reason }}
         run: |
-          echo 'Reason: ${{ github.event.inputs.reason }}'
+          echo "Reason: $REASON"
       - name: .NET code metrics
         id: dotnet-code-metrics
-        uses: dotnet/samples/github-actions/DotNet.GitHubAction@main
+        uses: dotnet/samples/github-actions/DotNet.GitHubAction@acb39ceb13f910ae0f8f6298059c59102b749c41  # main as of 2026-09-26
         env:
           GREETINGS: "Hello, .NET developers!"  # ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -53,7 +58,7 @@ jobs:
       # merge commit (refs/pull/N/merge), which create-pull-request can't use as a
       # base, and a manual run from another branch must not publish metrics either.
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v8.1.1
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
         if: ${{ github.ref == 'refs/heads/main' && steps.dotnet-code-metrics.outputs.updated-metrics == 'true' }}
         with:
           title: "${{ steps.dotnet-code-metrics.outputs.summary-title }}"

@@ -17,7 +17,7 @@ NO_YAMLLINT="$WORK/bin-no-yamllint"
 LOG="$WORK/gate.log"
 
 mkdir -p "$STUBS" "$NO_YAMLLINT"
-for tool in dotnet npm npx yamllint docker; do
+for tool in dotnet npm npx yamllint docker actionlint zizmor shellcheck; do
   cat > "$STUBS/$tool" <<EOF
 #!/usr/bin/env bash
 call="$tool \$*"
@@ -117,6 +117,9 @@ $calls"
 
 BUILD="dotnet build Blazor-Server.slnx -c Release"
 TEST="dotnet test --project $REPO/tests/Fake.Tests/Fake.Tests.csproj --configuration Release"
+# actionlint takes no file arguments, so its stub logs a trailing space.
+WORKFLOW_LINT="actionlint${IFS:0:1}
+zizmor --offline --min-severity medium ."
 
 new_branch feature/1-none
 run_gate
@@ -131,6 +134,7 @@ commit_file .sandcastle/lib/a.mts 'export {};'
 run_gate
 expect "every step runs in order" passed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
 npx --no-install markdownlint-cli2 docs/a.md
+$WORKFLOW_LINT
 npm run check:sandcastle
 $BUILD
 $TEST*"
@@ -142,20 +146,28 @@ FAIL='npx*' run_gate
 expect "a Markdown lint failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
 npx --no-install markdownlint-cli2 docs/a.md"
 
+FAIL='actionlint*' run_gate
+expect "a workflow lint failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
+npx --no-install markdownlint-cli2 docs/a.md
+actionlint${IFS:0:1}"
+
 FAIL='npm*' run_gate
 expect "a Sandcastle check failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
 npx --no-install markdownlint-cli2 docs/a.md
+$WORKFLOW_LINT
 npm run check:sandcastle"
 
 FAIL='dotnet build*' run_gate
 expect "a build failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
 npx --no-install markdownlint-cli2 docs/a.md
+$WORKFLOW_LINT
 npm run check:sandcastle
 $BUILD"
 
 FAIL='dotnet test*' run_gate
 expect "a test failure fails the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
 npx --no-install markdownlint-cli2 docs/a.md
+$WORKFLOW_LINT
 npm run check:sandcastle
 $BUILD
 $TEST*"
@@ -179,6 +191,16 @@ expect "without yamllint, a branch with no YAML changes passes" passed \
   "npx --no-install markdownlint-cli2 docs/a.md
 $BUILD
 $TEST*"
+
+new_branch feature/5b-shell
+commit_file scripts/tool.sh '#!/usr/bin/env bash'
+run_gate
+expect "a changed shell script is shellchecked" passed "shellcheck scripts/tool.sh
+$BUILD
+$TEST*"
+
+FAIL='shellcheck*' run_gate
+expect "a shell lint failure stops the gate" failed "shellcheck scripts/tool.sh"
 
 new_branch feature/6-deleted
 git -C "$REPO" rm -q docs/old.md

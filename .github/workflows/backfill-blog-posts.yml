@@ -44,7 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
-        uses: actions/checkout@v7
+        # zizmor: ignore[artipacked] this job pushes with the checkout's credential.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           # A PAT, as in release.yml: a PR opened with GITHUB_TOKEN is

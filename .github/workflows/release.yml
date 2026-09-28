@@ -35,7 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
-        uses: actions/checkout@v7
+        # zizmor: ignore[artipacked] this job pushes with the checkout's credential.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: main
           fetch-depth: 0
@@ -155,13 +156,13 @@ jobs:
         run: |
           # any() is required: with `.[] | test(...)`, jq -e exits on the
           # last label only, so e.g. ["semver:minor","bug"] would miss minor.
-          BUMP=patch
+          BUMP="patch"
           if echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):major$"))' >/dev/null; then
-            BUMP=major
+            BUMP="major"
           elif echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):minor$"))' >/dev/null; then
-            BUMP=minor
+            BUMP="minor"
           elif echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):patch$"))' >/dev/null; then
-            BUMP=patch
+            BUMP="patch"
           fi
 
           # Base on the highest release tag by version, then bump exactly
