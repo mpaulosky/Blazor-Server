@@ -204,6 +204,17 @@ run --apply --delete-remote --orphan-days 08
 check "accepts --orphan-days with a leading zero" test "$STATUS" -eq 0
 check "treats it as decimal" remote_lacks chore/old-orphan
 
+setup
+push_branch chore/old-local-orphan 30
+git -C "$CLONE" push -q origin --delete chore/old-local-orphan
+push_branch chore/old-remote-orphan 30
+remote_only chore/old-remote-orphan
+run --apply --delete-remote
+check "finishes when git refuses to delete an unmerged local orphan" test "$STATUS" -eq 0
+check "reports the refused local delete" output_has "failed to delete local chore/old-local-orphan (use --force-local"
+check "keeps that unmerged local branch" local_has chore/old-local-orphan
+check "still deletes the remote orphans after the refusal" remote_lacks chore/old-remote-orphan
+
 # --- fail closed --------------------------------------------------------------
 
 setup
