@@ -1,7 +1,6 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+# Dependabot version updates. Every label used below must exist in the repo:
+# Dependabot doesn't create them, and silently leaves them off the PR.
+# https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 ---
 
 version: 2
@@ -16,6 +15,10 @@ updates:
       day: "sunday"
       time: "16:00"
     open-pull-requests-limit: 10
+    # Wait a week before proposing a new release, so a compromised or broken
+    # one is usually caught upstream before it reaches a PR here.
+    cooldown:
+      default-days: 7
     labels:
       - "github-actions"
       - "dependencies"
@@ -33,6 +36,10 @@ updates:
       day: "sunday"
       time: "16:00"
     open-pull-requests-limit: 10
+    # Wait a week before proposing a new release, so a compromised or broken
+    # one is usually caught upstream before it reaches a PR here.
+    cooldown:
+      default-days: 7
     labels:
       - "nuget"
       - "dependencies"
@@ -50,10 +57,35 @@ updates:
       day: "sunday"
       time: "16:00"
     open-pull-requests-limit: 10
+    # Wait a week before proposing a new release, so a compromised or broken
+    # one is usually caught upstream before it reaches a PR here.
+    cooldown:
+      default-days: 7
     labels:
       - "dotnet-sdk"
       - "dependencies"
     groups:
       dotnet-sdk:
+        patterns:
+          - "*"
+
+  # Maintain the root npm packages (dev tooling: sandcastle, markdownlint)
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "16:00"
+    open-pull-requests-limit: 10
+    # Wait a week before proposing a new release, so a compromised or broken
+    # one is usually caught upstream before it reaches a PR here.
+    cooldown:
+      default-days: 7
+    labels:
+      - "npm"
+      - "dependencies"
+    groups:
+      all-npm:
         patterns:
           - "*"
