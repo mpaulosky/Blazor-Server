@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 |------|-------|------|
+| 2026-09-29 | [fix(release): Start release posts with an H1 title](2026-09-29-pr-112-fix-release-start-release-posts-with-an-h1-title.md) | release,automation |
 | 2026-09-29 | [build: switch the repo tooling from npm to pnpm](2026-09-29-pr-113-build-switch-the-repo-tooling-from-npm-to-pnpm.md) | release,automation |
 | 2026-09-28 | [ci: Lint workflows and shell scripts before push and in CI](2026-09-28-pr-110-ci-lint-workflows-and-shell-scripts-before-push-and-in-ci.md) | release,automation |
 | 2026-09-28 | [ci: Run the test suite on Dependabot PRs](2026-09-28-pr-106-ci-run-the-test-suite-on-dependabot-prs.md) | release,automation |
