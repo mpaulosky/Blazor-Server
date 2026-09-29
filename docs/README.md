@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.57](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.57) | 2026-09-29 | build: switch the repo tooling from npm to pnpm | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-113-build-switch-the-repo-tooling-from-npm-to-pnpm.md) |
 | [v0.0.56](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.56) | 2026-09-28 | ci: Lint workflows and shell scripts before push and in CI | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-110-ci-lint-workflows-and-shell-scripts-before-push-and-in-ci.md) |
 | [v0.0.55](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.55) | 2026-09-28 | ci: Run the test suite on Dependabot PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-106-ci-run-the-test-suite-on-dependabot-prs.md) |
 | [v0.0.54](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.54) | 2026-09-28 | chore(deps): Fix Dependabot config | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-105-chore-deps-fix-dependabot-config.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.50](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.50) | 2026-09-26 | ci(sandcastle): Keep pr-automerge.yml from merging PRs handed back to a human | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-94-ci-sandcastle-keep-pr-automerge-yml-from-merging-prs-handed-back-to-a-human.md) |
 | [v0.0.49](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.49) | 2026-09-26 | feat(sandcastle): Run the gate at two checkpoints with a gate-fixer role | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-93-feat-sandcastle-run-the-gate-at-two-checkpoints-with-a-gate-fixer-role.md) |
 | [v0.0.48](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.48) | 2026-09-26 | feat(sandcastle): Critique each round's plan and defer picks that aren't safe in parallel | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-92-feat-sandcastle-critique-each-round-s-plan-and-defer-picks-that-aren-t-safe-in-parallel.md) |
-| [v0.0.47](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.47) | 2026-09-26 | feat(sandcastle): One gate script shared by the pre-push hook, the sandbox and people | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-89-feat-sandcastle-one-gate-script-shared-by-the-pre-push-hook-the-sandbox-and-people.md) |
 
 <!-- RELEASES_END -->
 
@@ -68,13 +68,13 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 2. Install the prerequisites:
 
    - The .NET SDK `10.0.401`, as pinned in [global.json](https://github.com/mpaulosky/Blazor-Server/blob/main/global.json) (later 10.0 feature bands are accepted).
-   - Node.js and npm, used by the git hooks and the lint tools.
+   - Node.js and pnpm (`corepack enable`), used by the git hooks and the lint tools. The repo refuses `npm install`.
    - [yamllint](https://yamllint.readthedocs.io/), which the pre-push hook runs on changed YAML files.
 
-3. Install the npm packages, then build and test:
+3. Install the pnpm packages, then build and test:
 
    ```bash
-   npm install
+   pnpm install
    dotnet build Blazor-Server.slnx
    dotnet test --solution Blazor-Server.slnx
    ```

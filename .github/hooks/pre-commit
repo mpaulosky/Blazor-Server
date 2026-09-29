@@ -31,8 +31,8 @@ fi
 
 if [[ -z "$MARKDOWNLINT_BIN" ]]; then
   echo -e "${YELLOW}⚠️   markdownlint-cli2 not found — skipping markdown lint check.${RESET}"
-  echo -e "    To enable: run  ${CYAN}npm install${RESET}  (markdownlint-cli2 is a dev dependency)"
-  echo -e "    Or install globally: ${CYAN}npm install -g markdownlint-cli2${RESET}"
+  echo -e "    To enable: run  ${CYAN}pnpm install${RESET}  (markdownlint-cli2 is a dev dependency)"
+  echo -e "    Or install globally: ${CYAN}pnpm add -g markdownlint-cli2${RESET}"
   exit 0
 fi
 

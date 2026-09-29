@@ -47,12 +47,19 @@ export const GATE_FIXER_ATTEMPTS = 2;
 export const GATE_COMMENT_LINES = 100;
 
 // Hooks run inside the sandbox before the agent starts each iteration.
-// npm install ensures the sandbox always has fresh dependencies.
+// pnpm install ensures the sandbox always has fresh dependencies. The copied
+// node_modules records the host's pnpm store, so pnpm may rebuild it against
+// the sandbox's store; confirm-modules-purge=false lets it do that without a
+// TTY prompt.
 export const hooks = {
-  sandbox: { onSandboxReady: [{ command: "npm install" }] },
+  sandbox: {
+    onSandboxReady: [
+      { command: "pnpm install --frozen-lockfile --config.confirm-modules-purge=false" },
+    ],
+  },
 };
 
 // Copy node_modules from the host into the worktree before each sandbox
-// starts. Avoids a full npm install from scratch; the hook above handles
+// starts. Avoids a full pnpm install from scratch; the hook above handles
 // platform-specific binaries and any packages added since the last copy.
 export const copyToWorktree = ["node_modules"];

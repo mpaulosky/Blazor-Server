@@ -14,5 +14,9 @@
   },
   "dependencies": {
     "zod": "^4.6.5"
-  }
+  },
+  "engines": {
+    "npm": "please-use-pnpm"
+  },
+  "packageManager": "pnpm@12.6.0"
 }

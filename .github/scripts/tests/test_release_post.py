@@ -148,6 +148,8 @@ def test_files_section_groups_by_area_in_fixed_order():
     [
         ("package-lock.json", True),
         ("web/package-lock.json", True),
+        ("pnpm-lock.yaml", True),
+        ("web/pnpm-lock.yaml", True),
         ("poetry.lock", True),
         ("docs/blogs/2026-09-24-pr-1-x.md", True),
         ("README.md", True),

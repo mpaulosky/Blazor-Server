@@ -5,7 +5,8 @@
 #   2. markdownlint-cli2 on changed Markdown files
 #   3. actionlint and zizmor when workflows or dependabot.yml changed
 #   4. shellcheck on changed shell scripts and git hooks
-#   5. the Sandcastle TypeScript check when .sandcastle/ or package*.json changed
+#   5. the Sandcastle TypeScript check when .sandcastle/, package.json or the
+#      pnpm lockfile/workspace changed
 #   6. a Release build of the solution
 #   7. each test project under tests/, in Release
 # "Changed" means added or modified since the branch left origin/main, so a
@@ -19,7 +20,7 @@ cd "$ROOT"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RESET='\033[0m'
 
 # Hooks run with GIT_DIR and friends set, which confuse git calls made by the
-# .NET SDK and npm tooling in a worktree.
+# .NET SDK and pnpm tooling in a worktree.
 run_clean() {
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_PREFIX "$@"
 }
@@ -48,7 +49,7 @@ mapfile -t CHANGED_SHELL < <(
 )
 # Deletions count here: removing a module can break the code that imports it.
 mapfile -d '' -t CHANGED_SANDCASTLE < <(
-  git diff -z --name-only --no-renames "$BASE" HEAD -- .sandcastle ':(glob)package*.json'
+  git diff -z --name-only --no-renames "$BASE" HEAD -- .sandcastle package.json ':(glob)pnpm-*.yaml'
 )
 
 if [[ ${#CHANGED_YAML[@]} -gt 0 ]]; then
@@ -65,7 +66,7 @@ fi
 
 if [[ ${#CHANGED_MD[@]} -gt 0 ]]; then
   echo -e "\n${CYAN}📝 Markdown lint on changed files...${RESET}"
-  npx --no-install markdownlint-cli2 "${CHANGED_MD[@]}"
+  pnpm exec markdownlint-cli2 "${CHANGED_MD[@]}"
   echo -e "${GREEN}✅ Markdown lint OK.${RESET}"
 else
   echo -e "\n${GREEN}✅ No changed Markdown files to lint.${RESET}"
@@ -121,7 +122,7 @@ fi
 
 if [[ ${#CHANGED_SANDCASTLE[@]} -gt 0 ]]; then
   echo -e "\n${CYAN}🏰 Sandcastle TypeScript check...${RESET}"
-  run_clean npm run check:sandcastle
+  run_clean pnpm run check:sandcastle
   echo -e "${GREEN}✅ Sandcastle check OK.${RESET}"
 else
   echo -e "\n${GREEN}✅ No Sandcastle or package changes to check.${RESET}"
