@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests for scripts/gate.sh.
 # Each case runs the gate in a throwaway repo whose origin/main is a local ref.
-# Stub `dotnet`, `npm`, `npx`, `yamllint` and `docker` binaries log each call,
+# Stub `dotnet`, `pnpm`, `yamllint` and `docker` binaries log each call,
 # and fail when the call matches the FAIL glob, so no real build is needed.
 # Usage: scripts/tests/gate.test.sh
 set -uo pipefail
@@ -17,7 +17,7 @@ NO_YAMLLINT="$WORK/bin-no-yamllint"
 LOG="$WORK/gate.log"
 
 mkdir -p "$STUBS" "$NO_YAMLLINT"
-for tool in dotnet npm npx yamllint docker actionlint zizmor shellcheck; do
+for tool in dotnet pnpm yamllint docker actionlint zizmor shellcheck; do
   cat > "$STUBS/$tool" <<EOF
 #!/usr/bin/env bash
 call="$tool \$*"
@@ -133,51 +133,51 @@ commit_file docs/a.md '# A'
 commit_file .sandcastle/lib/a.mts 'export {};'
 run_gate
 expect "every step runs in order" passed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
-npx --no-install markdownlint-cli2 docs/a.md
+pnpm exec markdownlint-cli2 docs/a.md
 $WORKFLOW_LINT
-npm run check:sandcastle
+pnpm run check:sandcastle
 $BUILD
 $TEST*"
 
 FAIL='yamllint*' run_gate
 expect "a YAML lint failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml"
 
-FAIL='npx*' run_gate
+FAIL='pnpm exec*' run_gate
 expect "a Markdown lint failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
-npx --no-install markdownlint-cli2 docs/a.md"
+pnpm exec markdownlint-cli2 docs/a.md"
 
 FAIL='actionlint*' run_gate
 expect "a workflow lint failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
-npx --no-install markdownlint-cli2 docs/a.md
+pnpm exec markdownlint-cli2 docs/a.md
 actionlint${IFS:0:1}"
 
-FAIL='npm*' run_gate
+FAIL='pnpm run*' run_gate
 expect "a Sandcastle check failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
-npx --no-install markdownlint-cli2 docs/a.md
+pnpm exec markdownlint-cli2 docs/a.md
 $WORKFLOW_LINT
-npm run check:sandcastle"
+pnpm run check:sandcastle"
 
 FAIL='dotnet build*' run_gate
 expect "a build failure stops the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
-npx --no-install markdownlint-cli2 docs/a.md
+pnpm exec markdownlint-cli2 docs/a.md
 $WORKFLOW_LINT
-npm run check:sandcastle
+pnpm run check:sandcastle
 $BUILD"
 
 FAIL='dotnet test*' run_gate
 expect "a test failure fails the gate" failed "yamllint -c .yamllint.yml .github/workflows/a.yml config/b.yaml
-npx --no-install markdownlint-cli2 docs/a.md
+pnpm exec markdownlint-cli2 docs/a.md
 $WORKFLOW_LINT
-npm run check:sandcastle
+pnpm run check:sandcastle
 $BUILD
 $TEST*"
 
 new_branch feature/3-two-commits
 commit_file docs/first.md '# First'
 commit_file src/second.txt
-FAIL='npx*docs/first.md*' run_gate
+FAIL='pnpm exec*docs/first.md*' run_gate
 expect "a Markdown error in the first of two commits with no upstream fails the gate" failed \
-  "npx --no-install markdownlint-cli2 docs/first.md"
+  "pnpm exec markdownlint-cli2 docs/first.md"
 
 new_branch feature/4-no-yamllint
 commit_file a.yml
@@ -188,7 +188,7 @@ new_branch feature/5-no-yaml
 commit_file docs/a.md '# A'
 run_gate "$NO_YAMLLINT"
 expect "without yamllint, a branch with no YAML changes passes" passed \
-  "npx --no-install markdownlint-cli2 docs/a.md
+  "pnpm exec markdownlint-cli2 docs/a.md
 $BUILD
 $TEST*"
 
@@ -213,14 +213,22 @@ new_branch feature/7-sandcastle-deleted
 git -C "$REPO" rm -q .sandcastle/old.mts
 git -C "$REPO" commit -q -m "remove .sandcastle/old.mts"
 run_gate
-expect "deleting a Sandcastle file still runs the Sandcastle check" passed "npm run check:sandcastle
+expect "deleting a Sandcastle file still runs the Sandcastle check" passed "pnpm run check:sandcastle
 $BUILD
 $TEST*"
 
 new_branch feature/8-package
-commit_file package-lock.json '{}'
+commit_file package.json '{}'
 run_gate
-expect "a package*.json change runs the Sandcastle check" passed "npm run check:sandcastle
+expect "a package.json change runs the Sandcastle check" passed "pnpm run check:sandcastle
+$BUILD
+$TEST*"
+
+new_branch feature/8b-lockfile
+commit_file pnpm-lock.yaml '---'
+run_gate
+expect "a pnpm lockfile change runs the Sandcastle check" passed "yamllint -c .yamllint.yml pnpm-lock.yaml
+pnpm run check:sandcastle
 $BUILD
 $TEST*"
 

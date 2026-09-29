@@ -68,13 +68,13 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 2. Install the prerequisites:
 
    - The .NET SDK `10.0.401`, as pinned in [global.json](https://github.com/mpaulosky/Blazor-Server/blob/main/global.json) (later 10.0 feature bands are accepted).
-   - Node.js and npm, used by the git hooks and the lint tools.
+   - Node.js and pnpm (`corepack enable`), used by the git hooks and the lint tools. The repo refuses `npm install`.
    - [yamllint](https://yamllint.readthedocs.io/), which the pre-push hook runs on changed YAML files.
 
-3. Install the npm packages, then build and test:
+3. Install the pnpm packages, then build and test:
 
    ```bash
-   npm install
+   pnpm install
    dotnet build Blazor-Server.slnx
    dotnet test --solution Blazor-Server.slnx
    ```

@@ -225,8 +225,8 @@ picked role runs again on the existing branch and builds on earlier work; the ar
 hook linting only the last commit on a branch with no upstream) and stops at the first failure:
 
 1. `yamllint -c .yamllint.yml` on changed `*.yml` / `*.yaml` files (failing with an "install yamllint" message when it's missing; no Docker fallback);
-2. `npx --no-install markdownlint-cli2` on changed `*.md` files;
-3. the Sandcastle TypeScript check (`npm run check:sandcastle`: type-check plus the host's unit tests) when `.sandcastle/**` or `package*.json` changed;
+2. `pnpm exec markdownlint-cli2` on changed `*.md` files;
+3. the Sandcastle TypeScript check (`pnpm run check:sandcastle`: type-check plus the host's unit tests) when `.sandcastle/**`, `package.json` or the pnpm lockfile changed;
 4. `dotnet build Blazor-Server.slnx -c Release` (warnings as errors);
 5. `dotnet test --project` for each project under `tests/`, in Release.
 
@@ -301,11 +301,12 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 [Where an automatic Sandcastle trigger could run](https://github.com/mpaulosky/Blazor-Server/issues/54). The reasoning for the runner and token is in
 [ADR 0002](../adr/0002-unattended-sandcastle-on-a-hosted-runner.md).
 
-**Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` (never the event's ref) with `persist-credentials: false`, sets up Node 22, runs `npm ci` to
-install the locked dependencies (including the `tsx` devDependency), and then runs `npx --no-install tsx .sandcastle/main.mts` with `GH_TOKEN` set to `SANDCASTLE_GH_TOKEN`. The `gh` CLI
-reads `GH_TOKEN`, and the host's own git fetches and pushes authenticate through `gh auth setup-git`, a credential helper in the runner's global git config that reads `GH_TOKEN` from the
-host's environment. Nothing in the repository's `.git` holds the token, so the worktree and git metadata the sandbox mounts carry no credential. The step also passes `ANTHROPIC_API_KEY` when
-that secret is set and `CLAUDE_CODE_OAUTH_TOKEN` otherwise, and an earlier step fails the job with a clear message when `SANDCASTLE_GH_TOKEN` or both Claude secrets are missing. Triggers:
+**Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` (never the event's ref) with `persist-credentials: false`, sets up pnpm and Node 22, runs
+`pnpm install --frozen-lockfile` to install the locked dependencies (including the `tsx` devDependency), and then runs `pnpm exec tsx .sandcastle/main.mts` with `GH_TOKEN` set to
+`SANDCASTLE_GH_TOKEN`. The `gh` CLI reads `GH_TOKEN`, and the host's own git fetches and pushes authenticate through `gh auth setup-git`, a credential helper in the runner's global git
+config that reads `GH_TOKEN` from the host's environment. Nothing in the repository's `.git` holds the token, so the worktree and git metadata the sandbox mounts carry no credential. The
+step also passes `ANTHROPIC_API_KEY` when that secret is set and `CLAUDE_CODE_OAUTH_TOKEN` otherwise, and an earlier step fails the job with a clear message when `SANDCASTLE_GH_TOKEN` or
+both Claude secrets are missing. Triggers:
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;

@@ -37,9 +37,9 @@
 // with its own gh auth and passes each role what it needs through its prompt.
 //
 // Usage:
-//   npx tsx .sandcastle/main.mts
+//   pnpm exec tsx .sandcastle/main.mts
 // Or add to package.json:
-//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
+//   "scripts": { "sandcastle": "tsx .sandcastle/main.mts" }
 
 import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
