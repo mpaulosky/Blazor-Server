@@ -135,7 +135,7 @@ def test_run_writes_missing_posts_with_the_existing_tags(tmp_path):
     ]
     fourth = (tmp_path / "docs" / "blogs" / "2026-09-20-pr-4-feat-fourth.md").read_text(encoding="utf-8")
     assert "- **Release tag:** `v0.0.4`" in fourth
-    assert "### Commits" in fourth and "### Files changed" in fourth
+    assert "## Commits" in fourth and "## Files changed" in fourth
 
     index = (tmp_path / "docs" / "blogs" / "README.md").read_text(encoding="utf-8")
     assert index.index("pr-4-") < index.index("pr-2-") < index.index("pr-1-")
@@ -166,8 +166,8 @@ def test_dependabot_post_has_no_summary_but_others_do(tmp_path):
 
     bf.run(REPO, FakeGitHub(), root=tmp_path, api_key="sk-test", urlopen=urlopen)
     blog_dir = tmp_path / "docs" / "blogs"
-    assert "### Summary" not in (blog_dir / "2026-09-19-pr-2-bump-codeql-action.md").read_text(encoding="utf-8")
-    assert "### Summary" in (blog_dir / "2026-09-18-pr-1-chore-first.md").read_text(encoding="utf-8")
+    assert "## Summary" not in (blog_dir / "2026-09-19-pr-2-bump-codeql-action.md").read_text(encoding="utf-8")
+    assert "## Summary" in (blog_dir / "2026-09-18-pr-1-chore-first.md").read_text(encoding="utf-8")
 
 
 def test_second_run_without_regenerate_changes_nothing(tmp_path):
