@@ -6,6 +6,6 @@ allowBuilds:
 # pnpm 12 otherwise writes a two-document lockfile (the pnpm version first),
 # and GitHub's dependency graph reads only that first document, hiding the
 # real dependencies from Dependabot alerts (dependabot/dependabot-core#15904).
-# The pnpm version stays pinned by packageManager in package.json, which CI's
-# pnpm/action-setup and corepack both read.
+# The pnpm version stays pinned by packageManager in package.json, which
+# corepack reads (locally and in the Sandcastle image).
 pmOnFail: ignore
