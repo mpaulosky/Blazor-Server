@@ -69,7 +69,7 @@ updates:
         patterns:
           - "*"
 
-  # Maintain the root npm packages (dev tooling: sandcastle, markdownlint)
+  # Maintain the root pnpm packages (dev tooling: sandcastle, markdownlint)
   - package-ecosystem: "npm"
     directory: "/"
     target-branch: "main"

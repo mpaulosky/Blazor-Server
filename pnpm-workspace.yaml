@@ -1,0 +1,5 @@
+---
+# esbuild (under tsx) only uses its install script to check its native
+# binary, which pnpm already installs as an optional dependency.
+allowBuilds:
+  esbuild: false

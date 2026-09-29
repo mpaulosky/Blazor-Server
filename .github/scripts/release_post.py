@@ -40,7 +40,7 @@ AREAS = ["src/", "tests/", ".github/", ".sandcastle/", "docs/"]
 OTHER_AREA = "other"
 
 # Lock files are noise, and the rest are written by this script.
-DIFF_EXCLUDED_NAMES = {"package-lock.json"}
+DIFF_EXCLUDED_NAMES = {"package-lock.json", "pnpm-lock.yaml"}
 DIFF_EXCLUDED_PATHS = {"README.md", "docs/README.md"}
 DIFF_EXCLUDED_PREFIXES = ("docs/blogs/",)
 
