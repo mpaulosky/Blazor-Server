@@ -10,9 +10,10 @@ itself is on the README roadmap.
 
 ## Coding standards
 
-`.sandcastle/CODING_STANDARDS.md` wins when any other instruction file disagrees with it.
+`docs/CODING_STANDARDS.md` wins when any rule file disagrees with it. Path-scoped rules in `.claude/rules/` add
+guidance for Blazor, .NET, Markdown and blog posts, and load when you work on matching files.
 
-@.sandcastle/CODING_STANDARDS.md
+@docs/CODING_STANDARDS.md
 
 ## Project layout
 
@@ -44,15 +45,6 @@ then a Release build and every test project. Run it before pushing. Enable the h
 - Never commit or push to `main`; the pre-push hook rejects it.
 - Branches: `feature/{issue}-{slug}`, `hotfix/{issue}-{slug}`, or `chore/{slug}` (lowercase kebab-case).
 - Commits: `<type>(<scope>): <Summary>` in the imperative, 72 characters or fewer, capitalized, no trailing period.
-  Full rules in `.github/instructions/git-commit-instructions.md`.
+  Full rules in `.claude/rules/git-commit.md`.
 - Every merged PR triggers `release.yml`, which tags a release and opens a release-blog PR. A `[skip-release]` marker
   in the PR title opts out; the automated release-blog PRs use it so they don't release themselves.
-
-## File-specific guidance
-
-Read the matching file before editing these:
-
-- Razor components: `.github/instructions/blazor.instructions.md`
-- Markdown: `.github/instructions/markdown.instructions.md` (lint config: `.markdownlint-cli2.jsonc`)
-- Blog posts under `docs/blogs/`: `.github/instructions/blog.instructions.md`
-- Any .NET project file: `.github/instructions/dotnet-project.instructions.md`

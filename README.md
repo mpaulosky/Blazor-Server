@@ -110,7 +110,9 @@ tests/Architecture.Tests/    -- Architecture rules (keeps Domain free of forbidd
 tests/Domain.Tests.Unit/     -- Shared Kernel unit tests
 docs/adr/                    -- Architecture decision records
 CONTEXT.md                   -- Domain language
-.sandcastle/                 -- Sandcastle agent setup and coding standards
+.sandcastle/                 -- Sandcastle agent setup
+docs/CODING_STANDARDS.md     -- Coding standards
+CLAUDE.md, .claude/          -- Claude Code instructions, rules, skills and settings
 .github/workflows/           -- CI, code analysis, linting and release workflows
 .github/scripts/             -- Release blog post generator, backfill and pytest tests
 ```

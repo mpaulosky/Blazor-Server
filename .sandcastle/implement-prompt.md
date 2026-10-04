@@ -34,7 +34,7 @@ Here are the last 10 commits:
 
 Explore the repo and fill your context window with relevant information that will allow you to complete the task.
 
-Read `CONTEXT.md` for the domain language, `docs/adr/` for recorded decisions, and `.sandcastle/CODING_STANDARDS.md` for the rules the code must follow.
+Read `CONTEXT.md` for the domain language, `docs/adr/` for recorded decisions, and `docs/CODING_STANDARDS.md` for the rules the code must follow.
 
 Pay extra attention to test files that touch the relevant parts of the code.
 

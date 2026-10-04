@@ -1,11 +1,13 @@
 ---
-description: 'Blazor component and application patterns'
-applyTo: '**/*.razor, **/*.razor.cs, **/*.razor.css'
+paths:
+  - "**/*.razor"
+  - "**/*.razor.cs"
+  - "**/*.razor.css"
 ---
 
-# Blazor Instructions
+# Blazor Rules
 
-This is a server-rendered Blazor Web App on .NET 10 and C# 14. `.sandcastle/CODING_STANDARDS.md` is the full standard. If this file and that one disagree, `CODING_STANDARDS.md` wins.
+This is a server-rendered Blazor Web App on .NET 10 and C# 14. `docs/CODING_STANDARDS.md` is the full standard. If this file and that one disagree, `CODING_STANDARDS.md` wins.
 
 ## Structure
 
@@ -56,4 +58,4 @@ This is a server-rendered Blazor Web App on .NET 10 and C# 14. `.sandcastle/CODI
 ## Testing
 
 - Test components with bUnit, handlers, validators, and services with xUnit v3, and use NSubstitute for test doubles. Assert with FluentAssertions.
-- Follow the conventions in `.sandcastle/CODING_STANDARDS.md`: `MethodUnderTest_Scenario_ExpectedResult` names and `// Arrange`, `// Act`, `// Assert` comments.
+- Follow the conventions in `docs/CODING_STANDARDS.md`: `MethodUnderTest_Scenario_ExpectedResult` names and `// Arrange`, `// Act`, `// Assert` comments.

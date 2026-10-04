@@ -1,4 +1,4 @@
-# Git Commit Instructions
+# Git Commit Rules
 
 This document defines the required conventions and best practices for writing Git commit messages.
 
