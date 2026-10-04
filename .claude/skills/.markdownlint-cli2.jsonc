@@ -1,0 +1,5 @@
+// Merged with the root config. The dotnet-* skills are vendored from upstream
+// and kept as published, so they aren't linted; the repo's own skills are.
+{
+  "ignores": ["dotnet-*/**"]
+}

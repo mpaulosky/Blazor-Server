@@ -27,7 +27,7 @@ so Sandcastle builds its own upgrade.
 ## Labels
 
 | Label | Applied by | Meaning | Cleared by |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `Sandcastle` | Human, or the host on the child issues intake creates when it splits an issue | The issue is in the queue. | Human, or intake when it splits the issue into children |
 | `sandcastle:ready` | Host (intake) | The issue passed the Definition of Ready and isn't re-checked. | Human (forces a re-check), or the host when it applies an issue-level `sandcastle:needs-human` |
 | `sandcastle:needs-info` | Host (intake) | The issue's text is the problem: answer the questions and edit the issue. | Human, which re-queues the issue |
@@ -201,7 +201,7 @@ reviewer failure doesn't stop it: the pipeline carries on to the next step, and 
 gate attempts, and a checkpoint that runs out of attempts stops the pipeline without publishing (see **Checkpoints**).
 
 | Role | Prompt | Does | On failure |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | architect | `.sandcastle/roles/architect.md` | Writes the gitignored design note `.sandcastle/work/{n}/design.md` (types, signatures, where each change goes, risks). Writes no production code. Commits an ADR only for a decision that is hard to reverse, surprising, and a real trade-off. The host posts the note as an issue comment after the run. | Issue stops |
 | tester | `.sandcastle/roles/tester.md` | Turns each acceptance criterion into failing tests, adds the smallest compiling stubs (`throw new NotImplementedException()`), and commits red. | Issue stops |
 | backend | `.sandcastle/roles/backend.md` | Makes the tests green, with its own inner red→green loop. | Issue stops |
@@ -256,7 +256,7 @@ Every role's settings live in one `ROLE_AGENTS` map in the host code, so tuning 
 the reviewer or CI checks the output anyway.
 
 | Role | Model | Effort | maxIterations | Timeout (min) |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | intake | Sonnet | medium | 1 (structured) | 15 |
 | planner | Opus | high | 1 (structured) | 15 |
 | critique | Sonnet | high | 1 (structured) | 15 |
@@ -380,7 +380,7 @@ Filed with native "blocked by" links, so the blocker gate builds them in order a
 two `.github/workflows/**` changes the PAT can't push (see **Workflow files**). A human builds the trigger once its blockers have landed.
 
 | Issue | Blocked by |
-|---|---|
+| --- | --- |
 | [Split main.mts into modules and configure every role from one ROLE_AGENTS map](https://github.com/mpaulosky/Blazor-Server/issues/66) | [#65](https://github.com/mpaulosky/Blazor-Server/pull/65) (this spec) |
 | [One gate script shared by the pre-push hook, the sandbox and people](https://github.com/mpaulosky/Blazor-Server/issues/67) | #66 |
 | [The host names branches and skips issues that already have a PR](https://github.com/mpaulosky/Blazor-Server/issues/68) | #66 |
