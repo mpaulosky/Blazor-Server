@@ -3,7 +3,9 @@
 This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
-|------|-------|------|
+| ---- | ----- | ---- |
+| 2026-10-04 | [chore: Standardize on the repo-ci-baseline Template](2026-10-04-pr-127-chore-standardize-on-the-repo-ci-baseline-template.md) | release,automation |
+| 2026-10-04 | [chore(deps-dev): bump @types/node from 26.6.2 to 26.6.3 in the all-npm group](2026-10-04-pr-126-chore-deps-dev-bump-types-node-from-26-6-2-to-26-6-3-in-the-all-npm-group.md) | release,automation |
 | 2026-10-04 | [docs(README): Run each test project instead of dotnet test --solution](2026-10-04-pr-123-docs-readme-run-each-test-project-instead-of-dotnet-test-solution.md) | release,automation |
 | 2026-10-04 | [ci(automerge): Stop waiting on Copilot after three review rounds](2026-10-04-pr-119-ci-automerge-stop-waiting-on-copilot-after-three-review-rounds.md) | release,automation |
 | 2026-10-04 | [chore(claude): Make Claude Code the repo's agent setup](2026-10-04-pr-118-chore-claude-make-claude-code-the-repo-s-agent-setup.md) | release,automation |
