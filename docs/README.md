@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.62](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.62) | 2026-10-04 | docs(README): Run each test project instead of dotnet test --solution | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-123-docs-readme-run-each-test-project-instead-of-dotnet-test-solution.md) |
 | [v0.0.61](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.61) | 2026-10-04 | ci(automerge): Stop waiting on Copilot after three review rounds | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-119-ci-automerge-stop-waiting-on-copilot-after-three-review-rounds.md) |
 | [v0.0.60](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.60) | 2026-10-04 | chore(claude): Make Claude Code the repo's agent setup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-118-chore-claude-make-claude-code-the-repo-s-agent-setup.md) |
 | [v0.0.59](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.59) | 2026-09-29 | build: write a single-document pnpm lockfile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-115-build-write-a-single-document-pnpm-lockfile.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.55](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.55) | 2026-09-28 | ci: Run the test suite on Dependabot PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-106-ci-run-the-test-suite-on-dependabot-prs.md) |
 | [v0.0.54](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.54) | 2026-09-28 | chore(deps): Fix Dependabot config | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-105-chore-deps-fix-dependabot-config.md) |
 | [v0.0.53](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.53) | 2026-09-28 | fix(scripts): Keep squad cleanup going when a local delete is refused | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-103-fix-scripts-keep-squad-cleanup-going-when-a-local-delete-is-refused.md) |
-| [v0.0.52](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.52) | 2026-09-28 | fix(scripts): Update squad branch cleanup to the fail-safe version | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-101-fix-scripts-update-squad-branch-cleanup-to-the-fail-safe-version.md) |
 
 <!-- RELEASES_END -->
 
@@ -71,13 +71,16 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
    - Node.js and pnpm (`corepack enable`), used by the git hooks and the lint tools. The repo refuses `npm install`.
    - [yamllint](https://yamllint.readthedocs.io/), which the pre-push hook runs on changed YAML files.
 
-3. Install the pnpm packages, then build and test:
+3. Install the pnpm packages, then build and test each test project:
 
    ```bash
    pnpm install
    dotnet build Blazor-Server.slnx
-   dotnet test --solution Blazor-Server.slnx
+   (for project in tests/*/*.csproj; do dotnet test --project "$project" || exit 1; done)
    ```
+
+   Run the test projects one at a time, as `scripts/gate.sh` and CI do. Under Microsoft Testing Platform,
+   `dotnet test --solution` can report zero tests even when the projects pass.
 
 4. Optionally enable the git hooks in `.github/hooks` (markdownlint on commit, and `scripts/gate.sh` on push):
 
