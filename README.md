@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 |---------|------|-------|-----------|
+| [v0.0.60](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.60) | 2026-10-04 | chore(claude): Make Claude Code the repo's agent setup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-118-chore-claude-make-claude-code-the-repo-s-agent-setup.md) |
 | [v0.0.59](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.59) | 2026-09-29 | build: write a single-document pnpm lockfile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-115-build-write-a-single-document-pnpm-lockfile.md) |
 | [v0.0.58](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.58) | 2026-09-29 | fix(release): Start release posts with an H1 title | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-112-fix-release-start-release-posts-with-an-h1-title.md) |
 | [v0.0.57](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.57) | 2026-09-29 | build: switch the repo tooling from npm to pnpm | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-113-build-switch-the-repo-tooling-from-npm-to-pnpm.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.53](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.53) | 2026-09-28 | fix(scripts): Keep squad cleanup going when a local delete is refused | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-103-fix-scripts-keep-squad-cleanup-going-when-a-local-delete-is-refused.md) |
 | [v0.0.52](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.52) | 2026-09-28 | fix(scripts): Update squad branch cleanup to the fail-safe version | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-101-fix-scripts-update-squad-branch-cleanup-to-the-fail-safe-version.md) |
 | [v0.0.51](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.51) | 2026-09-28 | ci: Add nightly squad branch and worktree cleanup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-99-ci-add-nightly-squad-branch-and-worktree-cleanup.md) |
-| [v0.0.50](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.50) | 2026-09-26 | ci(sandcastle): Keep pr-automerge.yml from merging PRs handed back to a human | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-26-pr-94-ci-sandcastle-keep-pr-automerge-yml-from-merging-prs-handed-back-to-a-human.md) |
 
 <!-- RELEASES_END -->
 
