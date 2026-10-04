@@ -57,7 +57,7 @@ Comments on the issue from the repository owner:
    - Remove helpful abstractions that improve code organization
    - Make the code harder to debug or extend
 
-5. **Apply project standards**: Follow the coding standards defined in @.sandcastle/CODING_STANDARDS.md
+5. **Apply project standards**: Follow the coding standards defined in @docs/CODING_STANDARDS.md
 
 6. **Preserve functionality**: Never change what the code does - only how it does it. All original features, outputs, and behaviors must remain intact.
 

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet format:*)",
+      "Bash(scripts/gate.sh)",
+      "Bash(scripts/sync-copilot-review.sh:*)",
+      "Bash(pnpm run check:sandcastle)",
+      "Bash(pnpm exec markdownlint-cli2:*)",
+      "Bash(yamllint:*)",
+      "Bash(actionlint:*)",
+      "Bash(shellcheck:*)"
+    ],
+    "deny": [
+      "Read(./.sandcastle/.env)"
+    ]
+  }
+}

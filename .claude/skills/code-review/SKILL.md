@@ -14,12 +14,12 @@ they don't say. Every finding cites the file and rule it rests on.
 
 Read the sections that govern the changed code before commenting on it:
 
-- `.sandcastle/CODING_STANDARDS.md`: style, .NET and Blazor, Auth0, error handling with `Result`, FluentValidation,
-  Vertical Slice Architecture, Central Package Management, and testing. It wins when another instruction file
+- `docs/CODING_STANDARDS.md`: style, .NET and Blazor, Auth0, error handling with `Result`, FluentValidation,
+  Vertical Slice Architecture, Central Package Management, and testing. It wins when another rule file
   disagrees.
 - `CONTEXT.md`: the domain language (Template, Generated App, Theme, Palette, Visitor, User, Admin, Shared Kernel).
 - `docs/adr/`: recorded decisions. A change that contradicts an ADR needs a new ADR that supersedes it.
-- `.github/instructions/git-commit-instructions.md`: commit message format.
+- `.claude/rules/`: the path-scoped rules (Blazor, .NET, Markdown, blog posts) and the commit message format.
 
 ## What to check
 
