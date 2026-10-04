@@ -49,9 +49,15 @@ function readyPr(overrides = {}) {
   };
 }
 
-// Copilot reviews of each given commit, oldest first.
-function copilotReviewsOf(...oids) {
-  return { nodes: oids.map((oid) => ({ commit: { oid } })) };
+// Copilot reviews of each given commit, oldest first. A { oid, merge: true }
+// entry is a merge commit, such as a merge from main.
+function copilotReviewsOf(...commits) {
+  return {
+    nodes: commits.map((commit) => {
+      const { oid, merge } = typeof commit === "string" ? { oid: commit, merge: false } : commit;
+      return { commit: { oid, parents: { totalCount: merge ? 2 : 1 } } };
+    })
+  };
 }
 
 // Review threads, each opened by the given login, all unresolved unless marked.
@@ -82,6 +88,7 @@ async function evaluate(pr, events = []) {
   const merges = [];
   const logs = [];
   const eventRequests = [];
+  const queries = [];
   let graphqlRequests = 0;
   const pullRequests = Array.isArray(pr) ? [...pr] : [pr];
   const eventSets = Array.isArray(events[0]) ? [...events] : [events];
@@ -99,9 +106,10 @@ async function evaluate(pr, events = []) {
   };
   const github = {
     rest,
-    graphql: async () => ({
-      repository: { pullRequest: pullRequests[Math.min(graphqlRequests++, pullRequests.length - 1)] }
-    }),
+    graphql: async (query) => {
+      queries.push(query);
+      return { repository: { pullRequest: pullRequests[Math.min(graphqlRequests++, pullRequests.length - 1)] } };
+    },
     paginate: async (method, params) => {
       if (method === rest.issues.listEvents) {
         eventRequests.push(params);
@@ -121,7 +129,7 @@ async function evaluate(pr, events = []) {
 
   process.env.HAS_RELEASE_PR_PAT = "true";
   await run(github, context, core);
-  return { merges, logs, eventRequests };
+  return { merges, logs, eventRequests, queries };
 }
 
 test("merges a ready PR at the head it checked", async () => {
@@ -282,4 +290,33 @@ test("still needs green checks at the review cap", async () => {
   const { merges } = await evaluate(pr);
 
   assert.deepEqual(merges, []);
+});
+
+test("doesn't count Copilot reviews of merge commits toward the cap", async () => {
+  const reviews = copilotReviewsOf("one", { oid: "merge-main-1", merge: true }, { oid: "merge-main-2", merge: true });
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: reviews }));
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("no Copilot review of " + HEAD)), logs.join("\n"));
+});
+
+test("accepts a Copilot review of a merge commit at the head below the cap", async () => {
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf({ oid: HEAD, merge: true }) }));
+
+  assert.equal(merges.length, 1);
+});
+
+test("reaches the cap on three non-merge commits among merges from main", async () => {
+  const reviews = copilotReviewsOf("one", { oid: "merge-main", merge: true }, "two", "three");
+  const { merges } = await evaluate(readyPr({ copilotReviews: reviews }));
+
+  assert.equal(merges.length, 1);
+});
+
+test("keeps the cap reached through many re-reviews of one commit", async () => {
+  const reviews = copilotReviewsOf("one", "two", "three", ...Array(30).fill("three"));
+  const { merges, queries } = await evaluate(readyPr({ copilotReviews: reviews }));
+
+  assert.equal(merges.length, 1);
+  assert.ok(queries.every((query) => query.includes("reviews(last: 100,")), "Copilot reviews are fetched 100 at a time");
 });

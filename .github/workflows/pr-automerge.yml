@@ -10,9 +10,11 @@ name: PR Auto-Merge
 #
 # Copilot re-reviews every push and can find something new each time, so a
 # PR could chase its reviews forever. Once Copilot has reviewed
-# COPILOT_REVIEW_CAP distinct commits, the merge stops waiting for its review
-# of the head and stops counting its unresolved threads. Threads anyone else
-# opens still hold the merge.
+# COPILOT_REVIEW_CAP distinct non-merge commits, the merge stops waiting for
+# its review of the head and stops counting its unresolved threads. Merges
+# from main don't count: the ruleset keeps branches up to date, so they would
+# use up the cap without a single fix. Threads anyone else opens still hold
+# the merge. docs/adr/0003-copilot-review-cap.md records the decision.
 #
 # A PR Sandcastle handed back with sandcastle:needs-human never merges while it
 # carries the label, or when someone other than the repository owner last
@@ -92,10 +94,15 @@ jobs:
                        # Filtering by author keeps other reviews (each thread
                        # reply counts as one) from pushing Copilot's off the
                        # page. The filter takes the "[bot]" login; the nodes
-                       # themselves report it without the suffix.
-                       copilotReviews: reviews(last: 20, author: "copilot-pull-request-reviewer[bot]") {
+                       # themselves report it without the suffix. 100 is the
+                       # page limit; the cap would only be undercounted after
+                       # about 98 re-reviews of the same two commits.
+                       copilotReviews: reviews(last: 100, author: "copilot-pull-request-reviewer[bot]") {
                          nodes {
-                           commit { oid }
+                           commit {
+                             oid
+                             parents { totalCount }
+                           }
                          }
                        }
                        # The first comment's author is who opened the thread.
@@ -194,11 +201,13 @@ jobs:
 
               // Copilot re-reviews every push, including merge-from-main
               // commits, so its review has to cover the exact head, until it
-              // has reviewed COPILOT_REVIEW_CAP different commits.
-              const reviewedCommits = new Set(
-                pr.copilotReviews.nodes.map((review) => review.commit?.oid).filter(Boolean)
+              // has reviewed COPILOT_REVIEW_CAP different non-merge commits.
+              const reviewed = pr.copilotReviews.nodes.map((review) => review.commit).filter(Boolean);
+              const reviewedCommits = new Set(reviewed.map((commit) => commit.oid));
+              const reviewRounds = new Set(
+                reviewed.filter((commit) => commit.parents?.totalCount === 1).map((commit) => commit.oid)
               );
-              const capReached = reviewedCommits.size >= COPILOT_REVIEW_CAP;
+              const capReached = reviewRounds.size >= COPILOT_REVIEW_CAP;
               if (!capReached && !reviewedCommits.has(pr.headRefOid)) {
                 core.info(`Waiting on PR #${pullNumber}: no Copilot review of ${pr.headRefOid} yet.`);
                 return;
