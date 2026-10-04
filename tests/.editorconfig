@@ -1,0 +1,42 @@
+# Analyzer suppressions for the test projects only. The root .editorconfig is
+# Owned by the repo-ci-baseline Template and overwritten on every Apply, so
+# the test suite's own rules live here, beside the code they cover.
+
+#############################
+# Test projects
+#############################
+# AnalysisMode=all opts into rules aimed at designing public library APIs (CA1034, CA1002,
+# CA1054, CA1716, CA1812) and at production-path correctness (CA2000, CA2012, CA1849, CA1861)
+# that don't apply well to internal test doubles and mocking-framework usage:
+#   CA1034 - nested test-double types need to be public for dynamic dispatch/NSubstitute proxies
+#             to see them, and nesting keeps each test double next to the test that uses it.
+#   CA1002 - test-double constructor parameters (e.g. List<string> call-order trackers) are never
+#             a public API surface.
+#   CA1054 - example URLs passed as string literals to test methods don't need a Uri overload.
+#   CA1716 - namespaces mirror the production folder layout (e.g. "Shared"); Razor-inferred
+#             namespaces in production code hit the same pattern without being flagged.
+#   CA1812 - these "uninstantiated" internal classes are resolved through reflection by the DI
+#             container or NSubstitute, which the analyzer can't see.
+#   CA2000 - HttpClient/HttpMessageHandler test doubles are short-lived and die with the test
+#             process; there's no accumulating leak to guard against.
+#   CA2012 - false positive when NSubstitute's Returns(...) is configured with a pre-built
+#             ValueTask<T> for a mocked async member.
+#   CA1849 - test setup that already shells out to synchronous git/process calls gains nothing
+#             from making one File.WriteAllText call async.
+#   CA1861 - perf micro-optimization for arrays passed a handful of times per test run.
+# CA1707 is suppressed because MethodUnderTest_Scenario_ExpectedResult is this suite's established
+# test-naming convention.
+# CA2007 - ConfigureAwait(false) exists to avoid deadlocking a captured sync context; test runners
+#           don't have one, so it's noise here rather than a correctness safeguard.
+[*.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1034.severity = none
+dotnet_diagnostic.CA1002.severity = none
+dotnet_diagnostic.CA1054.severity = none
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA2000.severity = none
+dotnet_diagnostic.CA2012.severity = none
+dotnet_diagnostic.CA1849.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA2007.severity = none
