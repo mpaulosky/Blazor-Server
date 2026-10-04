@@ -41,7 +41,7 @@ the generated posts in `docs/blogs/`.
 **Workflows and hooks.** Steps that publish anything (open a PR, push, tag, release) run only for `main`: a
 `github.ref == 'refs/heads/main'` check, or a merged-into-`main` condition as in `release.yml`. `workflow_dispatch`
 runs on any branch, and pull request runs check out a detached merge commit. Branch names in hooks, prompts and
-docs follow `feature/{issue}-{slug}`, `hotfix/{issue}-{slug}` or `chore/{slug}`.
+docs follow `feature/{issue}-{slug}`, `fix/{issue}-{slug}`, `hotfix/{issue}-{slug}` or `chore/{slug}`.
 
 **Sandcastle prompts.** In `.sandcastle/*-prompt.md`, an exclamation mark followed by a backtick runs the text up to
 the next backtick as a shell command before the agent sees the prompt. Flag that sequence anywhere it isn't an

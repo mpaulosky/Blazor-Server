@@ -147,7 +147,7 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - In integration tests, replace external services (Auth0, HTTP APIs) through `WebApplicationFactory.WithWebHostBuilder` and `ConfigureTestServices`.
   Use a test authentication handler instead of calling Auth0.
 - Test both paths of every `Result`-returning handler: the success value and each expected error code.
-- CI reports coverage and warns below 80%, but doesn't fail the build. Treat untested new behavior as a review finding, rather than the coverage percentage.
+- CI fails the build when line coverage drops below the threshold in `.github/ci/coverage-threshold` (80%). Still treat untested new behavior as a review finding, whatever the percentage.
 
 ### Example
 
