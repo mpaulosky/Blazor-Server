@@ -48,7 +48,7 @@ content/src/UI/Styles/palette.css
 # Logs & Artifacts
 logs/
 *.log
-*.txt
+build-log.txt
 .mongo/
 mongodb-data/
 
@@ -63,16 +63,8 @@ dist/
 .next/
 out/
 
-# OS-Specific
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-
 # Build Outputs
 publish/
-bin/
-obj/
 artifacts/
 
 # Test Runner
@@ -80,7 +72,6 @@ artifacts/
 OpenCover/
 
 # Rider
-.idea/
 *.sln.iml
 *.sln.DotSettings.user
 
@@ -98,3 +89,6 @@ tmp/
 
 # Pre-push hook test results
 .tmp-test-results/
+
+# Claude Code worktrees
+.claude/worktrees/
