@@ -263,6 +263,14 @@ commit_file .github/copilot-instructions.md '# Stale'
 run_gate
 expect "a Copilot review file that drifted from the skill stops the gate" failed "$REVIEW_LINT" "has drifted"
 
+git -C "$REPO" switch -q feature/10-review-synced
+git -C "$REPO" update-ref refs/remotes/origin/main feature/10-review-synced
+new_branch feature/12-review-deleted
+git -C "$REPO" rm -q .github/copilot-instructions.md
+git -C "$REPO" commit -q -m "remove .github/copilot-instructions.md"
+run_gate
+expect "deleting the Copilot review file stops the gate" failed "" "has drifted"
+
 git -C "$REPO" update-ref -d refs/remotes/origin/main
 run_gate
 expect "a missing origin/main fails the gate" failed "" "git fetch origin"

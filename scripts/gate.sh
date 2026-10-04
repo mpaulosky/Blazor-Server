@@ -41,8 +41,10 @@ changed_files() {
 mapfile -d '' -t CHANGED_YAML < <(changed_files '*.yml' '*.yaml')
 mapfile -d '' -t CHANGED_MD < <(changed_files '*.md')
 # Either side of the Copilot review sync, or the script that does it.
+# Deletions count here: deleting the generated file is drift too.
 mapfile -d '' -t CHANGED_REVIEW < <(
-  changed_files .claude/skills/code-review/SKILL.md .github/copilot-instructions.md scripts/sync-copilot-review.sh
+  git diff -z --name-only --no-renames "$BASE" HEAD -- \
+    .claude/skills/code-review/SKILL.md .github/copilot-instructions.md scripts/sync-copilot-review.sh
 )
 mapfile -d '' -t CHANGED_WORKFLOWS < <(
   changed_files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/dependabot.yml'

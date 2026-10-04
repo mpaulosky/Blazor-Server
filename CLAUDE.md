@@ -32,14 +32,17 @@ guidance for Blazor, .NET, Markdown and blog posts, and load when you work on ma
 The repo uses pnpm (pinned by `packageManager` in `package.json`); npm is refused. Run `pnpm install` first.
 
 ```bash
-dotnet build Blazor-Server.slnx
-dotnet test --solution Blazor-Server.slnx
-pnpm run check:sandcastle  # type-check and test .sandcastle/
-scripts/gate.sh            # everything the pre-push hook runs; needs a fresh `git fetch origin main`
+scripts/gate.sh                                       # the full check; needs a fresh `git fetch origin main`
+dotnet build Blazor-Server.slnx                       # quick build while iterating
+dotnet test --project tests/<Project>/<Project>.csproj  # one test project while iterating
+pnpm run check:sandcastle                             # type-check and test .sandcastle/
 ```
 
-`scripts/gate.sh` is the definition of "ready to push": lint of changed YAML, Markdown, workflows and shell scripts,
-then a Release build and every test project. Run it before pushing. Enable the hooks once per clone with
+`scripts/gate.sh` is the definition of "ready to push": lint of the changed YAML, Markdown, workflows and shell
+scripts, the Copilot review sync check, the Sandcastle check when its files changed, then a Release build and each test
+project under `tests/`, run one by one. Don't use `dotnet test --solution` as the check: under Microsoft Testing
+Platform it can report zero tests while the project runs pass. The pre-push hook runs the gate after its own branch
+checks (no pushes to `main`, `preview` or `dev`, and the naming rules below). Enable the hooks once per clone with
 `git config core.hooksPath .github/hooks`.
 
 ## Git workflow
