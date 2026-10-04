@@ -24,9 +24,13 @@ check_branch_name() {
     exit 1
   fi
 
-  if ! [[ "$branch" =~ ^(feature|hotfix)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]] && ! [[ "$branch" =~ ^chore/[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  # The branch standard shared by every repo: feature/, fix/ and hotfix/ name
+  # their issue; chore/ is for work without one, so its slug starts with a
+  # letter and can't pass for an issue number. Slugs are lowercase letters and
+  # digits in words joined by '-'.
+  if ! [[ "$branch" =~ ^(feature|fix|hotfix)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]] && ! [[ "$branch" =~ ^chore/[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
     echo -e "${RED}❌ Branch name '${branch}' does not match naming convention.${RESET}"
-    echo -e "   Expected: ${YELLOW}feature/{issue-number}-{kebab-slug}${RESET}, ${YELLOW}hotfix/{issue-number}-{kebab-slug}${RESET}, or ${YELLOW}chore/{kebab-slug}${RESET}"
+    echo -e "   Expected: ${YELLOW}feature/{issue}-{slug}${RESET}, ${YELLOW}fix/{issue}-{slug}${RESET}, ${YELLOW}hotfix/{issue}-{slug}${RESET}, or ${YELLOW}chore/{slug}${RESET}"
     exit 1
   fi
 }
@@ -37,7 +41,6 @@ if [[ -n "$PUSH_REFS" ]]; then
   # Classify by remote ref: `git push origin v1.0.0:main` has a tag as its
   # local ref but still updates main.
   UPDATES_BRANCH=false
-  PUSHED_BRANCH_SHAS=()
   while read -r _local_ref local_sha remote_ref _remote_sha; do
     [[ "$remote_ref" == refs/heads/* ]] || continue
     branch="${remote_ref#refs/heads/}"
@@ -51,8 +54,17 @@ if [[ -n "$PUSH_REFS" ]]; then
     fi
 
     check_branch_name "$branch"
+
+    # The gate runs against the working tree, so it only vouches for the
+    # commit that is checked out. Refuse a push of anything else (another
+    # branch, or a tag pushed to a branch) rather than gate the wrong code.
+    pushed_commit="$(git rev-parse --verify --quiet "${local_sha}^{commit}" || echo "$local_sha")"
+    if [[ "$pushed_commit" != "$(git rev-parse HEAD)" ]]; then
+      echo -e "${RED}❌ '${branch}' is not the checked-out commit, so the gate can't test it.${RESET}"
+      echo -e "   Check it out first: ${YELLOW}git switch ${branch}${RESET}, then push again."
+      exit 1
+    fi
     UPDATES_BRANCH=true
-    PUSHED_BRANCH_SHAS+=("$local_sha")
   done <<< "$PUSH_REFS"
 
   if [[ "$UPDATES_BRANCH" == false ]]; then
@@ -64,29 +76,27 @@ else
   check_branch_name "$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
 fi
 
-GATED_HEAD="$(git config --local --get sandcastle.gatedHead 2>/dev/null || true)"
-if [[ -n "$GATED_HEAD" ]]; then
-  if [[ -n "$PUSH_REFS" ]]; then
-    ALL_PUSHED_SHAS_GATED=true
-    for local_sha in "${PUSHED_BRANCH_SHAS[@]}"; do
-      if [[ "$local_sha" != "$GATED_HEAD" ]]; then
-        ALL_PUSHED_SHAS_GATED=false
-        break
-      fi
-    done
-
-    if [[ "$ALL_PUSHED_SHAS_GATED" == true ]]; then
-      echo -e "${GREEN}✅ Sandcastle already gated all pushed branch HEADs — skipping the gate.${RESET}"
-      exit 0
-    fi
-  elif [[ "$GATED_HEAD" == "$(git rev-parse HEAD)" ]]; then
-    echo -e "${GREEN}✅ Sandcastle already gated HEAD — skipping the gate.${RESET}"
-    exit 0
-  fi
+# Every pushed branch is the checked-out commit (checked above). The gate
+# tests the working tree, so it must match that commit exactly: uncommitted
+# or untracked files (an untracked .cs file still compiles) could pass the
+# gate for code that isn't in the push. Ignored files don't count.
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo -e "${RED}❌ The working tree has uncommitted or untracked changes, so the gate can't vouch for the pushed commit.${RESET}"
+  echo -e "   Commit them, or set them aside with ${YELLOW}git stash --include-untracked${RESET}, then push again."
+  git status --short | head -n 20
+  exit 1
 fi
 
-# The gate runs against the working tree. Sandcastle pushes from the issue
-# worktree, which has the pushed branch checked out.
+# Sandcastle runs this gate in its sandbox and records the commit it passed as
+# sandcastle.gatedHead before pushing it. Every pushed branch is HEAD and the
+# tree is clean (both checked above), so a HEAD Sandcastle already gated needs
+# no second run. Unset everywhere but a Sandcastle repo.
+GATED_HEAD="$(git config --local --get sandcastle.gatedHead 2>/dev/null || true)"
+if [[ -n "$GATED_HEAD" && "$GATED_HEAD" == "$(git rev-parse HEAD)" ]]; then
+  echo -e "${GREEN}✅ Sandcastle already gated ${GATED_HEAD:0:12} — skipping the gate.${RESET}"
+  exit 0
+fi
+
 "$ROOT/scripts/gate.sh"
 
 echo -e "\n${GREEN}━━━ All gates passed — pushing ✅ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"

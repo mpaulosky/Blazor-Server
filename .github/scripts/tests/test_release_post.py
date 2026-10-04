@@ -1,7 +1,10 @@
 import io
 import json
+import re
 import subprocess
+import time
 import urllib.error
+from pathlib import Path
 
 import pytest
 
@@ -67,6 +70,8 @@ def make_repo(tmp_path):
     (tmp_path / "docs" / "blogs").mkdir(parents=True)
     readme = "# Demo\n\n## About\n\nText.\n\n## Releases\n\n<!-- RELEASES_START -->\nold\n<!-- RELEASES_END -->\n\n## License\n"
     (tmp_path / "README.md").write_text(readme, encoding="utf-8")
+    # A repo that publishes its README as the Pages landing page.
+    (tmp_path / "docs" / "README.md").write_text(readme, encoding="utf-8")
     (tmp_path / "docs" / "index.html").write_text(
         "<html>\n  <body>\n"
         "    <!-- RELEASES_HTML_START -->\n    old\n    <!-- RELEASES_HTML_END -->\n"
@@ -99,15 +104,326 @@ def test_slugify_matches_the_workflow_slug():
     assert rp.slugify("!!!") == "pr-update"
 
 
+def test_post_title_is_a_valid_yaml_double_quoted_scalar():
+    post = rp.render_post({"number": 7}, 'Fix "quotes" and a trailing \\', "v1.2.3", "2026-09-26", [], [], None, "m")
+    assert 'post_title: "Fix \\"quotes\\" and a trailing \\\\"\n' in post
+
+
+def heading_levels(post):
+    """Levels of every line in a rendered post that looks like an ATX heading.
+
+    This deliberately over-counts rather than re-implementing the parser under
+    test: it strips all quote and list markers and leading indentation from
+    every line, and skips only fences and HTML comments that open at column 0,
+    which are unambiguously top-level (an indented opener may belong to a list
+    item and end with it). So it can never miss a heading (the invariant tests
+    need exactly that), but a "#" line in indented code or in a fence inside a
+    container counts too, so the invariant tests don't use those.
+    nest_headings' exact behaviour inside containers is pinned by its own tests.
+    """
+    body = post.split("---\n", 2)[2]
+    fence = None
+    comment = False
+    levels = []
+    for line in body.splitlines():
+        if comment:
+            comment = "-->" not in line
+            continue
+        marker = re.match(r" {0,3}(`{3,}|~{3,})(.*)", line)
+        if fence is not None:
+            if marker and marker.group(1)[0] == fence[0] and len(marker.group(1)) >= len(fence) and not marker.group(2).strip():
+                fence = None
+            continue
+        if marker and marker.start(1) == 0:
+            fence = marker.group(1)
+            continue
+        if line.startswith("<!--"):
+            comment = "-->" not in line[4:]
+            continue
+        text = re.sub(r"^(?:\s*(?:>|[-+*](?=\s)|\d+[.)](?=\s)))*\s*", "", line)
+        if re.match(r"#{1,6}(\s|$)", text):
+            levels.append(len(text) - len(text.lstrip("#")))
+    return levels
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("> # A\n- # B\n1. # C\n> - > ## D", [1, 1, 1, 1, 2]),
+        ("- # A\n  #### B\n    ### C", [1, 1, 4, 3]),  # continuation lines, at any depth
+        ("- > ```\n  > # counted\n  > ```", [1, 1]),  # container fences over-count; never miss
+        ("```\n# not a heading\n```\n<!--\n# nor this\n-->\n## Real", [1, 2]),
+        # An indented opener may belong to a list item and end with it, so it isn't tracked.
+        ("- item\n  ```\n# Root", [1, 1]),
+        ("- item\n  <!--\n# Root", [1, 1]),
+    ],
+)
+def test_heading_levels_counts_every_heading_looking_line(body, expected):
+    assert heading_levels(f"---\nx: 1\n---\n# T\n{body}") == expected
+
+
+def assert_one_h1_and_no_skipped_levels(post):
+    levels = heading_levels(post)
+    assert levels[0] == 1
+    assert levels.count(1) == 1
+    assert all(b - a <= 1 for a, b in zip(levels, levels[1:]))
+
+
 def test_post_starts_with_one_h1_and_never_skips_a_level():
     commits = [{"sha": "abc1234def", "commit": {"message": "Add a thing"}}]
     files = [{"filename": "src/A.cs", "additions": 1, "deletions": 0}]
     post = rp.render_post({"number": 7, "body": "Why"}, "Add a thing", "v1.2.3", "2026-09-26", commits, files, "Short.", "m")
-    body = post.split("---\n", 2)[2]
-    levels = [len(line) - len(line.lstrip("#")) for line in body.splitlines() if line.startswith("#")]
-    assert levels[0] == 1
-    assert levels.count(1) == 1
-    assert all(b - a <= 1 for a, b in zip(levels, levels[1:]))
+    assert_one_h1_and_no_skipped_levels(post)
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "# Context\n\nWhy.\n\n## Details\n\nHow.",
+        "#### Details\n\nHow.",
+        "### Deep first\n\n# Then shallow\n\n###### Then very deep",
+        "## Plan\n\n```bash\n# a shell comment, not a heading\n```\n\n### Steps",
+        "```\n```bash\n# a fence line with an info string doesn't close the fence\n```\n\n# After",
+        "> # Context\n\n- # Context\n\n1. # Context",
+        "<!--\n```\n-->\n# Context",
+        "- # A\n  #### B",
+    ],
+)
+def test_headings_in_the_description_and_summary_stay_nested(description):
+    summary = "# The gist\n\nShort.\n\n### Detail"
+    post = rp.render_post({"number": 7, "body": description}, "T", "v1.2.3", "2026-09-26", [], [], summary, "m")
+    assert_one_h1_and_no_skipped_levels(post)
+
+
+def test_nest_headings_keeps_relative_levels_and_fenced_code():
+    text = "# A\n\n```\n# not a heading\n```\n\n### B\n\n~~~\n## still code\n~~~\n\n## C\n#hashtag"
+    assert rp.nest_headings(text) == (
+        "### A\n\n```\n# not a heading\n```\n\n#### B\n\n~~~\n## still code\n~~~\n\n#### C\n#hashtag"
+    )
+
+
+def test_nest_headings_converts_setext_headings_but_keeps_thematic_breaks():
+    text = "Title\n===\n\nText.\n\n---\n\n- item\n---\n\nSub\n---"
+    assert rp.nest_headings(text) == "### Title\n\nText.\n\n---\n\n- item\n---\n\n#### Sub"
+
+
+def test_a_closing_fence_followed_by_a_thematic_break_stays_a_fence():
+    text = "```\ncode\n```\n---\n# After"
+    assert rp.nest_headings(text) == "```\ncode\n```\n---\n### After"
+
+
+def test_adjacent_thematic_breaks_are_not_setext_text():
+    text = "Text.\n\n---\n---\n\n# After"
+    assert rp.nest_headings(text) == "Text.\n\n---\n---\n\n### After"
+
+
+def test_a_setext_heading_takes_its_whole_paragraph():
+    text = "Release\nNotes\n===\n\nBody.\n\nSub\nheading\n---\n\n- item\nlazy continuation\n---"
+    assert rp.nest_headings(text) == (
+        "### Release Notes\n\nBody.\n\n#### Sub heading\n\n- item\nlazy continuation\n---"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Table-like and #hashtag lines are paragraph text, so the underline takes them too.
+        ("text\n| a | b |\n===", "### text | a | b |"),
+        ("#hashtag\nPara\n---", "### #hashtag Para"),
+        # A lone === line is text, and becomes part of the heading below it.
+        ("===\nTitle\n---", "### === Title"),
+        # Text continuing a list item or quote can't be underlined into a heading.
+        ("1. one\n===\ntext\n---", "1. one\n===\ntext\n---"),
+        ("> quote\n===\n===", "> quote\n===\n==="),
+        ("- item\n\n    indented\nPara\n---", "- item\n\n    indented\nPara\n---"),
+        # A quote closes at a blank line; a list closes at a thematic break.
+        ("> quote\n\nPara\n---", "> quote\n\n### Para"),
+        ("- item\ntext\n---\nPara\n---", "- item\ntext\n---\n### Para"),
+    ],
+)
+def test_setext_headings_follow_commonmark_paragraphs(text, expected):
+    assert rp.nest_headings(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("> # Context\n> Why.", "> ### Context\n> Why."),
+        ("- # Context\n  Why.", "- ### Context\n  Why."),
+        ("> - # Deep\n>   ## Deeper", "> - ### Deep\n>   #### Deeper"),
+        # Setext headings inside a quote or list item, and a lazy === that isn't one.
+        ("> Title\n> ===", "> ### Title"),
+        ("- Title\n  ===", "- ### Title"),
+        ("> Title\n===", "> Title\n==="),
+        # Fence markers inside an HTML comment are comment text, not code.
+        ("<!--\n```\n-->\n# Context", "<!--\n```\n-->\n### Context"),
+        ("<!-- # not a heading -->\n# Context", "<!-- # not a heading -->\n### Context"),
+        # An HTML comment inside a list item is opaque too, fence markers and all.
+        ("- <!--\n  ```\n  -->\n# Context", "- <!--\n  ```\n  -->\n### Context"),
+        # Tabs expand to 4-column stops, so a tab-indented line continues the list item.
+        ("-\t# First\n\t# Second", "-   ### First\n    ### Second"),
+        # A line that fails to continue a quote or list item may open any list item
+        # (GitHub's renderer and CommonMark's reference parser agree); inside the
+        # item, only "1." interrupts.
+        ("> paragraph\n2. # Context", "> paragraph\n2. ### Context"),
+        ("- a\n2. # b", "- a\n2. ### b"),
+        ("- a\n  2. # b", "- a\n  2. # b"),
+        ("-\n  # A", "-\n  ### A"),
+    ],
+)
+def test_nest_headings_reaches_into_containers_and_skips_html_comments(text, expected):
+    assert rp.nest_headings(text) == expected
+
+
+@pytest.mark.parametrize("comment", ["<!--\n```\n-->", "- <!--\n  ```\n  -->"])
+def test_a_fence_in_an_html_comment_does_not_swallow_the_rest_of_the_post(comment):
+    body = f"{comment}\n\nThe real description."
+    commits = [{"sha": "abc1234def", "commit": {"message": "Add a thing"}}]
+    post = rp.render_post({"number": 7, "body": body}, "T", "v1.2.3", "2026-09-26", commits, [], None, "m")
+    assert rp.post_excerpt(post) == "The real description."
+    assert "Add a thing" not in rp.section(post, "PR description")
+
+
+def test_deeply_nested_containers_do_not_exhaust_the_stack():
+    # A size-bounded PR body can nest far deeper than Python's recursion limit.
+    assert rp.nest_headings("> " * 1100 + "# Context").endswith("> ### Context")
+    assert rp.nest_headings("- " * 1100 + "# Context").endswith("- ### Context")
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        lambda n: "- " * n + "# Context",
+        lambda n: "> " * n + "# Context",
+        lambda n: "- " * n + "x" + "\n" * n + "  text",
+        lambda n: "> x\n" + "lazy\n" * n,
+    ],
+)
+def test_scanning_stays_linear_in_nesting_depth_and_length(shape):
+    # Time the same shape at two sizes; a quadratic scan takes ~16x longer at 4x
+    # the size (measured before the fix), a linear one ~4x. The best of three
+    # runs keeps scheduling noise out, and the 10x bound leaves plenty of slack.
+    def best(n):
+        text = shape(n)
+        runs = []
+        for _ in range(3):
+            start = time.perf_counter()
+            rp.nest_headings(text)
+            runs.append(time.perf_counter() - start)
+        return min(runs)
+
+    small, large = best(2_000), best(8_000)
+    assert large < max(small, 0.001) * 10
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # A "#" line inside a raw HTML block is text: GitHub renders it literally.
+        ("<details>\n# x\n</details>", "<details>\n# x\n</details>"),
+        ("<div>\n## y\n</div>\n\n# z", "<div>\n## y\n</div>\n\n### z"),
+        ("<pre>\n# code\n</pre>\n# after", "<pre>\n# code\n</pre>\n### after"),
+        ("- <div>\n  # x\n# root", "- <div>\n  # x\n### root"),
+        # Block-tag blocks end at a blank line, so Markdown after one is Markdown again.
+        (
+            "<details>\n<summary>S</summary>\n\n# x\n\n</details>",
+            "<details>\n<summary>S</summary>\n\n### x\n\n</details>",
+        ),
+        ("<span>\n# inside\n\n# after", "<span>\n# inside\n\n### after"),
+        # A block tag interrupts a paragraph; any other tag doesn't...
+        ("text\n<details>\n# w\n</details>", "text\n<details>\n# w\n</details>"),
+        ("text\n<span>\n# v", "text\n<span>\n### v"),
+        # ...unless the line fails to continue its quote, when any HTML block can open.
+        ("> quote\n<span>\n# after", "> quote\n<span>\n# after"),
+        # A comment can close on the line that opens it.
+        ("<!-->\n# after", "<!-->\n### after"),
+        # Processing instructions, declarations and CDATA stay opaque until their own marker.
+        ("<?php\n# x\n?>\n# after", "<?php\n# x\n?>\n### after"),
+        ("<!DOCTYPE html\n# x\n>\n# after", "<!DOCTYPE html\n# x\n>\n### after"),
+        ("<![CDATA[\n# x\n]]>\n# after", "<![CDATA[\n# x\n]]>\n### after"),
+        # A declaration needs an uppercase letter: GitHub reads "<!doctype" as text.
+        ("<!doctype html\n# x", "<!doctype html\n### x"),
+        # The tag grammar is ASCII: a non-breaking space or a long s ("\u017f", which
+        # Unicode case-folds to "s") makes the line text, so GitHub reads the "#" after it
+        # as a heading. ASCII case-insensitivity still applies.
+        ("<div\u00a0>\n# x", "<div\u00a0>\n### x"),
+        ("<\u017ftyle>\n# x", "<\u017ftyle>\n### x"),
+        ('<a\u00a0href="x">\n# y', '<a\u00a0href="x">\n### y'),
+        ("<DIV>\n# x", "<DIV>\n# x"),
+        # Only spaces and tabs make a blank line: a non-breaking space doesn't end the block.
+        ("<div>\n\u00a0\n# x", "<div>\n\u00a0\n# x"),
+        ("<div>\n \t\n# x", "<div>\n \t\n### x"),
+    ],
+)
+def test_nest_headings_leaves_raw_html_blocks_alone(text, expected):
+    assert rp.nest_headings(text) == expected
+
+
+def test_an_html_block_never_becomes_the_excerpt():
+    body = "<details>\n<summary>Notes</summary>\n\nThe real description.\n\n</details>"
+    post = rp.render_post({"number": 7, "body": body}, "T", "v1.2.3", "2026-09-26", [], [], None, "m")
+    assert rp.post_excerpt(post) == "The real description."
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # PR bodies from the GitHub API often use CRLF; GitHub reads these as two H1s.
+        ("Title\r\n===\r\n\r\n# x", "### Title\n\n### x"),
+        ("- item\r\n  ---\r\n", "- ### item\n"),
+        ("<div>\r\n\r\n# x", "<div>\n\n### x"),
+        ("Title\r===", "### Title"),  # a lone CR is a line ending too
+        # A non-breaking space is text: this line continues the paragraph instead of ending it.
+        ("para\n\u00a0\n# y", "para\n\u00a0\n### y"),
+        # List numbers are ASCII digits: GitHub reads these lines as paragraph text.
+        ("\u0661. # x", "\u0661. # x"),
+        ("\uff11. # x", "\uff11. # x"),
+    ],
+)
+def test_nest_headings_reads_line_endings_and_blank_lines_as_commonmark_does(text, expected):
+    assert rp.nest_headings(text) == expected
+
+
+def test_code_lines_treats_a_trailing_cr_as_part_of_the_line_ending():
+    assert rp.code_lines(["<div>\r", "\r", "# x"]) == {0}
+
+
+def test_a_fence_line_with_an_info_string_does_not_close_the_fence():
+    text = "```\n```python\n# comment\n```\n# Heading"
+    assert rp.nest_headings(text) == "```\n```python\n# comment\n```\n### Heading"
+
+
+def test_section_ignores_a_summary_heading_from_inside_the_pr_description():
+    new_post = rp.render_post(
+        {"number": 7, "body": "## Summary\n\nFrom the PR body."}, "T", "v1.2.3", "2026-09-26", [], [], None, "m"
+    )
+    old_post = "## T\n\n### PR description\n\n## Summary\n\nFrom the PR body.\n\n### Commits\n"
+    assert rp.section(new_post, "Summary") == ""
+    assert rp.section(old_post, "Summary") == ""
+
+
+@pytest.mark.parametrize(("title", "level"), [("#", "##"), ("##", "###")])
+def test_excerpt_skips_a_summary_heading_inside_a_fenced_example(title, level):
+    fenced = f"```markdown\n{level} Summary\n\nCode sample, not a summary.\n```"
+    post = (
+        f"---\npost_title: \"T\"\n---\n{title} T\n\n{level} PR description\n\n"
+        f"The real description.\n\n{fenced}\n\n{level} Commits\n\n- Add a thing\n"
+    )
+    assert rp.section(post, "Summary") == ""
+    assert rp.post_excerpt(post) == "The real description."
+
+
+def test_nested_description_headings_do_not_end_the_section():
+    post = rp.render_post({"number": 7, "body": "# Context\n\nWhy."}, "T", "v1.2.3", "2026-09-26", [], [], None, "m")
+    assert rp.first_paragraph(rp.section(post, "PR description")) == "Why."
+
+
+@pytest.mark.parametrize(("title", "level"), [("#", "##"), ("##", "###")])
+def test_section_reads_posts_from_before_and_after_the_h1_title(title, level):
+    # Posts written before the title became an H1 used a ## title and ### section headings.
+    text = f"{title} T\n\n{level} Summary\n\nThe gist.\n\n{level} PR description\n\nWhy.\n"
+    assert rp.first_paragraph(rp.section(text, "Summary")) == "The gist."
+    assert rp.first_paragraph(rp.section(text, "PR description")) == "Why."
 
 
 def test_commits_section_lists_subjects_only():
@@ -149,7 +465,7 @@ def test_files_section_groups_by_area_in_fixed_order():
         ("package-lock.json", True),
         ("web/package-lock.json", True),
         ("pnpm-lock.yaml", True),
-        ("web/pnpm-lock.yaml", True),
+        ("src/AtelierStore.Web/pnpm-lock.yaml", True),
         ("poetry.lock", True),
         ("docs/blogs/2026-09-24-pr-1-x.md", True),
         ("README.md", True),
@@ -191,6 +507,15 @@ def test_replace_between_without_markers_returns_none():
     assert rp.replace_between("no markers", "X", ["y"]) is None
 
 
+def test_run_leaves_a_missing_docs_readme_missing(tmp_path):
+    make_repo(tmp_path)
+    (tmp_path / "docs" / "README.md").unlink()
+    run(tmp_path)
+
+    assert "v0.0.3" in (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert not (tmp_path / "docs" / "README.md").exists()
+
+
 def test_run_writes_readme_and_index_tables(tmp_path):
     make_repo(tmp_path)
     run(tmp_path)
@@ -209,13 +534,14 @@ def test_run_writes_readme_and_index_tables(tmp_path):
     assert "<td>feat(ui): Add the &quot;dark&quot; theme</td>" in index
     assert f'<td><a href="https://github.com/{REPO}/blob/main/docs/blogs/{post}">Post</a></td>' in index
     assert "<td>—</td>" in index
-    # Blog posts table: Date | Title | Release | Source PR
-    assert f'<td><a href="https://github.com/{REPO}/blob/main/docs/blogs/{post}">feat(ui): Add the &quot;dark&quot; theme</a></td>' in index
-    assert "<td>v0.0.3</td>" in index
-    assert f'<td><a href="https://github.com/{REPO}/pull/42">#42</a></td>' in index
+    # Blog post cards: date, release, linked title, excerpt, source PR
+    assert '<time datetime="2026-09-24">24 Sep 2026</time><span class="post-tag">v0.0.3</span>' in index
+    assert f'<h3 class="post-title"><a href="https://github.com/{REPO}/blob/main/docs/blogs/{post}">feat(ui): Add the &quot;dark&quot; theme</a></h3>' in index
+    assert '<p class="post-excerpt">Adds a theme.</p>' in index
+    assert f'<p class="post-source"><a href="https://github.com/{REPO}/pull/42">PR #42</a></p>' in index
 
 
-def test_blog_posts_table_is_newest_first_and_capped_at_ten(tmp_path):
+def test_blog_post_cards_are_newest_first_and_capped_at_ten(tmp_path):
     blog_dir = make_repo(tmp_path) / "docs" / "blogs"
     for n in range(1, 13):
         (blog_dir / f"2026-09-{n:02d}-pr-{n}-post-{n}.md").write_text(
@@ -230,9 +556,8 @@ def test_blog_posts_table_is_newest_first_and_capped_at_ten(tmp_path):
         )
     posts = rp.read_blog_posts(blog_dir)
     lines = rp.render_blogs_html(posts, REPO)
-    rows = [line for line in lines if line.strip().startswith("<tr>")]
-    # Header row plus ten posts.
-    assert len(rows) == 11
+    cards = [line for line in lines if line.strip() == '<li class="post-card">']
+    assert len(cards) == 10
     html_text = "\n".join(lines)
     assert "Post &lt;12&gt;" in html_text
     assert "Post &lt;2&gt;" not in html_text
@@ -304,6 +629,107 @@ def test_blog_index_keeps_posts_whose_title_mentions_date(tmp_path):
     assert index.count("| Date | Title | Tags |") == 1
 
 
+def test_table_separators_use_the_compact_style(tmp_path):
+    # markdownlint MD060 ("compact") needs a space on both sides of every pipe.
+    blog_dir = make_repo(tmp_path) / "docs" / "blogs"
+    rp.update_blog_index(blog_dir, "2026-09-24", "feat(ui): Next", "2026-09-24-pr-8-feat-ui-next.md")
+    index = (blog_dir / "README.md").read_text(encoding="utf-8")
+    assert "| ---- | ----- | ---- |" in index.splitlines()
+    assert "| ------- | ---- | ----- | --------- |" in rp.render_releases_markdown([]).splitlines()
+
+
+def test_blog_index_replaces_an_old_style_separator(tmp_path):
+    blog_dir = make_repo(tmp_path) / "docs" / "blogs"
+    (blog_dir / "README.md").write_text("| Date | Title | Tags |\n|------|-------|------|\n", encoding="utf-8")
+    rp.update_blog_index(blog_dir, "2026-09-24", "feat(ui): Next", "2026-09-24-pr-8-feat-ui-next.md")
+    index = (blog_dir / "README.md").read_text(encoding="utf-8")
+    assert "|------|-------|------|" not in index
+    assert index.count("| ---- | ----- | ---- |") == 1
+
+
+# Blog post cards and excerpts
+
+
+def card_post(summary="Release notes seed for v0.0.3 from PR #42.", body=""):
+    return f'---\npost_title: "T"\nsummary: "{summary}"\npost_date: "2026-09-24"\n---\n## T\n\n{body}'
+
+
+def test_excerpt_prefers_the_ai_summary_section():
+    text = card_post(body="### Summary\n\nClaude wrote this.\n\n### PR description\n\nThe description.\n")
+    assert rp.post_excerpt(text, "Release notes seed for v0.0.3 from PR #42.") == "Claude wrote this."
+
+
+def test_excerpt_uses_a_real_front_matter_summary_over_the_description():
+    text = card_post(body="### PR description\n\nThe description.\n")
+    assert rp.post_excerpt(text, "A hand-written summary.") == "A hand-written summary."
+
+
+def test_excerpt_skips_the_seed_summary_headings_and_issue_references():
+    body = (
+        "### PR description\n\nFixes #16.\n\n## Problem\n\n"
+        "`FindBySlugAsync` lowercases the **slug**, see [the issue](https://x/16).\n\n"
+        "### Commits\n\n- abc Commit subject\n"
+    )
+    assert rp.post_excerpt(card_post(body=body), "Release notes seed for v0.0.3 from PR #42.") == (
+        "FindBySlugAsync lowercases the slug, see the issue."
+    )
+
+
+def test_excerpt_joins_a_list_and_keeps_snake_case():
+    body = "### PR description\n\n## Summary\n\n- Removes the `pull_request` trigger.\n- Keeps _manual_ runs.\n"
+    assert rp.post_excerpt(card_post(body=body)) == "Removes the pull_request trigger. Keeps manual runs."
+
+
+def test_excerpt_skips_code_blocks_and_tables():
+    body = "### PR description\n\n```bash\necho hi\n\necho there\n```\n\n| a | b |\n| - | - |\n\nReal text.\n"
+    assert rp.post_excerpt(card_post(body=body)) == "Real text."
+
+
+def test_excerpt_is_empty_without_a_description():
+    assert rp.post_excerpt(card_post(body="### PR description\n\nNo PR description was provided.\n")) == ""
+    assert rp.post_excerpt("no front matter or sections") == ""
+
+
+def test_long_excerpts_are_cut_at_a_word_with_an_ellipsis():
+    text = "word " * 100
+    short = rp.shorten(text.strip())
+    assert len(short) <= rp.EXCERPT_LENGTH
+    assert short.endswith("word…")
+    assert rp.shorten("Short enough.") == "Short enough."
+
+
+def test_display_date_formats_iso_dates_and_leaves_others_alone():
+    assert rp.display_date("2026-09-07") == "7 Sep 2026"
+    assert rp.display_date("someday") == "someday"
+
+
+def test_blog_cards_escape_titles_and_excerpts():
+    posts = [{"file": "a.md", "pr": "5", "title": "<b>T</b>", "date": "2026-09-24", "tag": "", "excerpt": "a < b & c"}]
+    html_text = "\n".join(rp.render_blogs_html(posts, REPO))
+    assert "&lt;b&gt;T&lt;/b&gt;" in html_text
+    assert '<p class="post-excerpt">a &lt; b &amp; c</p>' in html_text
+    assert "post-tag" not in html_text
+
+
+def test_blog_cards_without_posts_show_an_empty_message():
+    assert rp.render_blogs_html([], REPO) == ['<p class="post-empty">No blog posts yet.</p>']
+
+
+def test_real_pages_site_is_unchanged_by_a_second_table_update(tmp_path):
+    # The committed docs/index.html must already be what update_tables writes,
+    # so a release run only changes it when releases or posts change.
+    source = Path(__file__).resolve().parents[3] / "docs" / "index.html"
+    if not source.exists():
+        pytest.skip("this repo has no docs/index.html Pages site")
+    (tmp_path / "docs" / "blogs").mkdir(parents=True)
+    (tmp_path / "docs" / "index.html").write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    rp.update_tables(REPO, FakeGitHub(), tmp_path)
+    once = (tmp_path / "docs" / "index.html").read_text(encoding="utf-8")
+    rp.update_tables(REPO, FakeGitHub(), tmp_path)
+    assert (tmp_path / "docs" / "index.html").read_text(encoding="utf-8") == once
+    assert "<!-- RELEASES_HTML_START -->" in once and "<!-- BLOGS_HTML_START -->" in once
+
+
 # Post content and the AI summary
 
 
@@ -325,12 +751,13 @@ def test_no_key_writes_post_without_summary(tmp_path, capsys):
         "author1: mpaulosky",
         'post_slug: "v0.0.3-pr-42"',
         "microsoft_alias: n/a",
-        'featured_image: ""',
         "  - release:v0.0.3",
         'summary: "Release notes seed for v0.0.3 from PR #42."',
         'post_date: "2026-09-24"',
     ]:
         assert line in post
+    # Nothing renders a featured image, so the post doesn't carry one.
+    assert "featured_image" not in post
     assert post.index("## PR description") < post.index("## Commits") < post.index("## Files changed")
     assert "Adds a theme." in post
 

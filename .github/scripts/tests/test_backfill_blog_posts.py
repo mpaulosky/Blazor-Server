@@ -60,6 +60,7 @@ def make_repo(tmp_path):
     (tmp_path / "README.md").write_text(
         "# Demo\n\n## Releases\n\n<!-- RELEASES_START -->\nold\n<!-- RELEASES_END -->\n", encoding="utf-8"
     )
+    (tmp_path / "docs" / "README.md").write_text("# Demo\n", encoding="utf-8")
     (tmp_path / "docs" / "index.html").write_text(
         "<!-- RELEASES_HTML_START -->\n<!-- RELEASES_HTML_END -->\n"
         "<!-- BLOGS_HTML_START -->\n<!-- BLOGS_HTML_END -->\n",
@@ -148,7 +149,7 @@ def test_run_writes_missing_posts_with_the_existing_tags(tmp_path):
 
     html = (tmp_path / "docs" / "index.html").read_text(encoding="utf-8")
     assert html.count('">Post</a>') == 3
-    assert f'<a href="https://github.com/{REPO}/pull/2">#2</a>' in html
+    assert f'<a href="https://github.com/{REPO}/pull/2">PR #2</a>' in html
 
 
 def test_dependabot_post_has_no_summary_but_others_do(tmp_path):
@@ -166,8 +167,8 @@ def test_dependabot_post_has_no_summary_but_others_do(tmp_path):
 
     bf.run(REPO, FakeGitHub(), root=tmp_path, api_key="sk-test", urlopen=urlopen)
     blog_dir = tmp_path / "docs" / "blogs"
-    assert "## Summary" not in (blog_dir / "2026-09-19-pr-2-bump-codeql-action.md").read_text(encoding="utf-8")
-    assert "## Summary" in (blog_dir / "2026-09-18-pr-1-chore-first.md").read_text(encoding="utf-8")
+    assert "## Summary" not in (blog_dir / "2026-09-19-pr-2-bump-codeql-action.md").read_text(encoding="utf-8").splitlines()
+    assert "## Summary" in (blog_dir / "2026-09-18-pr-1-chore-first.md").read_text(encoding="utf-8").splitlines()
 
 
 def test_second_run_without_regenerate_changes_nothing(tmp_path):
@@ -203,8 +204,10 @@ def test_regenerate_twice_changes_nothing(tmp_path):
 def test_main_passes_the_inputs(monkeypatch, tmp_path):
     calls = {}
 
-    def fake_run(repository, gh, root, regenerate, only, api_key, model):
-        calls.update(repository=repository, regenerate=regenerate, only=only, api_key=api_key, model=model)
+    def fake_run(repository, gh, root, regenerate, only, api_key, model, wait_for):
+        calls.update(
+            repository=repository, regenerate=regenerate, only=only, api_key=api_key, model=model, wait_for=wait_for
+        )
         return []
 
     monkeypatch.setattr(bf, "run", fake_run)
@@ -217,4 +220,77 @@ def test_main_passes_the_inputs(monkeypatch, tmp_path):
         "only": {1, 3},
         "api_key": "sk-test",
         "model": bf.rp.DEFAULT_MODEL,
+        "wait_for": None,
     }
+
+
+class LaggingGitHub(FakeGitHub):
+    """Lists v0.0.4 (PR 4) only from the given call on, like a just-published Release."""
+
+    def __init__(self, listed_from_call):
+        super().__init__()
+        self.listed_from_call = listed_from_call
+        self.calls = 0
+
+    def releases(self):
+        self.calls += 1
+        if self.calls < self.listed_from_call:
+            return [r for r in self.releases_data if r["tag_name"] != "v0.0.4"]
+        return self.releases_data
+
+
+def test_run_lists_again_until_a_just_published_release_appears(tmp_path):
+    make_repo(tmp_path)
+    gh = LaggingGitHub(listed_from_call=3)
+    slept = []
+
+    written = bf.run(REPO, gh, root=tmp_path, wait_for={4}, sleep=slept.append)
+
+    assert written == [1, 2, 4]
+    assert slept == [bf.WAIT_DELAY, bf.WAIT_DELAY]
+    readme = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert "[v0.0.4]" in readme
+
+
+def test_the_tables_use_the_listing_the_posts_came_from(tmp_path):
+    make_repo(tmp_path)
+    gh = LaggingGitHub(listed_from_call=2)
+
+    bf.run(REPO, gh, root=tmp_path, wait_for={4}, sleep=lambda _: None)
+
+    # One listing that lacked v0.0.4, one that had it; the tables reuse the second.
+    assert gh.calls == 2
+    assert "[v0.0.4]" in (tmp_path / "README.md").read_text(encoding="utf-8")
+
+
+def test_run_writes_what_is_listed_when_a_release_never_appears(tmp_path, capsys):
+    make_repo(tmp_path)
+    gh = LaggingGitHub(listed_from_call=99)
+    slept = []
+
+    written = bf.run(REPO, gh, root=tmp_path, wait_for={4}, sleep=slept.append)
+
+    assert written == [1, 2]
+    assert gh.calls == bf.WAIT_ATTEMPTS
+    assert len(slept) == bf.WAIT_ATTEMPTS - 1
+    assert "::warning::No Release is listed yet for PR #4" in capsys.readouterr().out
+
+
+def test_run_lists_once_without_wait_for(tmp_path):
+    make_repo(tmp_path)
+    gh = LaggingGitHub(listed_from_call=99)
+
+    written = bf.run(REPO, gh, root=tmp_path, sleep=lambda _: pytest.fail("slept"))
+
+    assert written == [1, 2]
+    assert gh.calls == 1
+
+
+def test_main_passes_wait_for_prs(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(bf, "run", lambda *args, **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(bf.rp, "GitHub", lambda repo: object())
+
+    bf.main(["--repo", REPO, "--wait-for-prs", "187, #188"])
+
+    assert seen["wait_for"] == {187, 188}
