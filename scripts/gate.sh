@@ -3,12 +3,14 @@
 # Sandcastle sandbox and people. Stops at the first failing step:
 #   1. yamllint on changed YAML files
 #   2. markdownlint-cli2 on changed Markdown files
-#   3. actionlint and zizmor when workflows or dependabot.yml changed
-#   4. shellcheck on changed shell scripts and git hooks
-#   5. the Sandcastle TypeScript check when .sandcastle/, package.json or the
+#   3. scripts/sync-copilot-review.sh --check when the code-review skill or
+#      .github/copilot-instructions.md changed
+#   4. actionlint and zizmor when workflows or dependabot.yml changed
+#   5. shellcheck on changed shell scripts and git hooks
+#   6. the Sandcastle TypeScript check when .sandcastle/, package.json or the
 #      pnpm lockfile/workspace changed
-#   6. a Release build of the solution
-#   7. each test project under tests/, in Release
+#   7. a Release build of the solution
+#   8. each test project under tests/, in Release
 # "Changed" means added or modified since the branch left origin/main, so a
 # branch with no upstream is linted in full, not just its last commit.
 # Usage: scripts/gate.sh
@@ -38,6 +40,10 @@ changed_files() {
 
 mapfile -d '' -t CHANGED_YAML < <(changed_files '*.yml' '*.yaml')
 mapfile -d '' -t CHANGED_MD < <(changed_files '*.md')
+# Either side of the Copilot review sync, or the script that does it.
+mapfile -d '' -t CHANGED_REVIEW < <(
+  changed_files .claude/skills/code-review/SKILL.md .github/copilot-instructions.md scripts/sync-copilot-review.sh
+)
 mapfile -d '' -t CHANGED_WORKFLOWS < <(
   changed_files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/dependabot.yml'
 )
@@ -70,6 +76,11 @@ if [[ ${#CHANGED_MD[@]} -gt 0 ]]; then
   echo -e "${GREEN}✅ Markdown lint OK.${RESET}"
 else
   echo -e "\n${GREEN}✅ No changed Markdown files to lint.${RESET}"
+fi
+
+if [[ ${#CHANGED_REVIEW[@]} -gt 0 ]]; then
+  echo -e "\n${CYAN}🔁 Copilot review instructions sync...${RESET}"
+  "$ROOT/scripts/sync-copilot-review.sh" --check
 fi
 
 # The workflow and shell linters, at the versions .github/workflows/lint-actions.yml

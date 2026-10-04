@@ -105,16 +105,17 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 ## Project layout
 
 ```text
-src/Domain/                  -- Shared Kernel: Result, Result<T>, ApplicationConstants
-tests/Architecture.Tests/    -- Architecture rules (keeps Domain free of forbidden dependencies)
-tests/Domain.Tests.Unit/     -- Shared Kernel unit tests
-docs/adr/                    -- Architecture decision records
-CONTEXT.md                   -- Domain language
-.sandcastle/                 -- Sandcastle agent setup
-docs/CODING_STANDARDS.md     -- Coding standards
-CLAUDE.md, .claude/          -- Claude Code instructions, rules, skills and settings
-.github/workflows/           -- CI, code analysis, linting and release workflows
-.github/scripts/             -- Release blog post generator, backfill and pytest tests
+src/Domain/                      -- Shared Kernel: Result, Result<T>, ApplicationConstants
+tests/Architecture.Tests/        -- Architecture rules (keeps Domain free of forbidden dependencies)
+tests/Domain.Tests.Unit/         -- Shared Kernel unit tests
+docs/adr/                        -- Architecture decision records
+CONTEXT.md                       -- Domain language
+.sandcastle/                     -- Sandcastle agent setup
+docs/CODING_STANDARDS.md         -- Coding standards
+CLAUDE.md, .claude/              -- Claude Code instructions, rules, skills and settings
+.github/workflows/               -- CI, code analysis, linting and release workflows
+.github/scripts/                 -- Release blog post generator, backfill and pytest tests
+.github/copilot-instructions.md  -- Copilot PR review checklist, generated from the code-review skill
 ```
 
 ## Roadmap

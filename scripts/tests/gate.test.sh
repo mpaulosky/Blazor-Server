@@ -49,6 +49,8 @@ mkdir -p "$REPO/tests/Fake.Tests" "$REPO/docs" "$REPO/.sandcastle"
 echo '<Project />' > "$REPO/tests/Fake.Tests/Fake.Tests.csproj"
 echo '# Old' > "$REPO/docs/old.md"
 echo 'export {};' > "$REPO/.sandcastle/old.mts"
+mkdir -p "$REPO/scripts"
+cp "$(dirname "$GATE")/sync-copilot-review.sh" "$REPO/scripts/"
 git -C "$REPO" add .
 git -C "$REPO" commit -q -m init
 git -C "$REPO" update-ref refs/remotes/origin/main main
@@ -241,6 +243,25 @@ git -C "$REPO" switch -q feature/9-main-moved
 run_gate
 expect "files changed only on main since the branch point are not linted" passed "$BUILD
 $TEST*"
+
+SKILL_MD=$'---\nname: code-review\ndescription: Review.\n---\n\n# Code review\n\nCheck things.'
+REVIEW_LINT="pnpm exec markdownlint-cli2 .claude/skills/code-review/SKILL.md .github/copilot-instructions.md"
+
+new_branch feature/10-review-synced
+commit_file .claude/skills/code-review/SKILL.md "$SKILL_MD"
+(cd "$REPO" && scripts/sync-copilot-review.sh >/dev/null)
+git -C "$REPO" add .github/copilot-instructions.md
+git -C "$REPO" commit -q -m "sync copilot instructions"
+run_gate
+expect "a synced code-review skill passes the Copilot review check" passed "$REVIEW_LINT
+$BUILD
+$TEST*" "match the code-review skill"
+
+new_branch feature/11-review-drift
+commit_file .claude/skills/code-review/SKILL.md "$SKILL_MD"
+commit_file .github/copilot-instructions.md '# Stale'
+run_gate
+expect "a Copilot review file that drifted from the skill stops the gate" failed "$REVIEW_LINT" "has drifted"
 
 git -C "$REPO" update-ref -d refs/remotes/origin/main
 run_gate
