@@ -76,7 +76,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
    ```bash
    pnpm install
    dotnet build Blazor-Server.slnx
-   for project in tests/*/*.csproj; do dotnet test --project "$project" || break; done
+   (for project in tests/*/*.csproj; do dotnet test --project "$project" || exit 1; done)
    ```
 
    Run the test projects one at a time, as `scripts/gate.sh` and CI do. Under Microsoft Testing Platform,
