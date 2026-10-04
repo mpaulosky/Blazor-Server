@@ -201,3 +201,5 @@ section of the repository with proper links back through to the main `/README.md
 ---
 
 Thank you for helping us make this project better!
+
+<!-- docs-only CI probe; this PR is closed without merging -->
