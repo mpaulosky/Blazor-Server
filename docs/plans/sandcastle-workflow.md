@@ -11,6 +11,8 @@ so Sandcastle builds its own upgrade.
 
 - **Fully unattended.** No human approves plans or merges. A human steps in only when Sandcastle hands something back (see [Giving up](#giving-up-and-telling-the-human)), or when
   they choose to join a PR's review: `pr-automerge.yml` merges only once every thread is resolved, so a thread a human opens waits for that human to resolve it.
+  Copilot's threads are the exception: after Copilot has reviewed three non-merge commits of a PR, they and its review of the head stop holding the merge
+  ([ADR 0003](../adr/0003-copilot-review-cap.md)).
 - **The host decides; agents propose.** Agents never call GitHub write APIs. They return structured verdicts or write files, and the host (`main.mts`) validates them and applies
   labels, comments, links, pushes and thread resolutions with `gh`.
 - **Trust boundary.** Anyone with write access is trusted like the owner: they can already push to any branch, dispatch workflows and change what Sandcastle would build. Today the owner is

@@ -49,6 +49,28 @@ function readyPr(overrides = {}) {
   };
 }
 
+// Copilot reviews of each given commit, oldest first. A { oid, merge: true }
+// entry is a merge commit, such as a merge from main.
+function copilotReviewsOf(...commits) {
+  return {
+    nodes: commits.map((commit) => {
+      const { oid, merge } = typeof commit === "string" ? { oid: commit, merge: false } : commit;
+      return { commit: { oid, parents: { totalCount: merge ? 2 : 1 } } };
+    })
+  };
+}
+
+// Review threads, each opened by the given login, all unresolved unless marked.
+function threadsBy(...authors) {
+  const nodes = authors.map((author) => ({
+    isResolved: author.resolved ?? false,
+    comments: { nodes: [{ author: author.login === null ? null : { login: author.login ?? author } }] }
+  }));
+  return { totalCount: nodes.length, nodes };
+}
+
+const COPILOT = "copilot-pull-request-reviewer";
+
 function labelled(...names) {
   return { totalCount: names.length, nodes: names.map((name) => ({ name })) };
 }
@@ -66,6 +88,7 @@ async function evaluate(pr, events = []) {
   const merges = [];
   const logs = [];
   const eventRequests = [];
+  const queries = [];
   let graphqlRequests = 0;
   const pullRequests = Array.isArray(pr) ? [...pr] : [pr];
   const eventSets = Array.isArray(events[0]) ? [...events] : [events];
@@ -83,9 +106,10 @@ async function evaluate(pr, events = []) {
   };
   const github = {
     rest,
-    graphql: async () => ({
-      repository: { pullRequest: pullRequests[Math.min(graphqlRequests++, pullRequests.length - 1)] }
-    }),
+    graphql: async (query) => {
+      queries.push(query);
+      return { repository: { pullRequest: pullRequests[Math.min(graphqlRequests++, pullRequests.length - 1)] } };
+    },
     paginate: async (method, params) => {
       if (method === rest.issues.listEvents) {
         eventRequests.push(params);
@@ -105,7 +129,7 @@ async function evaluate(pr, events = []) {
 
   process.env.HAS_RELEASE_PR_PAT = "true";
   await run(github, context, core);
-  return { merges, logs, eventRequests };
+  return { merges, logs, eventRequests, queries };
 }
 
 test("merges a ready PR at the head it checked", async () => {
@@ -197,6 +221,120 @@ test("re-checks the latest sandcastle:needs-human removal before merging", async
   assert.deepEqual(merges, []);
   assert.ok(
     logs.some((line) => line.includes("PR #7") && line.includes(NEEDS_HUMAN) && line.includes("triager")),
+    logs.join("\n")
+  );
+});
+
+test("waits for a Copilot review of the head below the review cap", async () => {
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two") }));
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("no Copilot review of " + HEAD)), logs.join("\n"));
+});
+
+test("waits on an unresolved Copilot thread below the review cap", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", HEAD), reviewThreads: threadsBy(COPILOT) });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("1 unresolved review thread(s)")), logs.join("\n"));
+});
+
+test("merges without a review of the head once Copilot reviewed three commits", async () => {
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two", "three") }));
+
+  assert.equal(merges.length, 1);
+  assert.ok(
+    logs.some((line) => line.includes("review cap (3) reached") && line.includes("without a Copilot review of " + HEAD)),
+    logs.join("\n")
+  );
+});
+
+test("counts reviewed commits, not reviews, toward the cap", async () => {
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "one", "two") }));
+
+  assert.deepEqual(merges, []);
+});
+
+test("merges past unresolved Copilot threads at the review cap and says how many", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two", HEAD),
+    reviewThreads: threadsBy(COPILOT, COPILOT, { login: OWNER, resolved: true })
+  });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.equal(merges.length, 1);
+  assert.ok(logs.some((line) => line.includes("past 2 unresolved Copilot thread(s)")), logs.join("\n"));
+});
+
+test("still waits on a person's unresolved thread at the review cap", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two", HEAD),
+    reviewThreads: threadsBy(COPILOT, OWNER)
+  });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("1 unresolved review thread(s)")), logs.join("\n"));
+});
+
+test("treats a thread with no known author as a person's at the review cap", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two", HEAD), reviewThreads: threadsBy({ login: null }) });
+  const { merges } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+});
+
+test("still needs green checks at the review cap", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two", "three"), mergeStateStatus: "BLOCKED" });
+  const { merges } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+});
+
+test("doesn't count Copilot reviews of merge commits toward the cap", async () => {
+  const reviews = copilotReviewsOf("one", { oid: "merge-main-1", merge: true }, { oid: "merge-main-2", merge: true });
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: reviews }));
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("no Copilot review of " + HEAD)), logs.join("\n"));
+});
+
+test("accepts a Copilot review of a merge commit at the head below the cap", async () => {
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf({ oid: HEAD, merge: true }) }));
+
+  assert.equal(merges.length, 1);
+});
+
+test("reaches the cap on three non-merge commits among merges from main", async () => {
+  const reviews = copilotReviewsOf("one", { oid: "merge-main", merge: true }, "two", "three");
+  const { merges } = await evaluate(readyPr({ copilotReviews: reviews }));
+
+  assert.equal(merges.length, 1);
+});
+
+test("keeps the cap reached through many re-reviews of one commit", async () => {
+  const reviews = copilotReviewsOf("one", "two", "three", ...Array(30).fill("three"));
+  const { merges, queries } = await evaluate(readyPr({ copilotReviews: reviews }));
+
+  assert.equal(merges.length, 1);
+  assert.ok(queries.every((query) => query.includes("reviews(last: 100,")), "Copilot reviews are fetched 100 at a time");
+});
+
+test("doesn't log the cap when it didn't change the outcome", async () => {
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two", HEAD) }));
+
+  assert.equal(merges.length, 1);
+  assert.ok(!logs.some((line) => line.includes("review cap")), logs.join("\n"));
+});
+
+test("logs both requirements the cap bypassed", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two", "three"), reviewThreads: threadsBy(COPILOT) });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.equal(merges.length, 1);
+  assert.ok(
+    logs.some((line) => line.includes("without a Copilot review of " + HEAD + " and past 1 unresolved Copilot thread(s)")),
     logs.join("\n")
   );
 });
