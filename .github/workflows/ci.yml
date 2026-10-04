@@ -25,10 +25,11 @@ permissions:
     paths-ignore:
       - "docs/**"
 
-  # No paths-ignore here: the "Build Solution" job below is a required
-  # status check on main's ruleset. A docs-only PR that this workflow
-  # never runs against would leave that check permanently missing,
-  # blocking the PR from merging forever (see PR #26).
+  # No paths-ignore here: "Build Solution" and "Test Suite" below are
+  # required status checks on main's ruleset. A docs-only PR that this
+  # workflow never runs against would leave them permanently missing,
+  # blocking the PR from merging. The changes job skips the build and tests
+  # for such a PR instead; a skipped required check counts as passing.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -53,50 +54,62 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
-  # Aspire parameter bindings for E2E.Tests
-  # (Parameters: auth0MgmtClientId/Secret)
-  # Every secret below is withheld from runs of a dependabot/* branch, however
-  # they were triggered (the PR's head branch, or the ref of a manual run): a
-  # maintainer re-running, reopening, updating or dispatching one would
-  # otherwise hand the real Auth0 credentials to unreviewed dependency code
-  # (restore, build and every test job can read this env).
-  Auth0__Domain: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}
-  Auth0__ClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_CLIENT_ID || '' }}
-  Auth0__ClientSecret: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_CLIENT_SECRET || '' }}
-  Auth0Management__ClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
-  Auth0Management__ClientSecret: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
-  Auth0Management__Domain: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}
-  Auth0Management__Audience: https://${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_DOMAIN || '' }}/api/v2/
-  Parameters__auth0MgmtClientId: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_ID || '' }}
-  Parameters__auth0MgmtClientSecret: >-
-    ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_MANAGEMENT_CLIENT_SECRET || '' }}
-
-  # Role test-user credentials for UI.Tests.E2E's authenticated Playwright fixtures
-  Auth0__E2E__Admin__Username: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_ADMIN_USERNAME || '' }}
-  Auth0__E2E__Admin__Password: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_ADMIN_PASSWORD || '' }}
-  Auth0__E2E__User__Username: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_USER_USERNAME || '' }}
-  Auth0__E2E__User__Password: ${{ !startsWith(github.head_ref || github.ref_name, 'dependabot/') && secrets.AUTH0_USER_PASSWORD || '' }}
-
 jobs:
+  # Whether the PR changes anything the build or tests depend on. A PR that
+  # changes only Markdown and files under docs/ (such as a release blog PR)
+  # skips the build, the test matrix and coverage. Everything else counts as
+  # code, including workflows and scripts, so an unexpected path runs the full
+  # suite. Pushes and manual runs always run it.
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # detect_changes.py (tested in .github/scripts/tests) lists the
+          # changed files against the base and appends code=true|false.
+          python3 .github/scripts/detect_changes.py --base "$BASE_SHA" --output "$GITHUB_OUTPUT"
+
   build:
     name: Build Solution
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ github.workspace }}/.nuget/packages
           key: >-
@@ -123,22 +136,18 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      # Repo-specific setup (a Seed file the repo owns), such as tools the
+      # build runs. Optional: a repo without the script skips this.
+      - name: Prepare build
+        run: |
+          if [ -f .github/ci/prepare.sh ]; then
+            bash .github/ci/prepare.sh build
+          fi
+
       - name: Build solution
         run: >-
           dotnet build "$SOLUTION_FILE" --configuration Release
-          --no-restore
-
-      - name: Cache build artifacts
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: |
-            **/bin/Release/
-            **/obj/
-          key: >-
-            ${{ runner.os }}-build-${{ hashFiles('**/*.csproj',
-            '**/Directory.Packages.props', 'global.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-
+          --no-restore -warnaserror
 
   # Unit tests for .github/scripts (the release blog generator).
   # Deliberately not a required status check on main's ruleset.
@@ -149,19 +158,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7
-        with:
-          node-version: "22"
 
       - name: Install pytest
         run: python -m pip install pytest
@@ -169,11 +173,9 @@ jobs:
       - name: Run pytest
         run: python -m pytest .github/scripts/tests
 
-      - name: Run PR automerge Node tests
-        run: node --test .github/scripts/tests/pr-automerge.test.mjs
-
-  # The pre-push hook and scripts/gate.sh have their own tests, which stub
-  # every tool they call, so they need nothing installed.
+  # Tests for .github/hooks/pre-commit, .github/hooks/pre-push and scripts/gate.sh,
+  # with stubbed tools.
+  # Also not a required status check.
   hook-tests:
     name: Hook tests
     runs-on: ubuntu-latest
@@ -181,22 +183,39 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Run pre-push hook tests
         run: bash .github/hooks/tests/pre-push.test.sh
 
-      - name: Run gate tests
-        run: bash scripts/tests/gate.test.sh
+      - name: Run pre-commit hook tests
+        run: bash .github/hooks/tests/pre-commit.test.sh
 
-  # Dependabot PRs run the test suite too: a dependency bump is exactly the
-  # change the tests must vet. The one exception is the Playwright (E2E)
-  # projects, which log in to Auth0 with real credentials. dependabot/*
-  # branches get no secrets (see env above), so discovery leaves those projects
-  # out there, and they run on main once the bump merges. No other test reads
-  # a secret.
+  # Tests for the inline script in .github/workflows/pr-automerge.yml, run
+  # against a fake GitHub client. Also not a required status check.
+  automerge-tests:
+    name: Auto-merge tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+
+      - name: Run pr-automerge tests
+        run: node --test .github/scripts/tests/pr-automerge.test.mjs
+
+  # Dependabot PRs run the full test suite: a dependency bump is exactly the
+  # change the tests must vet, and none of these jobs needs a secret.
   discover-tests:
     name: Discover Test Projects
     runs-on: ubuntu-latest
@@ -209,67 +228,23 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Discover test projects
         id: discover
-        env:
-          # The branch, not the actor: see the env comment at the top.
-          DEPENDABOT: ${{ startsWith(github.head_ref || github.ref_name, 'dependabot/') }}
-        run: |
-          matrix_json=$(python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+        # discover_tests.py (tested in .github/scripts/tests) resolves
+        # IsTestProject for each project under tests/ and appends the matrix
+        # and has_tests. It fails when projects exist but none is a test
+        # project, since a skipped matrix would pass "Test Suite".
+        run: python3 .github/scripts/discover_tests.py --output "$GITHUB_OUTPUT"
 
-          projects = []
-          for csproj in sorted(Path("tests").glob("**/*.csproj")):
-              folder = csproj.parent.name
-              lowered = folder.lower()
-              test_id = lowered.replace(".", "-").replace("_", "-")
-              is_e2e = "e2e" in lowered
-              csproj_text = csproj.read_text()
-              uses_playwright = "Microsoft.Playwright" in csproj_text
-              if uses_playwright and os.environ.get("DEPENDABOT") == "true":
-                  # Credentialed E2E: never on an unreviewed Dependabot bump.
-                  continue
-              # Playwright projects must be built before browsers can be installed.
-              prebuild = is_e2e or uses_playwright
-              projects.append(
-                  {
-                      "project_path": csproj.as_posix(),
-                      "test_name": folder,
-                      "test_id": test_id,
-                      "build_before_test": prebuild,
-                      "no_build": prebuild,
-                      "requires_playwright": uses_playwright,
-                      "verbosity": "normal" if is_e2e else "minimal",
-                  }
-              )
-
-          print(json.dumps({"include": projects}))
-          PY
-          )
-
-          {
-            echo "matrix<<EOF"
-            echo "$matrix_json"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-          project_count=$(echo "$matrix_json" | jq '.include | length')
-          if [ "$project_count" -eq 0 ]; then
-            # Expected while the repo is being bootstrapped: skip the test
-            # matrix instead of failing CI.
-            echo "has_tests=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No test projects found under tests/ — skipping tests."
-          else
-            echo "has_tests=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Discovered ${project_count} test projects under tests/"
-          fi
-
+  # Each matrix job restores and builds its own test project. Measured on
+  # #144: sharing the build job's output (with --no-build) saved nothing,
+  # because packing and downloading it costs as much as the build, and one
+  # job running every project used 60% fewer runner-minutes but took about
+  # 1.5 minutes longer. So the matrix stays, with no build cache.
   test:
     if: ${{ needs.discover-tests.outputs.has_tests == 'true' }}
     name: "Tests: ${{ matrix.test_name }}"
@@ -282,6 +257,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover-tests.outputs.matrix) }}
 
+    # Test secrets reach this job only, never the build or lint jobs, through
+    # the "Load test secrets" step below. Other per-repo variables go in
+    # .github/ci/prepare.sh, which can append them to $GITHUB_ENV.
     env:
       ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
       # Enable Playwright trace/video/screenshot capture for E2E jobs
@@ -290,17 +268,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ github.workspace }}/.nuget/packages
           key: >-
@@ -312,8 +290,27 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Matrix values come from the PR's test project paths: pass them through
-      # the environment rather than interpolating them into scripts.
+      # The repo's optional TEST_ENV secret holds NAME=value lines, such as
+      # MongoDB__ConnectionString=...; load_test_env.py (tested in
+      # .github/scripts/tests) masks each value and exports it to the later
+      # steps. One fixed secret keeps repo values out of this Owned file.
+      # Unset, as on every Dependabot run, it exports nothing, and the
+      # fixtures that need a secret fall back to fake settings.
+      - name: Load test secrets
+        env:
+          TEST_ENV: ${{ secrets.TEST_ENV }}
+        run: python3 .github/scripts/load_test_env.py --output "$GITHUB_ENV"
+
+      # Repo-specific setup for this test project (a Seed file the repo
+      # owns), such as publishing a project or pulling images it needs.
+      - name: Prepare tests
+        env:
+          TEST_NAME: ${{ matrix.test_name }}
+        run: |
+          if [ -f .github/ci/prepare.sh ]; then
+            bash .github/ci/prepare.sh test "$TEST_NAME"
+          fi
+
       - name: Build test project
         if: ${{ matrix.build_before_test }}
         env:
@@ -338,6 +335,8 @@ jobs:
 
       - name: Run tests
         id: run-tests
+        # Matrix values come from PR-controlled file names, so they reach the
+        # shell as quoted environment variables, never as interpolated text.
         env:
           PROJECT_PATH: ${{ matrix.project_path }}
           TEST_ID: ${{ matrix.test_id }}
@@ -346,19 +345,18 @@ jobs:
         run: |
           mkdir -p test-results
 
-          no_build_arg=()
+          no_build_arg=""
           if [ "$NO_BUILD" = "true" ]; then
-            no_build_arg=(--no-build)
+            no_build_arg="--no-build"
           fi
 
-          # Microsoft Testing Platform is enabled via global.json for .NET 10, so
-          # the coverage and xUnit report args are passed directly to the MTP runner
-          # instead of the legacy VSTest collector/Logger syntax.
-          # .NET 10 uses Microsoft Testing Platform (MTP), which accepts the
-          # xUnit TRX report option but not the legacy VSTest coverage flags.
+          # global.json runs dotnet test on Microsoft Testing Platform, so the
+          # TRX report comes from xunit.v3 and the Cobertura coverage from
+          # Microsoft.Testing.Extensions.CodeCoverage, not VSTest's logger
+          # and collector.
           dotnet test "$PROJECT_PATH" \
             --configuration Release \
-            "${no_build_arg[@]}" \
+            $no_build_arg \
             --verbosity "$VERBOSITY" \
             --results-directory "$GITHUB_WORKSPACE/test-results" \
             --report-xunit-trx \
@@ -373,7 +371,7 @@ jobs:
           exit $exit_code
 
       - name: Upload test results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: test-results-${{ matrix.test_id }}
@@ -387,7 +385,7 @@ jobs:
         run: echo "dir=$(dirname "$PROJECT_PATH")" >> "$GITHUB_OUTPUT"
 
       - name: Upload Playwright diagnostics
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() && matrix.requires_playwright }}
         with:
           name: playwright-artifacts-${{ matrix.test_id }}
@@ -406,17 +404,17 @@ jobs:
       - test
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
 
       - name: Download coverage reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: coverage-reports
 
@@ -432,47 +430,55 @@ jobs:
             -filefilters:"-**/obj/**/*.cs;-**/*.generated.cs" \
             -verbosity:verbose || echo "::warning::No coverage files found"
 
+      # This job only runs when test projects exist, so a missing or empty
+      # report is a failure too, not a reason to skip the gate.
       - name: Check coverage threshold
         run: |
           summary_json="./coverage-output/Summary.json"
-          if [ -f "./coverage-output/Summary.json" ]; then
-            echo "=== Summary.json raw ==="
-            cat "$summary_json" | jq . || true
-            coverable_expr='.summary.coverablelines // '
-            coverable_expr+='.summary.coverableLines // '
-            coverable_expr+='.coverablelines // .coverableLines // 0'
-            coverable_lines=$(jq -r "$coverable_expr" \
-              "$summary_json" 2>/dev/null || echo "0")
-            coverage_expr='.summary.linecoverage // .lineCoverage // 0'
-            coverage=$(jq -r "$coverage_expr" \
-              "$summary_json" 2>/dev/null || echo "0")
-            echo "Line Coverage: $coverage%"
-            if [ "$coverable_lines" = "0" ]; then
-              echo "::warning::No coverable lines found in Summary.json"
-              echo "::warning::Skipping threshold check"
-            else
-              if (( $(echo "$coverage < 80" | bc -l) )); then
-                echo "::warning::Code coverage is below 80% threshold"
-                echo "::warning::$coverage% (required: 80%)"
-                echo "::warning::Continuing without failing the workflow"
-              else
-                echo "::notice::Coverage gate passed: $coverage% >= 80%"
-              fi
-            fi
-          else
-            echo "::warning::Coverage report not available"
-            echo "::warning::Skipping threshold check"
+          if [ ! -f "$summary_json" ]; then
+            echo "::error::Coverage report not available: $summary_json"
+            exit 1
           fi
+          echo "=== Summary.json raw ==="
+          jq . "$summary_json" || true
+          coverable_expr='.summary.coverablelines // '
+          coverable_expr+='.summary.coverableLines // '
+          coverable_expr+='.coverablelines // .coverableLines // 0'
+          coverable_lines=$(jq -r "$coverable_expr" \
+            "$summary_json" 2>/dev/null || echo "0")
+          coverage_expr='.summary.linecoverage // .lineCoverage // 0'
+          coverage=$(jq -r "$coverage_expr" \
+            "$summary_json" 2>/dev/null || echo "0")
+          echo "Line Coverage: $coverage%"
+          if [ "$coverable_lines" = "0" ]; then
+            echo "::error::No coverable lines found in Summary.json"
+            exit 1
+          fi
+          # The threshold is per repo: the Seed .github/ci/coverage-threshold
+          # holds a whole percentage, 80 when the file is missing.
+          threshold=80
+          if [ -f .github/ci/coverage-threshold ]; then
+            threshold=$(tr -d '[:space:]' < .github/ci/coverage-threshold)
+          fi
+          if ! [[ "$threshold" =~ ^[0-9]+$ ]] || (( threshold > 100 )); then
+            echo "::error::.github/ci/coverage-threshold must hold a whole percentage, not '$threshold'"
+            exit 1
+          fi
+          if (( $(echo "$coverage < $threshold" | bc -l) )); then
+            echo "::error::Code coverage $coverage% is below the $threshold% threshold"
+            exit 1
+          fi
+          echo "::notice::Coverage gate passed: $coverage% >= $threshold%"
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: coverage-reports
           path: coverage-output
 
       - name: Publish to Codecov
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         if: always()
         with:
           files: ./coverage-output/Cobertura.xml
@@ -482,7 +488,8 @@ jobs:
 
   report:
     if: ${{ always() }}
-    name: Test Report Summary
+    # A required status check on main's ruleset: keep this name stable.
+    name: Test Suite
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # publish-unit-test-result-action writes a check run and a PR comment.
@@ -492,28 +499,33 @@ jobs:
       pull-requests: write
       issues: read
     needs:
+      - changes
       - build
       - discover-tests
       - test
+      - coverage
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Download all test results
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: all-test-results
 
-      # Dependabot runs get a read-only token whatever the job asks for, so the
-      # check run and PR comment this writes can't be published there. The
-      # status step below still fails the job when a test did.
+      # Dependabot and fork PR runs get a read-only token whatever the job
+      # asks for, so the check run and PR comment this writes can't be
+      # published there. The status step below still fails the job when a
+      # test did.
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@d0a4676d0e0b938bc201470d88276b7c74c712b3  # v2.24.0
+        uses: EnricoMi/publish-unit-test-result-action@d0a4676d0e0b938bc201470d88276b7c74c712b3 # v2.24.0
         if: >-
           ${{ always() && needs.discover-tests.outputs.has_tests == 'true' &&
-          github.actor != 'dependabot[bot]' }}
+          github.actor != 'dependabot[bot]' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository) }}
         with:
           files: |
             all-test-results/**/*.trx
@@ -527,17 +539,24 @@ jobs:
           # PR-controlled project paths: read from the environment, not
           # interpolated into the script.
           TEST_MATRIX: ${{ needs.discover-tests.outputs.matrix }}
+          CHANGES_STATUS: ${{ needs.changes.result }}
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
           BUILD_STATUS: ${{ needs.build.result }}
           DISCOVER_STATUS: ${{ needs.discover-tests.result }}
           TEST_STATUS: ${{ needs.test.result }}
+          COVERAGE_STATUS: ${{ needs.coverage.result }}
         run: |
           {
             echo "## Test Execution Summary"
             echo ""
             echo "### Job Status"
+            if [ "$CHANGES_STATUS" = "success" ] && [ "$CODE_CHANGED" = "false" ]; then
+              echo "- **Docs-only change:** the build, tests and coverage were skipped."
+            fi
             echo "- **Build:** ${BUILD_STATUS}"
             echo "- **Discovered Tests:** ${DISCOVER_STATUS}"
             echo "- **Test Matrix:** ${TEST_STATUS}"
+            echo "- **Coverage gate:** ${COVERAGE_STATUS}"
             echo ""
             echo "### Artifacts"
             echo "- Test and coverage reports are in Actions artifacts"
@@ -550,11 +569,16 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           # This job is the required status check that stands in for the
-          # dynamically named "Tests: …" matrix jobs, so it must fail when
-          # they do. A skipped test matrix (no test projects) still passes.
-          if [[ "$BUILD_STATUS" =~ ^(failure|cancelled)$ \
+          # dynamically named "Tests: …" matrix jobs and the coverage
+          # gate, so it must fail when any of them does. A skipped test
+          # matrix (no test projects, or a docs-only change) still passes, but
+          # only when the changes job itself succeeded: if it failed, the build
+          # was skipped for the wrong reason.
+          if [[ "$CHANGES_STATUS" != "success" \
+            || "$BUILD_STATUS" =~ ^(failure|cancelled)$ \
             || "$DISCOVER_STATUS" =~ ^(failure|cancelled)$ \
-            || "$TEST_STATUS" =~ ^(failure|cancelled)$ ]]; then
+            || "$TEST_STATUS" =~ ^(failure|cancelled)$ \
+            || "$COVERAGE_STATUS" =~ ^(failure|cancelled)$ ]]; then
             echo "❌ **Overall Status:** FAILED" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           else

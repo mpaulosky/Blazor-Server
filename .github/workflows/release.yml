@@ -13,96 +13,142 @@ name: Release
         required: true
         type: string
 
-permissions:
-  contents: write
-  pull-requests: write
+# Each job grants only what it needs.
+permissions: {}
 
 env:
   # Model for the AI Summary in release blog posts (used only when the
   # ANTHROPIC_API_KEY secret is set).
   ANTHROPIC_MODEL: claude-sonnet-5
 
+# One group for every run that can release, so releases never overlap and
+# versions follow merge order. GitHub keeps only the newest pending run in a
+# group and cancels the one it replaces, so each run releases every merged PR
+# still owed a release (see the plan job), not just the PR that started it: a
+# cancelled run's PR goes out with the next one. A run that can't release (an
+# unmerged PR closing, a PR into another branch, a dispatch from a branch) gets
+# a group of its own, so it can't replace a pending release run and then do
+# nothing. The condition is the plan job's `if`; keep the two in step.
 concurrency:
-  group: release-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: >-
+    ${{ ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+    (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'))
+    && 'release-main' || format('release-ignored-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  plan:
+    # Publishes tags, releases and a docs PR, so a manual run must come from
+    # main, never from a branch's copy of this file. The concurrency group at
+    # the top uses the same condition.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.pull_request.merged == true &&
       github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.queue.outputs.prs }}
+    steps:
+      - name: Checkout main
+        # zizmor: ignore[artipacked] release_queue.py fetches main again with this read-only credential.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          # Tags and history, to tell which merges the newest release holds.
+          fetch-depth: 0
+
+      - name: List the PRs to release
+        id: queue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # A manual run goes through the same list as a merge, so it can't
+          # release a newer PR ahead of an older one still owed a release. A
+          # PR that's already released isn't listed; the docs job still
+          # re-delivers its post if main lacks it.
+          PR_NUMBER="${INPUT_PR_NUMBER:-$EVENT_PR_NUMBER}"
+          PR_NUMBER="${PR_NUMBER#\#}"
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::pr_number must be a PR number, got '${PR_NUMBER}'."
+            exit 1
+          fi
+          PRS=$(python3 .github/scripts/release_queue.py --repo "$REPOSITORY" --pr "$PR_NUMBER")
+          echo "Releasing, in order: ${PRS}"
+          echo "prs=${PRS}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: plan
+    if: needs.plan.outputs.prs != '' && needs.plan.outputs.prs != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # "Resolve PR metadata" reads the PR.
+      pull-requests: read
+    # One PR at a time, oldest merge first. Not fail-fast, so one PR's failure
+    # is reported without cancelling the rest; the ordering check in "Reserve
+    # release tag" still stops any PR from overtaking one that wasn't
+    # released.
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.plan.outputs.prs) }}
     steps:
       - name: Checkout main
         # zizmor: ignore[artipacked] this job pushes with the checkout's credential.
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           fetch-depth: 0
-          # A PAT (not GITHUB_TOKEN) is required here: it's persisted as the
-          # git credential for this checkout, and later used by `git push` to
-          # publish the release-notes branch and by `gh pr create` to open
-          # the PR. GitHub treats PRs authored by github-actions[bot] (i.e.
-          # opened via GITHUB_TOKEN) as untrusted and gates every
-          # pull_request-triggered workflow behind a manual "Approve and run"
-          # click. Authoring as a real collaborator (via RELEASE_PR_PAT)
-          # avoids that approval requirement entirely, so the PR's
-          # pull_request checks (lint, CodeQL) start on their own. Falls back
-          # to GITHUB_TOKEN if the PAT secret isn't configured, in which case
-          # those checks wait for a manual "Approve and run".
+          # Persisted as the git credential that pushes the release tag. Same
+          # PAT-with-fallback as the docs job (see the comment there).
           token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Resolve PR metadata
         id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
-          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
-          EVENT_TITLE: ${{ github.event.pull_request.title }}
-          EVENT_URL: ${{ github.event.pull_request.html_url }}
-          EVENT_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          EVENT_LABELS_CSV: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ matrix.pr }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          if [ -n "$INPUT_PR_NUMBER" ]; then
-            PR_NUMBER="$INPUT_PR_NUMBER"
-            PR_JSON=$(gh api \
-              "repos/${REPOSITORY}/pulls/${PR_NUMBER}" \
-              --jq '{
-                number: .number,
-                title: .title,
-                html_url: .html_url,
-                merged: .merged,
-                merge_commit_sha: (.merge_commit_sha // ""),
-                labels: [.labels[].name]
-              }')
+          PR_JSON=$(gh api \
+            "repos/${REPOSITORY}/pulls/${PR_NUMBER}" \
+            --jq '{
+              number: .number,
+              title: .title,
+              html_url: .html_url,
+              merged: .merged,
+              base_ref: .base.ref,
+              merge_commit_sha: (.merge_commit_sha // ""),
+              labels: [.labels[].name]
+            }')
 
-            MERGED=$(echo "$PR_JSON" | jq -r '.merged')
-            if [ "$MERGED" != "true" ]; then
-              echo "PR #${PR_NUMBER} is not merged; skipping."
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
-            TITLE=$(echo "$PR_JSON" | jq -r '.title')
-            URL=$(echo "$PR_JSON" | jq -r '.html_url')
-            MERGE_SHA=$(echo "$PR_JSON" | jq -r '.merge_commit_sha')
-            LABELS=$(echo "$PR_JSON" | jq -c '.labels')
-          else
-            PR_NUMBER="$EVENT_PR_NUMBER"
-            TITLE="$EVENT_TITLE"
-            URL="$EVENT_URL"
-            MERGE_SHA="$EVENT_MERGE_SHA"
-            LABELS=$(printf '%s' "$EVENT_LABELS_CSV" | jq -Rc 'if length == 0 then [] else split(",") end')
+          MERGED=$(echo "$PR_JSON" | jq -r '.merged')
+          if [ "$MERGED" != "true" ]; then
+            echo "PR #${PR_NUMBER} is not merged; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          if [ -z "$PR_NUMBER" ]; then
-            echo "Unable to resolve PR number."
-            exit 1
+          # Only PRs merged into main are released; a manual run is held to
+          # the same rule.
+          BASE_REF=$(echo "$PR_JSON" | jq -r '.base_ref')
+          if [ "$BASE_REF" != "main" ]; then
+            echo "PR #${PR_NUMBER} was merged into '${BASE_REF}', not main; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          LABELS=$(echo "${LABELS:-[]}" | jq -c '.' 2>/dev/null || echo '[]')
+          TITLE=$(echo "$PR_JSON" | jq -r '.title')
+          URL=$(echo "$PR_JSON" | jq -r '.html_url')
+          MERGE_SHA=$(echo "$PR_JSON" | jq -r '.merge_commit_sha')
+          LABELS=$(echo "$PR_JSON" | jq -c '.labels // []')
 
           {
             echo "skip=false"
@@ -137,23 +183,55 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          MARKER="Source PR: #${PR_NUMBER}"
-          MATCHES=$(gh api "repos/${REPOSITORY}/releases?per_page=100" --paginate \
-            | jq -rs --arg marker "$MARKER" '[.[][] | select((.body // "") | contains($marker))] | length')
+          # Match the whole "Source PR: #n" line, so PR #1 doesn't match a
+          # release for #10. Drafts don't count: the planner and the ordering
+          # guard ignore them too, so a PR named only by a draft is still owed
+          # a published Release (and "Create release" publishes the draft).
+          EXISTING_TAG=$(gh api "repos/${REPOSITORY}/releases?per_page=100" --paginate \
+            | jq -rs --arg n "$PR_NUMBER" \
+              '[.[][] | select(.draft | not) | select((.body // "") | test("(^|\\n)\\s*Source PR: #" + $n + "\\s*(\\r?\\n|$)")) | .tag_name] | first // empty')
 
-          if [ "${MATCHES:-0}" -gt 0 ]; then
+          if [ -n "$EXISTING_TAG" ]; then
             echo "already_released=true" >> "$GITHUB_OUTPUT"
-            echo "Release already exists for PR #${PR_NUMBER}."
+            echo "tag=$EXISTING_TAG" >> "$GITHUB_OUTPUT"
+            echo "Release ${EXISTING_TAG} already exists for PR #${PR_NUMBER}; nothing to release."
           else
             echo "already_released=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Compute next version
+      # Pushing the tag is the lock: if another release took the version
+      # first, the push is rejected and the next version is tried.
+      - name: Reserve release tag
         if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true'
         id: version
         env:
           LABELS_JSON: ${{ steps.pr.outputs.labels }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          MERGE_SHA: ${{ steps.pr.outputs.merge_sha }}
+          QUEUE_JSON: ${{ needs.plan.outputs.prs }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Versions follow merge order: every PR ahead of this one in the
+          # queue must already have a published Release. A tag alone isn't
+          # enough: a run can push its tag and fail before the Release. If one
+          # is missing, stop; the next run releases both, in order.
+          RELEASED_PRS=$(gh api "repos/${REPOSITORY}/releases?per_page=100" --paginate \
+            --jq '.[] | select(.draft | not) | .body // ""' \
+            | sed -n 's/^[[:space:]]*Source PR: #\([0-9]*\)[[:space:]]*$/\1/p')
+          for EARLIER in $(echo "$QUEUE_JSON" | jq -r --argjson pr "$PR_NUMBER" '.[:index($pr)][]'); do
+            if ! grep -qx "$EARLIER" <<< "$RELEASED_PRS"; then
+              echo "::error::PR #${EARLIER} merged before #${PR_NUMBER} but has no published Release yet, so #${PR_NUMBER} isn't released ahead of it."
+              exit 1
+            fi
+          done
+
+          # Tag the PR's merge commit, not whatever main points at by now.
+          TARGET="${MERGE_SHA:-$(git rev-parse HEAD)}"
+
           # any() is required: with `.[] | test(...)`, jq -e exits on the
           # last label only, so e.g. ["semver:minor","bug"] would miss minor.
           BUMP="patch"
@@ -161,137 +239,59 @@ jobs:
             BUMP="major"
           elif echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):minor$"))' >/dev/null; then
             BUMP="minor"
-          elif echo "$LABELS_JSON" | jq -e 'any(.[]; test("^(semver|release):patch$"))' >/dev/null; then
-            BUMP="patch"
           fi
 
-          # Base on the highest release tag by version, then bump exactly
-          # once. Not `git describe`: that returns the nearest ancestor tag,
-          # which isn't guaranteed to be the highest version. `|| true` keeps
-          # a repo with no release tags yet (grep exits 1) on the fallback
-          # below if the step ever runs with pipefail.
-          LAST_TAG=$(git tag --list 'v[0-9]*' --sort=-v:refname \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)
-          LAST_TAG="${LAST_TAG:-v0.0.0}"
-          BASE_VERSION="${LAST_TAG#v}"
+          NEXT_TAG=""
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet --force --tags origin
 
-          if ! echo "$BASE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            BASE_VERSION="0.0.0"
-          fi
+            # A tag left by an earlier run that failed before its Release was
+            # created is reused rather than orphaned.
+            REUSED=$(git for-each-ref 'refs/tags/v*' --format='%(refname:short)|%(contents:subject)' \
+              | awk -F'|' -v s="from PR #${PR_NUMBER}" 'substr($2, length($2) - length(s) + 1) == s { print $1; exit }')
+            if [ -n "$REUSED" ]; then
+              NEXT_TAG="$REUSED"
+              BASE_VERSION="${REUSED#v}"
+              echo "Reusing tag ${NEXT_TAG} from an earlier run."
+              break
+            fi
 
-          MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
-          MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
-          PATCH=$(echo "$BASE_VERSION" | cut -d. -f3)
+            # Base on the highest release tag by version, then bump exactly
+            # once. Not `git describe`: that returns the nearest ancestor tag,
+            # which isn't guaranteed to be the highest version.
+            LAST_TAG=$(git tag --list 'v[0-9]*' --sort=-v:refname \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)
+            BASE_VERSION="${LAST_TAG#v}"
+            BASE_VERSION="${BASE_VERSION:-0.0.0}"
+            IFS=. read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+            case "$BUMP" in
+              major) CANDIDATE="v$((MAJOR+1)).0.0" ;;
+              minor) CANDIDATE="v${MAJOR}.$((MINOR+1)).0" ;;
+              *) CANDIDATE="v${MAJOR}.${MINOR}.$((PATCH+1))" ;;
+            esac
 
-          case "$BUMP" in
-            major)
-              NEXT_VERSION="$((MAJOR+1)).0.0"
-              ;;
-            minor)
-              NEXT_VERSION="${MAJOR}.$((MINOR+1)).0"
-              ;;
-            *)
-              NEXT_VERSION="${MAJOR}.${MINOR}.$((PATCH+1))"
-              ;;
-          esac
-
-          NEXT_TAG="v${NEXT_VERSION}"
-          while git rev-parse "$NEXT_TAG" >/dev/null 2>&1; do
-            NEXT_MAJOR=$(echo "$NEXT_VERSION" | cut -d. -f1)
-            NEXT_MINOR=$(echo "$NEXT_VERSION" | cut -d. -f2)
-            NEXT_PATCH=$(echo "$NEXT_VERSION" | cut -d. -f3)
-            NEXT_PATCH=$((NEXT_PATCH+1))
-            NEXT_VERSION="${NEXT_MAJOR}.${NEXT_MINOR}.${NEXT_PATCH}"
-            NEXT_TAG="v${NEXT_VERSION}"
+            git tag -a "$CANDIDATE" "$TARGET" -m "Release ${CANDIDATE} from PR #${PR_NUMBER}"
+            if git push origin "refs/tags/${CANDIDATE}"; then
+              NEXT_TAG="$CANDIDATE"
+              break
+            fi
+            echo "::notice::${CANDIDATE} was taken by a concurrent release; retrying (attempt ${attempt})."
+            git tag -d "$CANDIDATE"
+            sleep $((attempt * 3))
           done
+
+          if [ -z "$NEXT_TAG" ]; then
+            echo "::error::Could not reserve a release tag after 5 attempts."
+            exit 1
+          fi
 
           {
             echo "bump=$BUMP"
             echo "base_version=$BASE_VERSION"
-            echo "next_version=$NEXT_VERSION"
             echo "tag=$NEXT_TAG"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Update release blog and README files
-        if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true'
-        id: docs
-        env:
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-          TAG: ${{ steps.version.outputs.tag }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-          # Optional: without it (or when the API fails) the post is written
-          # without the AI Summary section and the release carries on.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          python3 .github/scripts/release_post.py --pr "$PR_NUMBER" --tag "$TAG"
-
-          # git status (not git diff) so brand-new, still-untracked files count.
-          if [ -z "$(git status --porcelain -- docs/blogs README.md docs/README.md docs/index.html)" ]; then
-            echo "docs_changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "docs_changed=true" >> "$GITHUB_OUTPUT"
-
-      # continue-on-error lets the tag and GitHub Release below go out even
-      # when the docs PR can't be delivered. The "Report docs PR failure"
-      # step at the end then fails the run, so the problem isn't hidden.
-      - name: Commit and push docs updates
-        if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true' && steps.docs.outputs.docs_changed == 'true'
-        id: commit
-        continue-on-error: true
-        env:
-          # Same PAT-with-fallback as the checkout step (see comment there);
-          # gh pr create authors the PR as whichever identity this token
-          # belongs to.
-          GH_TOKEN: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
-          HAS_RELEASE_PR_PAT: ${{ secrets.RELEASE_PR_PAT != '' }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Stage only paths that exist; git add fails on a missing pathspec
-          # (e.g. docs/index.html in a repo that has removed it).
-          for path in docs/blogs README.md docs/README.md docs/index.html; do
-            if [ -e "$path" ]; then
-              git add -- "$path"
-            fi
-          done
-
-          if git diff --cached --quiet; then
-            echo "committed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # main is rules-protected and requires a pull request, so the docs
-          # update goes out on its own branch/PR rather than a direct push.
-          # The [skip-release] marker keeps this PR's own merge from
-          # triggering another run of this workflow.
-          BRANCH="docs/release-notes-pr-${PR_NUMBER}"
-          # Return to main even if a later command fails, so the tag step
-          # below never tags the unmerged docs commit.
-          trap 'git checkout --quiet main' EXIT
-          git checkout -b "$BRANCH"
-          git commit -m "docs: add release blog for PR #${PR_NUMBER} [skip-release]"
-          git push origin "$BRANCH"
-          git checkout main
-
-          if [ "$HAS_RELEASE_PR_PAT" != "true" ]; then
-            echo "::notice::RELEASE_PR_PAT is not set, so $BRANCH is pushed and opened with GITHUB_TOKEN. Its pull_request workflow runs (lint, CodeQL) need a manual \"Approve and run\" before they start, and auto-merge waits on them. Set RELEASE_PR_PAT to avoid this."
-          fi
-
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "docs: add release blog for PR #${PR_NUMBER} [skip-release]" \
-            --body "Automated release-notes update generated for #${PR_NUMBER}. Opened by the release workflow; the [skip-release] title marker keeps its own merge from starting another release."
-
-          gh pr merge "$BRANCH" --auto --squash
-
-          echo "committed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Create tag and release
+      - name: Create release
         if: steps.files.outputs.eligible == 'true' && steps.idempotency.outputs.already_released != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -302,16 +302,7 @@ jobs:
           BUMP: ${{ steps.version.outputs.bump }}
           BASE_VERSION: ${{ steps.version.outputs.base_version }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag ${TAG} already exists locally."
-          else
-            git tag -a "$TAG" -m "Release ${TAG} from PR #${PR_NUMBER}"
-            git push origin "$TAG"
-          fi
-
+          # "Reserve release tag" already pushed the tag at the merge commit.
           EXTRA_NOTES=$(cat <<EOF
           Source PR: #${PR_NUMBER}
           Source PR URL: ${PR_URL}
@@ -320,7 +311,19 @@ jobs:
           EOF
           )
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "none")
+          if [ "$IS_DRAFT" = "true" ]; then
+            # A draft doesn't count as released anywhere in this workflow, so
+            # publish it rather than leave the PR owed forever. draft_release.py
+            # appends these notes unless the draft already names the PR, and
+            # fails on a draft that names another one.
+            printf '%s\n' "$EXTRA_NOTES" > "$RUNNER_TEMP/release-notes.txt"
+            gh release view "$TAG" --json body --jq '.body' > "$RUNNER_TEMP/draft-body.txt"
+            BODY=$(python3 .github/scripts/draft_release.py --pr "$PR_NUMBER" --tag "$TAG" \
+              --notes-file "$RUNNER_TEMP/release-notes.txt" < "$RUNNER_TEMP/draft-body.txt")
+            gh release edit "$TAG" --draft=false --notes "$BODY"
+            echo "Published the draft Release ${TAG}."
+          elif [ "$IS_DRAFT" = "false" ]; then
             echo "Release ${TAG} already exists."
           else
             gh release create "$TAG" \
@@ -330,28 +333,129 @@ jobs:
               --verify-tag
           fi
 
-      - name: Report docs PR failure
-        if: always() && steps.commit.outcome == 'failure'
-        env:
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          MESSAGE="The release-notes PR for #${PR_NUMBER} (branch docs/release-notes-pr-${PR_NUMBER}) was not delivered. See the \"Commit and push docs updates\" step. If gh pr create was refused, add the RELEASE_PR_PAT secret or allow GitHub Actions to create pull requests in the repository settings."
-          echo "::error title=Release-notes PR not delivered::${MESSAGE}"
-          {
-            echo "### :x: Release-notes PR not delivered"
-            echo ""
-            echo "${MESSAGE}"
-            echo ""
-            echo "The tag and GitHub Release steps for ${TAG:-n/a} still ran; check them separately."
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-
       - name: Summary
         if: always()
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number || 'n/a' }}
+          ELIGIBLE: ${{ steps.files.outputs.eligible || 'n/a' }}
+          ALREADY_RELEASED: ${{ steps.idempotency.outputs.already_released || 'n/a' }}
+          TAG: ${{ steps.version.outputs.tag || steps.idempotency.outputs.tag || 'n/a' }}
         run: |
-          echo "PR: #${{ steps.pr.outputs.number || 'n/a' }}"
-          echo "Eligible: ${{ steps.files.outputs.eligible || 'n/a' }}"
-          echo "Already released: ${{ steps.idempotency.outputs.already_released || 'n/a' }}"
-          echo "Tag: ${{ steps.version.outputs.tag || 'n/a' }}"
-          echo "Docs PR step: ${{ steps.commit.outcome || 'n/a' }}"
+          echo "PR: #${PR_NUMBER}"
+          echo "Eligible: ${ELIGIBLE}"
+          echo "Already released: ${ALREADY_RELEASED}"
+          echo "Tag: ${TAG}"
+
+  # One blog PR per run, not one per released PR. Each would start from main
+  # and rewrite the same README and blog tables, so after the first merged the
+  # rest would conflict. This job writes a post for every Release that main
+  # has no post for yet (so a post from an earlier, still-open blog PR is
+  # included again), rebuilds the tables once, and force-pushes the result to
+  # one branch, so there's never more than one blog PR open.
+  docs:
+    needs: [plan, release]
+    # Also after a failed or skipped release job: the Releases that did go out
+    # still get their posts, and a manual run re-delivers a missing one.
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        # zizmor: ignore[artipacked] this job pushes with the checkout's credential.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          # A PAT (not GITHUB_TOKEN) is required here: it's persisted as the
+          # git credential for this checkout, and later used by `git push` to
+          # publish the release-notes branch and by `gh pr create` to open
+          # the PR. GitHub treats PRs authored by github-actions[bot] (i.e.
+          # opened via GITHUB_TOKEN) as untrusted and gates every
+          # pull_request-triggered workflow behind a manual "Approve and run"
+          # click. Authoring as a real collaborator (via RELEASE_PR_PAT)
+          # avoids that approval requirement entirely, so the PR's
+          # pull_request checks (lint, CodeQL) start on their own. Falls back
+          # to GITHUB_TOKEN if the PAT secret isn't configured, in which case
+          # those checks wait for a manual "Approve and run".
+          token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Write missing blog posts and release tables
+        id: docs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          # Optional: without it (or when the API fails) a post is written
+          # without the AI Summary section and the release carries on.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          QUEUE: ${{ needs.plan.outputs.prs }}
+        run: |
+          # The release list can lag a Release published seconds ago, so name
+          # the PRs this run released: the script lists again until each has
+          # one, for up to half a minute.
+          python3 .github/scripts/backfill_blog_posts.py --wait-for-prs "$(jq -r 'join(",")' <<< "${QUEUE:-[]}")"
+
+          # git status (not git diff) so brand-new, still-untracked files count.
+          if [ -z "$(git status --porcelain -- docs/blogs README.md docs/README.md docs/index.html)" ]; then
+            echo "Every Release already has its post on main; no blog PR needed."
+            echo "docs_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The PRs whose posts were written, from the new files' names
+          # (docs/blogs/{date}-pr-{n}-{slug}.md), oldest first.
+          PRS=$(git status --porcelain --untracked-files=all -- docs/blogs \
+            | sed -n 's|^?? docs/blogs/[0-9-]*-pr-\([0-9]*\)-.*\.md$|\1|p' | sort -n | paste -sd ' ')
+          echo "docs_changed=true" >> "$GITHUB_OUTPUT"
+          echo "prs=${PRS}" >> "$GITHUB_OUTPUT"
+
+      # main is rules-protected and requires a pull request, so the posts go
+      # out on their own branch and PR. The [skip-release] title marker keeps
+      # that PR's merge from starting another release.
+      - name: Open or update the blog PR
+        if: steps.docs.outputs.docs_changed == 'true'
+        env:
+          # Same PAT-with-fallback as the checkout step; gh pr create authors
+          # the PR as whichever identity this token belongs to.
+          GH_TOKEN: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
+          HAS_RELEASE_PR_PAT: ${{ secrets.RELEASE_PR_PAT != '' }}
+          PRS: ${{ steps.docs.outputs.prs }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="docs/release-notes"
+          LIST=$(for n in $PRS; do printf '#%s, ' "$n"; done | sed 's/, $//')
+          if [ "$(wc -w <<< "$PRS")" -eq 1 ]; then
+            TITLE="docs: add release blog for PR ${LIST} [skip-release]"
+          else
+            TITLE="docs: add release blogs for PR ${LIST} [skip-release]"
+          fi
+
+          git checkout -B "$BRANCH"
+          # Stage only paths that exist; git add fails on a missing pathspec
+          # (e.g. docs/index.html in a repo that has removed it).
+          for path in docs/blogs README.md docs/README.md docs/index.html; do
+            if [ -e "$path" ]; then
+              git add -- "$path"
+            fi
+          done
+          git commit -m "$TITLE"
+          # Rebuilt from main on every run, so an open blog PR is updated in
+          # place (and gains any newer posts) instead of conflicting.
+          git push --force origin "$BRANCH"
+
+          if [ "$HAS_RELEASE_PR_PAT" != "true" ]; then
+            echo "::notice::RELEASE_PR_PAT is not set, so $BRANCH is pushed and opened with GITHUB_TOKEN. Its pull_request workflow runs (lint, CodeQL) need a manual \"Approve and run\" before they start, and auto-merge waits on them. Set RELEASE_PR_PAT to avoid this."
+          fi
+
+          BODY="Automated release blog posts for ${LIST}, opened by the release workflow. It holds every Release whose post isn't on main yet, rebuilt from main on each run. The [skip-release] title marker keeps its merge from starting another release."
+          EXISTING=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh pr edit "$EXISTING" --title "$TITLE" --body "$BODY"
+            echo "Updated the open blog PR #${EXISTING}." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$TITLE" --body "$BODY"
+          fi
+
+          gh pr merge "$BRANCH" --auto --squash

@@ -14,54 +14,68 @@ name: PR Auto-Merge
 # its review of the head and stops counting its unresolved threads. Merges
 # from main don't count: the ruleset keeps branches up to date, so they would
 # use up the cap without a single fix. Threads anyone else opens still hold
-# the merge. docs/adr/0003-copilot-review-cap.md records the decision.
+# the merge.
 #
-# A PR Sandcastle handed back with sandcastle:needs-human never merges while it
-# carries the label, or when someone other than the repository owner last
-# removed it (see "Giving up on a PR" in docs/plans/sandcastle-workflow.md).
-# zizmor flags workflow_run as dangerous because it runs with write access
-# after a PR's workflows finish. That is safe here: the job never checks out
-# or executes PR code; it only reads PR state and merges through the API.
+# A PR labelled sandcastle:needs-human (Sandcastle's hand-back to a person)
+# never merges while it carries the label, or when someone other than the
+# repository owner last removed it. A repo that never uses the label is
+# unaffected.
+#
+# zizmor flags pull_request_target and workflow_run as dangerous because they
+# run with write access on PR events. That is safe here: neither path checks
+# out or executes PR code, as the comments below explain.
 "on":  # zizmor: ignore[dangerous-triggers]
-  pull_request:
+  # pull_request_target, not pull_request: it runs this file as it is on
+  # main, so a PR can't edit the script that decides whether it merges or
+  # reach the PAT. The job never checks out PR code.
+  pull_request_target:
     # unlabeled: the owner removing sandcastle:needs-human can make a PR ready.
     types: [opened, ready_for_review, reopened, edited, synchronize, unlabeled]
     branches: [main]
-  pull_request_review:
-    types: [submitted]
   # GitHub sends no check_suite events for suites created by Actions, and
   # every required check comes from one of these workflows, so their
   # completion is the signal that the checks may have gone green.
   workflow_run:
-    workflows: ["Build and Test Suite", "Lint Markdown", "Lint YAML", "CodeQL"]
+    workflows: ["Build and Test Suite", "Lint Markdown", "Lint YAML", "Lint Actions", "CodeQL"]
     types: [completed]
-  # Resolving a review thread has no Actions trigger, so a PR whose last
-  # blocker was an open thread is picked up by this sweep instead.
+  # Resolving a review thread has no Actions trigger, and pull_request_review
+  # would run the PR's own copy of this file with write access, so a PR whose
+  # last blocker was a review or an open thread is picked up by this sweep.
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+  # issues: read lets GITHUB_TOKEN list a PR's label events. The script reads
+  # them with GITHUB_TOKEN, not the PAT, so the PAT needs no Issues access.
   issues: read
   pull-requests: write
 
 jobs:
   merge-when-ready:
     name: Merge same-repo PRs when ready
+    # A manual sweep can merge every ready PR, so it runs only from main.
+    if: ${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Squash-merge when ready
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           HAS_RELEASE_PR_PAT: ${{ secrets.RELEASE_PR_PAT != '' }}
+          # Scoped by the permissions above; used only to read label events.
+          EVENTS_TOKEN: ${{ github.token }}
         with:
           # A merge made with GITHUB_TOKEN starts no workflows, so release.yml
           # (on: pull_request closed) would never run for it. Merge with the
           # PAT when it's set, the same fallback the release workflow uses.
+          # Every trigger runs main's copy of this file, never a PR's.
           github-token: ${{ secrets.RELEASE_PR_PAT || secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
+            // github authenticates with the PAT when it's set, which may lack
+            // Issues access; label events are read with GITHUB_TOKEN instead.
+            const eventsClient = getOctokit(process.env.EVENTS_TOKEN);
 
             // Sandcastle adds this label when it gives up on a PR and hands it
             // back to a person, who removes it once the PR may merge again.
@@ -148,20 +162,25 @@ jobs:
 
               // Someone with only triage access can remove the label too, and
               // would get a merge in before Sandcastle puts it back. Trust a
-              // removal only from the repository owner. Events come newest
-              // first, and every page is read so that other label changes
-              // can't hide the latest removal.
-              const events = await github.paginate(github.rest.issues.listEvents, {
+              // removal only from the repository owner. Events come oldest
+              // first, and every page is read, so the last change to this
+              // label is the latest one.
+              const events = await eventsClient.paginate(eventsClient.rest.issues.listEvents, {
                 owner,
                 repo,
                 issue_number: pullNumber,
                 per_page: 100
               });
-              const lastRemoval = events.find((event) => {
-                return event.event === "unlabeled" && event.label?.name === NEEDS_HUMAN;
+              const lastChange = events.findLast((event) => {
+                return (event.event === "labeled" || event.event === "unlabeled") && event.label?.name === NEEDS_HUMAN;
               });
-              const remover = lastRemoval?.actor?.login;
-              if (lastRemoval && remover !== owner) {
+              // Added after the snapshot was taken: it holds the merge too.
+              if (lastChange?.event === "labeled") {
+                core.info(`Skipping PR #${pullNumber}: ${NEEDS_HUMAN} was just added, so it waits for a person to remove the label.`);
+                return false;
+              }
+              const remover = lastChange?.actor?.login;
+              if (lastChange && remover !== owner) {
                 core.info(
                   `Skipping PR #${pullNumber}: ${NEEDS_HUMAN} was last removed by ` +
                   `@${remover ?? "unknown"}, not the repository owner @${owner}; ` +
@@ -173,22 +192,27 @@ jobs:
               return true;
             }
 
-            async function mergeIfReady(pullNumber) {
-              const pr = await getPullRequestStatus(pullNumber);
+            function isOpenSameRepoPr(pullNumber, pr) {
               if (!pr || pr.state !== "OPEN" || pr.isDraft || pr.isCrossRepository || pr.baseRefName !== "main") {
                 core.info(`Skipping PR #${pullNumber}: not an open, non-draft, same-repo PR into main.`);
+                return false;
+              }
+              return true;
+            }
+
+            async function mergeIfReady(pullNumber) {
+              let pr = await getPullRequestStatus(pullNumber);
+              if (!isOpenSameRepoPr(pullNumber, pr) || !(await isHandBackReadyToMerge(pullNumber, pr))) {
                 return;
               }
 
-              if (!(await isHandBackReadyToMerge(pullNumber, pr))) {
-                return;
-              }
-
-              // Re-check the current hand-back state immediately before the
-              // merge call so a freshly added label, or a new non-owner
-              // removal, cannot slip through after the initial readiness check.
-              const latestPr = await getPullRequestStatus(pullNumber);
-              if (!(await isHandBackReadyToMerge(pullNumber, latestPr))) {
+              // Reading the label events takes a while, so take a fresh
+              // snapshot and check the hand-back state again on it. Every
+              // check below reads this snapshot, so anything that changed
+              // meanwhile (a new label or thread, a new head, a failing
+              // check) counts, and the merge is pinned to its head.
+              pr = await getPullRequestStatus(pullNumber);
+              if (!isOpenSameRepoPr(pullNumber, pr) || !(await isHandBackReadyToMerge(pullNumber, pr))) {
                 return;
               }
 
@@ -291,7 +315,7 @@ jobs:
               core.info(`Squash-merged PR #${pullNumber} at ${pr.headRefOid}.`);
             }
 
-            // pull_request and pull_request_review events carry the PR;
+            // pull_request_target events carry the PR;
             // workflow_run carries only a commit; schedule and
             // workflow_dispatch sweep every open PR into main.
             let pullNumbers = [];

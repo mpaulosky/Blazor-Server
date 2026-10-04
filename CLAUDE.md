@@ -39,16 +39,20 @@ pnpm run check:sandcastle                             # type-check and test .san
 ```
 
 `scripts/gate.sh` is the definition of "ready to push": lint of the changed YAML, Markdown, workflows and shell
-scripts, the Copilot review sync check, the Sandcastle check when its files changed, then a Release build and each test
-project under `tests/`, run one by one. Don't use `dotnet test --solution` as the check: under Microsoft Testing
+scripts, then this repo's own checks in `.github/ci/gate-checks.sh` (the Copilot review sync check and the Sandcastle
+check, each when its files changed), then a Release build and each test project under `tests/`, run one by one.
+`scripts/gate.sh` is Owned by the repo-ci-baseline Template and overwritten on every Apply, so a new repo-only check
+goes in `gate-checks.sh`. Don't use `dotnet test --solution` as the check: under Microsoft Testing
 Platform it can report zero tests while the project runs pass. The pre-push hook runs the gate after its own branch
-checks (no pushes to `main`, `preview` or `dev`, and the naming rules below). Enable the hooks once per clone with
+checks (no pushes to `main`, `preview` or `dev`, the naming rules below, and a clean tree at the pushed commit), and
+skips it for a commit Sandcastle already gated. Enable the hooks once per clone with
 `git config core.hooksPath .github/hooks`.
 
 ## Git workflow
 
 - Never commit or push to `main`; the pre-push hook rejects it.
-- Branches: `feature/{issue}-{slug}`, `hotfix/{issue}-{slug}`, or `chore/{slug}` (lowercase kebab-case).
+- Branches: `feature/{issue}-{slug}`, `fix/{issue}-{slug}`, `hotfix/{issue}-{slug}`, or `chore/{slug}`, where a `chore/`
+  slug starts with a letter (lowercase kebab-case).
 - Commits: `<type>(<scope>): <Summary>` in the imperative, 72 characters or fewer, capitalized, no trailing period.
   Full rules in `.claude/rules/git-commit.md`.
 - Every merged PR triggers `release.yml`, which tags a release and opens a release-blog PR. A `[skip-release]` marker

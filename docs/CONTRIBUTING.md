@@ -33,12 +33,14 @@ Please report unwanted behavior to [Project Maintainer](mailto:matthew.paulosky@
 ## Quick Start
 
 1. Fork the repository and clone your fork.
-2. Create a branch from `develop` (use a descriptive name, e.g. `feature/123-add-search`).
-3. Make your changes, following the code style and guidelines below.
-4. Add or update tests as needed.
-5. Commit with clear messages (see below).
-6. Push your branch and open a Pull Request to `develop`.
-7. Ensure all checks pass and respond to review feedback.
+2. Run `git config core.hooksPath .github/hooks` once, so the pre-commit and pre-push hooks run.
+3. Create a branch from `main` named `feature/{issue}-{slug}`, `fix/{issue}-{slug}`, `hotfix/{issue}-{slug}` or
+   `chore/{slug}` (e.g. `feature/123-add-search`); the pre-push hook enforces it.
+4. Make your changes, following the code style and guidelines below.
+5. Add or update tests as needed.
+6. Commit with clear messages (see below).
+7. Push your branch and open a Pull Request to `main`.
+8. Ensure all checks pass and respond to review feedback.
 
 ## What should I know before I get started
 
@@ -150,10 +152,10 @@ Please provide as much detail as possible, including steps to reproduce, expecte
 
 [Fork the Repository to your account]( [your repository fork URL] ).
 
-1. Create a new Branch from the develop branch with a reference to the existing Issue number.
+1. Create a new branch from `main` with a reference to the existing Issue number.
 1. Work on the issue.
 1. Create Unit, Integration tests for any code that require them. We use xUnit v3, FluentAssertions, NSubstitute, bUnit, and Playwright to test our code and components.
-1. When you are done Create a Pull Request from your branch to the develop branch.
+1. When you are done, create a Pull Request from your branch to `main`.
 1. Submit the Pull Request.
 
 **Note:** Pull requests without unit tests will be delayed until tests are added. All new features and bug fixes must
@@ -179,7 +181,7 @@ Pull requests without unit tests will be delayed and asked for unit tests to pro
 1. All PRs are reviewed by maintainers and may require changes before merging.
 2. Automated checks (build, tests, lint) must pass before review.
 3. Be responsive to feedback and update your PR as needed.
-4. Once approved, your PR will be merged into `develop`.
+4. Once approved, your PR will be merged into `main`.
 
 ### Write code
 

@@ -8,7 +8,8 @@ past Release/PR pair:
 
 It writes docs/blogs/{merged-date}-pr-{n}-{slug}.md, updates the
 docs/blogs/README.md index, the RELEASES_START/END table in README.md (copied
-to docs/README.md), and the RELEASES_HTML/BLOGS_HTML tables in docs/index.html.
+to docs/README.md), and in the GitHub Pages site docs/index.html the
+RELEASES_HTML releases table and the BLOGS_HTML blog post cards.
 
 GitHub data comes from the gh CLI (GH_TOKEN). When ANTHROPIC_API_KEY is set,
 the post opens with a short summary written by Claude (model from
@@ -202,9 +203,313 @@ def request_summary(api_key, model, prompt, urlopen=urllib.request.urlopen):
 # Post file and blog index
 
 
+ATX_HEADING = re.compile(r"^( {0,3})(#{1,6})(?=[ \t]|$)")
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+SETEXT_UNDERLINE = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
+THEMATIC_BREAK = re.compile(r"^ {0,3}([-*_])([ \t]*\1){2,}[ \t]*$")
+INDENTED_CODE = re.compile(r"^( {4}|\t)")
+# CommonMark's seven kinds of HTML block, as (start, end) pairs; the end is a
+# pattern searched on each line, or HTML_ENDS_AT_BLANK. Their lines are raw
+# HTML, so a "#" line inside one is text, not a heading.
+HTML_ENDS_AT_BLANK = "blank line"
+HTML_BLOCK_TAGS = (
+    "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt"
+    "|fieldset|figcaption|figure|footer|form|frame|frameset|h1|h2|h3|h4|h5|h6|head|header|hr|html|iframe|legend|li"
+    "|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot"
+    "|th|thead|title|tr|track|ul"
+)
+HTML_ATTRIBUTE = r"""\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?"""
+HTML_BLOCKS = [
+    (re.compile(r" {0,3}<(?:pre|script|style|textarea)(?:\s|>|$)", re.I | re.A), re.compile(r"</(?:pre|script|style|textarea)>", re.I | re.A)),
+    (re.compile(r" {0,3}<!--", re.A), re.compile(r"-->", re.A)),
+    (re.compile(r" {0,3}<\?", re.A), re.compile(r"\?>", re.A)),
+    # Kind 4 needs an uppercase letter, as GitHub (cmark-gfm) reads it: "<!doctype" is text.
+    (re.compile(r" {0,3}<![A-Z]", re.A), re.compile(r">", re.A)),
+    (re.compile(r" {0,3}<!\[CDATA\[", re.A), re.compile(r"\]\]>", re.A)),
+    (re.compile(rf" {{0,3}}</?(?:{HTML_BLOCK_TAGS})(?:\s|/?>|$)", re.I | re.A), HTML_ENDS_AT_BLANK),
+]
+# Kind 7: any other complete open or closing tag alone on its line. Unlike the
+# others it can't interrupt a paragraph. All HTML patterns are re.ASCII: the
+# tag grammar is ASCII, so a non-breaking space or "\u017f" (long s, which
+# Unicode case-folds to "s") makes a line paragraph text, as GitHub reads it.
+HTML_OTHER_TAG = re.compile(
+    rf" {{0,3}}(?:<[A-Za-z][A-Za-z0-9-]*(?:{HTML_ATTRIBUTE})*\s*/?>|</[A-Za-z][A-Za-z0-9-]*\s*>)\s*$",
+    re.A,
+)
+# The level of the "## " post sections that nest_headings' text is inserted under.
+SECTION_LEVEL = 2
+QUOTE_MARKER = re.compile(r"^ {0,3}> ?")
+LIST_MARKER = re.compile(r"^ {0,3}([-+*]|[0-9]{1,9}[.)])(?=[ \t]|$)")
+# Position-anchored versions for scan_blocks, which matches containers at an
+# offset into the line instead of slicing a new suffix for every level.
+QUOTE_AT = re.compile(r" {0,3}> ?")
+LIST_AT = re.compile(r" {0,3}([-+*]|[0-9]{1,9}[.)])(?=[ \t]|$)")
+SPACES_AT = re.compile(r" *")
+
+
+def closes_fence(fence, line):
+    """Whether a line closes a fence opened by the marker run `fence`."""
+    fence_match = FENCE.match(line)
+    if not fence_match:
+        return False
+    marker, info = fence_match.groups()
+    return marker[0] == fence[0] and len(marker) >= len(fence) and not info.strip()
+
+
+def html_block_end(line, in_paragraph=False):
+    """The end condition of an HTML block opened by this line, or None if it opens none.
+
+    Kinds 1 to 5 end on the line matching their end pattern (possibly this
+    one), kinds 6 and 7 at a blank line. Inside a paragraph, only kinds 1 to 6
+    can start.
+    """
+    for start, end in HTML_BLOCKS:
+        if start.match(line):
+            return end
+    if not in_paragraph and HTML_OTHER_TAG.match(line):
+        return HTML_ENDS_AT_BLANK
+    return None
+
+
+def html_block_ends(end, line):
+    """Whether an HTML block with this end condition ends on this (non-blank) line."""
+    return end is not HTML_ENDS_AT_BLANK and bool(end.search(line))
+
+
+def code_lines(lines):
+    """Indexes of the lines that aren't Markdown text: fenced code and raw HTML blocks, at any depth.
+
+    A fence closes on a run of the same character at least as long as the
+    opener, with nothing but whitespace after it, or where its quote or list
+    item ends; an HTML block closes as html_block_end() describes.
+    """
+    code = set()
+    scan_blocks(list(lines), [], code)
+    return code
+
+
+def line_bounds(line):
+    """(last non-space index, last index of a character a thematic break can't contain), -1 if none."""
+    last_text = len(line.rstrip(" \t")) - 1
+    last_other = last_text
+    while last_other >= 0 and line[last_other] in " \t-*_":
+        last_other -= 1
+    return last_text, last_other
+
+
+def list_width_at(line, pos, bounds):
+    """The width of the list item marker and its spacing at `pos`, or None if none opens there.
+
+    The content starts after the marker and 1 to 4 spaces; with more, or none
+    at all, it starts one column after the marker. `bounds` is line_bounds(line),
+    so ruling out a thematic break costs O(1) unless the rest of the line could
+    be one.
+    """
+    marker = LIST_AT.match(line, pos)
+    if not marker:
+        return None
+    last_text, last_other = bounds
+    if last_other < pos and THEMATIC_BREAK.match(line[pos:]):
+        return None
+    end = marker.end()
+    spaces = SPACES_AT.match(line, end).end() - end
+    return end - pos + (spaces if last_text >= end and 1 <= spaces <= 4 else 1)
+
+
+def list_item_width(line):
+    """The content column of a list item opened by this line, or None if it opens none."""
+    return list_width_at(line, 0, line_bounds(line))
+
+
+def interrupts_paragraph(line):
+    """Whether a line ends a paragraph in the same container by opening a new block.
+
+    Only a non-empty list item interrupts, and an ordered one only when
+    numbered 1. (A line that fails to continue a quote or list item is judged
+    differently: there any list item opens a new block.)
+    """
+    width = list_item_width(line)
+    return bool(
+        ATX_HEADING.match(line)
+        or FENCE.match(line)
+        or THEMATIC_BREAK.match(line)
+        or html_block_end(line, in_paragraph=True) is not None
+        or QUOTE_MARKER.match(line)
+        or (width is not None and line[width:].strip(" \t") and re.match(r" {0,3}([-+*]|1[.)])", line))
+    )
+
+
+def scan_blocks(lines, headings, code=None):
+    """Finds the headings in Markdown lines, including those inside block quotes and list items.
+
+    Appends (line index, prefix, level, rest of line) to `headings` for each
+    ATX or setext heading, where the prefix is everything before the "#"s
+    (container markers and indent). The later lines of a setext heading,
+    including its underline, are set to None in `lines`. When `code` is a set,
+    the indexes of fenced code and raw HTML block lines are added to it.
+
+    This follows CommonMark's block parsing in one pass: each line first
+    matches the open quotes and list items, may lazily continue an open
+    paragraph, then opens new containers before its content is read. Columns
+    are measured with tabs expanded to CommonMark's 4-column stops, and a
+    blank line holds only spaces and tabs (a non-breaking space is text).
+    """
+    code = set() if code is None else code
+    # Open containers, outermost first: {"kind": "quote"}, or
+    # {"kind": "list", "width": content column, "has_content": bool}.
+    # quote_levels holds the stack positions of the quotes, so a blank line,
+    # which keeps every list item open, finds the first quote it ends in O(1).
+    stack = []
+    quote_levels = []
+    paragraph = None  # [(line index, container prefix, text)] of the open paragraph
+    fence = None
+    html_end = None  # end condition of the open HTML block, see html_block_end()
+
+    def mark_content():
+        if stack and stack[-1]["kind"] == "list":
+            stack[-1]["has_content"] = True
+
+    for index, raw in enumerate(lines):
+        # A trailing "\r" is the rest of a CRLF line ending; tabs expand so
+        # columns can be counted in spaces from here on.
+        line = raw.removesuffix("\r").expandtabs(4)
+        bounds = line_bounds(line)
+        last_text = bounds[0]
+        offset = 0
+        if last_text < 0:
+            matched = quote_levels[0] if quote_levels else len(stack)
+        else:
+            matched = 0
+            for container in stack:
+                if container["kind"] == "quote":
+                    marker = QUOTE_AT.match(line, offset)
+                    if not marker:
+                        break
+                    offset = marker.end()
+                elif last_text >= offset:
+                    if SPACES_AT.match(line, offset).end() - offset < container["width"]:
+                        break
+                    offset += container["width"]
+                matched += 1
+        rest = line[offset:]
+
+        if matched < len(stack):
+            # A line that opens no new block lazily continues the open paragraph.
+            # Here any list item or HTML block opens one: the rule that only
+            # some of them can interrupt a paragraph applies only once every
+            # container matched.
+            opens_block = (
+                interrupts_paragraph(rest) or list_item_width(rest) is not None or html_block_end(rest) is not None
+            )
+            if paragraph is not None and rest.strip(" ") and not opens_block:
+                paragraph.append((index, line[:offset], rest))
+                continue
+            del stack[matched:]
+            while quote_levels and quote_levels[-1] >= matched:
+                quote_levels.pop()
+            paragraph = fence = html_end = None
+
+        if html_end is HTML_ENDS_AT_BLANK and not rest.strip(" "):
+            html_end = None  # the blank line ends the block and is read as usual
+        if fence is not None or html_end is not None:
+            code.add(index)
+            if fence is not None:
+                fence = None if closes_fence(fence, rest) else fence
+            elif html_block_ends(html_end, rest):
+                html_end = None
+            continue
+
+        # Open new quotes and list items. A quote always interrupts a paragraph;
+        # a list item only when interrupts_paragraph() says so.
+        opened = len(stack)
+        while SPACES_AT.match(line, offset).end() - offset < 4:  # indented code opens no container
+            marker = QUOTE_AT.match(line, offset)
+            width = None if marker else list_width_at(line, offset, bounds)
+            if marker:
+                mark_content()
+                quote_levels.append(len(stack))
+                stack.append({"kind": "quote"})
+                offset = marker.end()
+            elif width is not None and (paragraph is None or interrupts_paragraph(line[offset:])):
+                mark_content()
+                stack.append({"kind": "list", "width": width, "has_content": last_text >= offset + width})
+                offset += width
+            else:
+                break
+            paragraph = None
+        rest = line[offset:]
+
+        if not rest.strip(" "):
+            paragraph = None
+            # An item that starts empty ends at its first blank line (not at its own marker line).
+            if len(stack) == opened and stack and stack[-1]["kind"] == "list" and not stack[-1]["has_content"]:
+                stack.pop()
+            continue
+        mark_content()
+
+        fence_match = FENCE.match(rest)
+        html_start = None if fence_match else html_block_end(rest, in_paragraph=paragraph is not None)
+        if fence_match or html_start is not None:
+            code.add(index)
+            if fence_match:
+                fence = fence_match.group(1)
+            elif not html_block_ends(html_start, rest):
+                html_end = html_start
+            paragraph = None
+            continue
+        heading = ATX_HEADING.match(rest)
+        if heading:
+            headings.append((index, line[:offset] + heading.group(1), len(heading.group(2)), rest[heading.end():]))
+            paragraph = None
+            continue
+        if paragraph is not None:
+            underline = SETEXT_UNDERLINE.match(rest)
+            if underline:
+                first, first_prefix, _ = paragraph[0]
+                text = " ".join(part.strip(" ") for _, _, part in paragraph)
+                headings.append((first, first_prefix, 1 if underline.group(1)[0] == "=" else 2, " " + text))
+                for later, _, _ in paragraph[1:]:
+                    lines[later] = None
+                lines[index] = None
+                paragraph = None
+            elif THEMATIC_BREAK.match(rest):
+                paragraph = None
+            else:
+                paragraph.append((index, line[:offset], rest))
+            continue
+        if INDENTED_CODE.match(rest) or THEMATIC_BREAK.match(rest):
+            continue
+        paragraph = [(index, line[:offset], rest)]
+
+
+def nest_headings(markdown):
+    """Re-levels the ATX headings in text inserted under a "## " section.
+
+    Distinct levels keep their order but close up (#, ####, ###### become
+    ###, ####, #####), and no heading sits more than one level below the one
+    before it, so the post keeps a single H1 and never skips a level. Setext
+    headings (a paragraph over a === or --- line, by CommonMark's paragraph
+    rules) become ATX headings first. Headings inside block quotes and list
+    items are re-levelled too, keeping their markers. Fenced code and raw HTML
+    blocks are left alone.
+    """
+    lines = re.split(r"\r\n|\r|\n", markdown)  # CommonMark's three line endings; PR bodies often use CRLF
+    headings = []  # (line index, prefix, original level, rest of line), in document order
+    scan_blocks(lines, headings)
+
+    rank = {level: i for i, level in enumerate(sorted({level for _, _, level, _ in headings}))}
+    previous = SECTION_LEVEL
+    for index, prefix, level, rest in headings:
+        new_level = min(SECTION_LEVEL + 1 + rank[level], previous + 1, 6)
+        lines[index] = f"{prefix}{'#' * new_level}{rest}"
+        previous = new_level
+    return "\n".join(line for line in lines if line is not None)
+
+
 def render_post(pr, title_line, tag, merged_date, commits, files, summary, model):
     number = pr["number"]
-    safe_title = title_line.replace('"', '\\"')
+    # A YAML double-quoted scalar: escape backslashes before quotes.
+    safe_title = title_line.replace("\\", "\\\\").replace('"', '\\"')
     ai_note = (
         "Generated by release automation from the PR title, description, commits and changed files. "
         + (f"Includes an AI summary written by {model}." if summary else "No AI summary.")
@@ -216,7 +521,6 @@ def render_post(pr, title_line, tag, merged_date, commits, files, summary, model
             "author1: mpaulosky",
             f'post_slug: "{tag.lower()}-pr-{number}"',
             "microsoft_alias: n/a",
-            'featured_image: ""',
             "categories:",
             "  - engineering",
             "tags:",
@@ -235,9 +539,9 @@ def render_post(pr, title_line, tag, merged_date, commits, files, summary, model
         f"- **Source PR:** [#{number}]({pr.get('html_url') or ''})\n"
     ]
     if summary:
-        sections.append(f"## Summary\n\n{summary}\n")
+        sections.append(f"## Summary\n\n{nest_headings(summary)}\n")
     body = (pr.get("body") or "").strip() or "No PR description was provided."
-    sections.append(f"## PR description\n\n{body}\n")
+    sections.append(f"## PR description\n\n{nest_headings(body)}\n")
     sections.append(render_commits(commits))
     sections.append(render_files(files))
     return front_matter + "\n".join(sections)
@@ -284,7 +588,7 @@ def update_blog_index(blog_dir, merged_date, title_line, post_name):
                 "This directory contains concise release-review posts for merged PR releases.",
                 "",
                 "| Date | Title | Tags |",
-                "|------|-------|------|",
+                "| ---- | ----- | ---- |",
                 *rows,
                 "",
             ]
@@ -305,6 +609,7 @@ def read_blog_posts(blog_dir):
         title = re.search(r'^post_title: "(.*)"$', front, flags=re.MULTILINE)
         date = re.search(r'^post_date: "(.*)"$', front, flags=re.MULTILINE)
         tag = re.search(r"^\s*- release:(\S+)$", front, flags=re.MULTILINE)
+        summary = re.search(r'^summary: "(.*)"$', front, flags=re.MULTILINE)
         posts.append(
             {
                 "file": path.name,
@@ -312,9 +617,95 @@ def read_blog_posts(blog_dir):
                 "title": title.group(1).replace('\\"', '"') if title else path.stem,
                 "date": date.group(1) if date else path.name[:10],
                 "tag": tag.group(1) if tag else "",
+                "excerpt": post_excerpt(text, summary.group(1).replace('\\"', '"') if summary else ""),
             }
         )
     return posts
+
+
+# Blog card excerpts
+
+EXCERPT_LENGTH = 200
+SEED_SUMMARY = re.compile(r"^Release notes seed for ")
+# Paragraphs that only point at an issue ("Fixes #16.") say nothing on a card.
+ISSUE_REFERENCE = re.compile(r"^(?:(?:fixes|closes|resolves|refs|part of)\s+#\d+[\s,.]*)+$", flags=re.IGNORECASE)
+
+
+def post_excerpt(text, summary=""):
+    """A card's excerpt: the AI summary section, a real front matter summary, else the PR description.
+
+    render_post writes the AI summary into a "## Summary" section and a
+    "Release notes seed" line into the front matter, so the seed line is skipped.
+    """
+    ai_summary = first_paragraph(section(text, "Summary"))
+    if ai_summary:
+        return shorten(ai_summary)
+    if summary and not SEED_SUMMARY.match(summary):
+        return shorten(plain_text(summary))
+    description = first_paragraph(section(text, "PR description"))
+    if description and description != "No PR description was provided.":
+        return shorten(description)
+    return ""
+
+
+def section(text, heading):
+    """The body of the post's "## {heading}" section, up to the next heading of the same level.
+
+    Posts written before the title became an H1 start with a "## " title and
+    use "### " for these sections. Only the post's own section level is read,
+    and lines inside fenced code are never headings, so a heading from the PR
+    description (nested, or in a code example) never passes for a section.
+    """
+    lines = text.split("\n")
+    code = code_lines(lines)
+    headings = [index for index, line in enumerate(lines) if index not in code and ATX_HEADING.match(line)]
+    if not headings:
+        return ""
+    level = "##" if lines[headings[0]].startswith("# ") else "###"
+    starts = [index for index in headings if lines[index].startswith(level + " ")]
+    for position, start in enumerate(starts):
+        if lines[start] == f"{level} {heading}":
+            end = starts[position + 1] if position + 1 < len(starts) else len(lines)
+            return "\n".join(lines[start + 1:end]) + ("\n" if end < len(lines) else "")
+    return ""
+
+
+def first_paragraph(markdown):
+    """The first paragraph of prose or list text, as plain text."""
+    for block in re.split(r"\n\s*\n", blank_code(markdown)):
+        lines = [line.strip() for line in block.strip().splitlines()]
+        if not lines or lines[0].startswith(("#", "|", "<!--", ">")):
+            continue
+        # Join list items and wrapped lines into one line of text.
+        plain = plain_text(" ".join(re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", line) for line in lines))
+        if plain and not ISSUE_REFERENCE.match(plain):
+            return plain
+    return ""
+
+
+def blank_code(markdown):
+    """The Markdown with fenced code and raw HTML block lines blanked, so they split and skip like blank lines."""
+    lines = markdown.split("\n")
+    code = code_lines(lines)
+    return "\n".join("" if index in code else line for index, line in enumerate(lines))
+
+
+def plain_text(markdown):
+    """Drop Markdown link, code and emphasis markup, keeping the words."""
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", markdown)
+    text = re.sub(r"`([^`]*)`", r"\1", text)
+    text = re.sub(r"(\*\*|\*)(\S(?:.*?\S)?)\1", r"\2", text)
+    # Underscores only mark emphasis at word edges, so snake_case names keep theirs.
+    text = re.sub(r"(?<!\w)(__|_)(\S(?:.*?\S)?)\1(?!\w)", r"\2", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def shorten(text, limit=EXCERPT_LENGTH):
+    """Cut text to at most limit characters at a word boundary, marking the cut with an ellipsis."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:.-–—")
+    return cut + "…"
 
 
 def newest_first(items):
@@ -392,7 +783,7 @@ def render_releases_markdown(entries):
             "<!-- RELEASES_START -->",
             "",
             "| Version | Date | Title | Blog post |",
-            "|---------|------|-------|-----------|",
+            "| ------- | ---- | ----- | --------- |",
             *rows,
             "",
             "<!-- RELEASES_END -->",
@@ -431,17 +822,36 @@ def render_releases_html(entries):
     return render_table(["Version", "Date", "Title", "Blog post"], rows, "No releases yet.")
 
 
+def display_date(iso_date):
+    """"2026-09-27" as "27 Sep 2026", or the text unchanged when it isn't an ISO date."""
+    try:
+        return datetime.date.fromisoformat(iso_date).strftime("%d %b %Y").lstrip("0")
+    except ValueError:
+        return iso_date
+
+
 def render_blogs_html(posts, repository):
-    rows = [
-        [
-            html.escape(p["date"]),
-            link(post_url(repository, p["file"]), p["title"]),
-            html.escape(p["tag"]) if p["tag"] else "—",
-            link(f"https://github.com/{repository}/pull/{p['pr']}", f"#{p['pr']}"),
+    """The newest posts as cards: date, release, linked title, excerpt and source PR."""
+    newest = newest_first(posts)[:TABLE_SIZE]
+    if not newest:
+        return ['<p class="post-empty">No blog posts yet.</p>']
+    lines = ['<ul class="post-grid">']
+    for p in newest:
+        meta = f'<time datetime="{html.escape(p["date"])}">{html.escape(display_date(p["date"]))}</time>'
+        if p["tag"]:
+            meta += f'<span class="post-tag">{html.escape(p["tag"])}</span>'
+        lines += [
+            '  <li class="post-card">',
+            "    <article>",
+            f'      <p class="post-meta">{meta}</p>',
+            f'      <h3 class="post-title">{link(post_url(repository, p["file"]), p["title"])}</h3>',
         ]
-        for p in newest_first(posts)[:TABLE_SIZE]
-    ]
-    return render_table(["Date", "Title", "Release", "Source PR"], rows, "No blog posts yet.")
+        if p.get("excerpt"):
+            lines.append(f'      <p class="post-excerpt">{html.escape(p["excerpt"])}</p>')
+        pr_link = link(f"https://github.com/{repository}/pull/{p['pr']}", f"PR #{p['pr']}")
+        lines += [f'      <p class="post-source">{pr_link}</p>', "    </article>", "  </li>"]
+    lines.append("</ul>")
+    return lines
 
 
 def replace_between(text, name, lines):
@@ -556,7 +966,11 @@ def update_tables(repository, gh, root=Path("."), current=None):
     readme = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
     readme = update_readme(readme, render_releases_markdown(entries), repository)
     readme_path.write_text(readme, encoding="utf-8")
-    (root / "docs" / "README.md").write_text(readme, encoding="utf-8")
+    # Only a repo that publishes its README as the Pages landing page keeps
+    # this copy; don't create one in a repo whose docs site has its own.
+    docs_readme = root / "docs" / "README.md"
+    if docs_readme.exists():
+        docs_readme.write_text(readme, encoding="utf-8")
 
     update_index_html(root / "docs" / "index.html", entries, read_blog_posts(blog_dir), repository)
 
