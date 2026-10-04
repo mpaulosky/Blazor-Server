@@ -21,7 +21,9 @@ The repository itself is protected as follows:
 - **Workflow hardening.** Actions are pinned to commit SHAs, and `zizmor` and `actionlint` check every workflow change.
 - **Dependabot** proposes dependency updates after a seven-day cooldown, so a compromised release is usually caught
   upstream first.
-- **Reviewed merges.** A pull request merges only after its checks pass and its review threads are resolved.
+- **Reviewed merges.** A pull request merges only after its checks pass, Copilot has reviewed its head, and its review
+  threads are resolved. One exception: once Copilot has reviewed three of a PR's commits, its own unresolved threads no
+  longer hold the merge, so a PR can't chase new Copilot findings forever. Threads anyone else opens always do.
 
 ## Reporting a Vulnerability
 
