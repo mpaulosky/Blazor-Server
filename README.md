@@ -71,13 +71,16 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
    - Node.js and pnpm (`corepack enable`), used by the git hooks and the lint tools. The repo refuses `npm install`.
    - [yamllint](https://yamllint.readthedocs.io/), which the pre-push hook runs on changed YAML files.
 
-3. Install the pnpm packages, then build and test:
+3. Install the pnpm packages, then build and test each test project:
 
    ```bash
    pnpm install
    dotnet build Blazor-Server.slnx
-   dotnet test --solution Blazor-Server.slnx
+   for project in tests/*/*.csproj; do dotnet test --project "$project" || break; done
    ```
+
+   Run the test projects one at a time, as `scripts/gate.sh` and CI do. Under Microsoft Testing Platform,
+   `dotnet test --solution` can report zero tests even when the projects pass.
 
 4. Optionally enable the git hooks in `.github/hooks` (markdownlint on commit, and `scripts/gate.sh` on push):
 
