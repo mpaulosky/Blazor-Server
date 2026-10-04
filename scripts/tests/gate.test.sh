@@ -271,6 +271,12 @@ git -C "$REPO" commit -q -m "remove .github/copilot-instructions.md"
 run_gate
 expect "deleting the Copilot review file stops the gate" failed "" "has drifted"
 
+new_branch feature/13-skill-deleted
+git -C "$REPO" rm -q .claude/skills/code-review/SKILL.md
+git -C "$REPO" commit -q -m "remove the code-review skill"
+run_gate
+expect "deleting the code-review skill stops the gate" failed "" "SKILL.md not found"
+
 git -C "$REPO" update-ref -d refs/remotes/origin/main
 run_gate
 expect "a missing origin/main fails the gate" failed "" "git fetch origin"
