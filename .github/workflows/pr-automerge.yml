@@ -8,6 +8,12 @@ name: PR Auto-Merge
 # before that review arrives. Each trigger below is a moment one of those
 # conditions can become true; the job re-checks all of them every time.
 #
+# Copilot re-reviews every push and can find something new each time, so a
+# PR could chase its reviews forever. Once Copilot has reviewed
+# COPILOT_REVIEW_CAP distinct commits, the merge stops waiting for its review
+# of the head and stops counting its unresolved threads. Threads anyone else
+# opens still hold the merge.
+#
 # A PR Sandcastle handed back with sandcastle:needs-human never merges while it
 # carries the label, or when someone other than the repository owner last
 # removed it (see "Giving up on a PR" in docs/plans/sandcastle-workflow.md).
@@ -59,6 +65,11 @@ jobs:
             // back to a person, who removes it once the PR may merge again.
             const NEEDS_HUMAN = "sandcastle:needs-human";
 
+            // Review rounds after which Copilot no longer holds the merge.
+            const COPILOT_REVIEW_CAP = 3;
+            // GraphQL reports the bot's login without the "[bot]" suffix.
+            const COPILOT_LOGIN = "copilot-pull-request-reviewer";
+
             async function getPullRequestStatus(pullNumber) {
               const status = await github.graphql(
                 `query MergeReadiness(
@@ -87,9 +98,15 @@ jobs:
                            commit { oid }
                          }
                        }
+                       # The first comment's author is who opened the thread.
                        reviewThreads(first: 100) {
                          totalCount
-                         nodes { isResolved }
+                         nodes {
+                           isResolved
+                           comments(first: 1) {
+                             nodes { author { login } }
+                           }
+                         }
                        }
                        labels(first: 100) {
                          totalCount
@@ -176,11 +193,13 @@ jobs:
               }
 
               // Copilot re-reviews every push, including merge-from-main
-              // commits, so its review has to cover the exact head.
-              const copilotReviewed = pr.copilotReviews.nodes.some((review) => {
-                return review.commit?.oid === pr.headRefOid;
-              });
-              if (!copilotReviewed) {
+              // commits, so its review has to cover the exact head, until it
+              // has reviewed COPILOT_REVIEW_CAP different commits.
+              const reviewedCommits = new Set(
+                pr.copilotReviews.nodes.map((review) => review.commit?.oid).filter(Boolean)
+              );
+              const capReached = reviewedCommits.size >= COPILOT_REVIEW_CAP;
+              if (!capReached && !reviewedCommits.has(pr.headRefOid)) {
                 core.info(`Waiting on PR #${pullNumber}: no Copilot review of ${pr.headRefOid} yet.`);
                 return;
               }
@@ -192,9 +211,15 @@ jobs:
                 return;
               }
 
-              const unresolved = pr.reviewThreads.nodes.filter((thread) => !thread.isResolved).length;
-              if (unresolved > 0) {
-                core.info(`Waiting on PR #${pullNumber}: ${unresolved} unresolved review thread(s).`);
+              // A thread with no known author (a deleted account) counts as a
+              // person's, so it keeps holding the merge.
+              const unresolved = pr.reviewThreads.nodes.filter((thread) => !thread.isResolved);
+              const unresolvedCopilot = unresolved.filter((thread) => {
+                return thread.comments?.nodes[0]?.author?.login === COPILOT_LOGIN;
+              }).length;
+              const blocking = capReached ? unresolved.length - unresolvedCopilot : unresolved.length;
+              if (blocking > 0) {
+                core.info(`Waiting on PR #${pullNumber}: ${blocking} unresolved review thread(s).`);
                 return;
               }
 
@@ -208,6 +233,16 @@ jobs:
                   `mergeStateStatus=${pr.mergeStateStatus ?? "unknown"}.`
                 );
                 return;
+              }
+
+              if (capReached) {
+                const headNote = reviewedCommits.has(pr.headRefOid)
+                  ? ""
+                  : `without a Copilot review of ${pr.headRefOid}, `;
+                core.info(
+                  `Copilot review cap (${COPILOT_REVIEW_CAP}) reached on PR #${pullNumber}: merging ` +
+                  `${headNote}past ${unresolvedCopilot} unresolved Copilot thread(s).`
+                );
               }
 
               if (process.env.HAS_RELEASE_PR_PAT !== "true") {

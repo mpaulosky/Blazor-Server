@@ -49,6 +49,22 @@ function readyPr(overrides = {}) {
   };
 }
 
+// Copilot reviews of each given commit, oldest first.
+function copilotReviewsOf(...oids) {
+  return { nodes: oids.map((oid) => ({ commit: { oid } })) };
+}
+
+// Review threads, each opened by the given login, all unresolved unless marked.
+function threadsBy(...authors) {
+  const nodes = authors.map((author) => ({
+    isResolved: author.resolved ?? false,
+    comments: { nodes: [{ author: author.login === null ? null : { login: author.login ?? author } }] }
+  }));
+  return { totalCount: nodes.length, nodes };
+}
+
+const COPILOT = "copilot-pull-request-reviewer";
+
 function labelled(...names) {
   return { totalCount: names.length, nodes: names.map((name) => ({ name })) };
 }
@@ -199,4 +215,71 @@ test("re-checks the latest sandcastle:needs-human removal before merging", async
     logs.some((line) => line.includes("PR #7") && line.includes(NEEDS_HUMAN) && line.includes("triager")),
     logs.join("\n")
   );
+});
+
+test("waits for a Copilot review of the head below the review cap", async () => {
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two") }));
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("no Copilot review of " + HEAD)), logs.join("\n"));
+});
+
+test("waits on an unresolved Copilot thread below the review cap", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", HEAD), reviewThreads: threadsBy(COPILOT) });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("1 unresolved review thread(s)")), logs.join("\n"));
+});
+
+test("merges without a review of the head once Copilot reviewed three commits", async () => {
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two", "three") }));
+
+  assert.equal(merges.length, 1);
+  assert.ok(
+    logs.some((line) => line.includes("review cap (3) reached") && line.includes("without a Copilot review of " + HEAD)),
+    logs.join("\n")
+  );
+});
+
+test("counts reviewed commits, not reviews, toward the cap", async () => {
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "one", "two") }));
+
+  assert.deepEqual(merges, []);
+});
+
+test("merges past unresolved Copilot threads at the review cap and says how many", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two", HEAD),
+    reviewThreads: threadsBy(COPILOT, COPILOT, { login: OWNER, resolved: true })
+  });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.equal(merges.length, 1);
+  assert.ok(logs.some((line) => line.includes("past 2 unresolved Copilot thread(s)")), logs.join("\n"));
+});
+
+test("still waits on a person's unresolved thread at the review cap", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two", HEAD),
+    reviewThreads: threadsBy(COPILOT, OWNER)
+  });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("1 unresolved review thread(s)")), logs.join("\n"));
+});
+
+test("treats a thread with no known author as a person's at the review cap", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two", HEAD), reviewThreads: threadsBy({ login: null }) });
+  const { merges } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+});
+
+test("still needs green checks at the review cap", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two", "three"), mergeStateStatus: "BLOCKED" });
+  const { merges } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
 });
