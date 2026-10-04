@@ -18,7 +18,7 @@ builds the solution in Release and runs every test project, stopping at the firs
 
 ## Commits
 
-Commit in small steps. Each message follows `.github/instructions/git-commit-instructions.md`:
+Commit in small steps. Each message follows `.claude/rules/git-commit.md`:
 
 - Subject: `<type>(<scope>): <Summary>`, for example `test(Domain): Add Result null-conversion test` or `feat(Domain): Port Result with targeted fixes`
 - Body: what changed and why, key decisions, and any blockers for the next run

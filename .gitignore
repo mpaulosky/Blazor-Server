@@ -37,18 +37,14 @@ Thumbs.db
 appsettings.Development.json
 appsettings.Development.local.json
 user-secrets/
-# appsettings.Development.json under content/ is template source (no real secrets), not a local override.
-!content/**/appsettings.Development.json
 
-# Tailwind CLI (downloaded standalone binary) and its build output
+# Tailwind CLI (downloaded standalone binary)
 .tailwindcss/
-content/src/UI/wwwroot/app.css
-content/src/UI/Styles/palette.css
 
 # Logs & Artifacts
 logs/
 *.log
-*.txt
+build-log.txt
 .mongo/
 mongodb-data/
 
@@ -63,16 +59,8 @@ dist/
 .next/
 out/
 
-# OS-Specific
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-
 # Build Outputs
 publish/
-bin/
-obj/
 artifacts/
 
 # Test Runner
@@ -80,7 +68,6 @@ artifacts/
 OpenCover/
 
 # Rider
-.idea/
 *.sln.iml
 *.sln.DotSettings.user
 
@@ -98,3 +85,6 @@ tmp/
 
 # Pre-push hook test results
 .tmp-test-results/
+
+# Claude Code worktrees
+.claude/worktrees/

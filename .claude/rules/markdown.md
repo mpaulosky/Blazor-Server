@@ -1,12 +1,12 @@
 ---
-description: 'Documentation and content creation standards'
-applyTo: '**/*.md'
+paths:
+  - "**/*.md"
 ---
 
-# Markdown Instructions
+# Markdown Rules
 
 `markdownlint-cli2` enforces these rules in CI and in the pre-commit and pre-push hooks, using `.markdownlint-cli2.jsonc`.
-Its `ignores` list skips vendored skills and agents and the release blog posts in `docs/blogs/`, which the release workflow generates from PR bodies.
+Its `ignores` list skips the vendored skills in `.claude/skills/` and the release blog posts in `docs/blogs/`, which the release workflow generates from PR bodies.
 `.sandcastle/.markdownlint-cli2.jsonc` also allows several top-level headings in the Sandcastle prompts.
 
 ## Structure
@@ -23,4 +23,5 @@ Its `ignores` list skips vendored skills and agents and the release blog posts i
 - **Tables:** Use tables for tabular data, with a header row.
 - **Line length:** Keep lines at or under 200 characters. Table rows are exempt because they can't wrap. Prefer one sentence or clause per line in long paragraphs.
 
-Blog posts under `docs/blogs/` have extra front-matter rules in `blog.instructions.md`. Other Markdown files have no front matter, apart from the `applyTo` header that instruction files need.
+Blog posts under `docs/blogs/` have extra front-matter rules in `blog.md`. Other Markdown files have no front matter, apart from the `paths` header on
+the rule files in `.claude/rules/` and the `name`/`description` header on skills.

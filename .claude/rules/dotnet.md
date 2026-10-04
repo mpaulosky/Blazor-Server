@@ -1,8 +1,16 @@
 ---
-applyTo: "**"
+paths:
+  - "**/*.cs"
+  - "**/*.razor"
+  - "**/*.csproj"
+  - "**/*.props"
+  - "**/*.slnx"
+  - "global.json"
 ---
 
-# .NET Project Instructions
+# .NET Project Rules
+
+`docs/CODING_STANDARDS.md` is the full standard. If this file and that one disagree, `CODING_STANDARDS.md` wins.
 
 ## Technology Stack (Required)
 
@@ -38,14 +46,9 @@ applyTo: "**"
 
 - Always flag any place where user input is used without validation or sanitization.
 
-## Response Style
-
-- Lead each code response with a one-sentence decision rationale.
-- If there is a simpler alternative approach, mention it after the primary answer.
-
 ## Guardrails
 
-Copilot must follow these guardrails:
+Follow these guardrails:
 
 - **NuGet changes** — new package additions/updates may be made autonomously when required to complete the task; keep changes minimal and include explicit rationale in the final summary/PR text.
 - **No secrets in code** — never hardcode connection strings, API keys, or passwords. Use `IConfiguration` or environment variables.
@@ -55,7 +58,7 @@ Copilot must follow these guardrails:
 
 ## Verification Checklist
 
-Before presenting any generated code, Copilot should confirm:
+Before handing back code changes, confirm:
 
 - [ ] No obvious syntax errors
 - [ ] Style guide followed

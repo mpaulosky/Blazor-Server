@@ -46,8 +46,8 @@ This project is a GitHub template for a server-rendered Blazor Web App built wit
 
 ### Code Style & Commit Messages
 
-- Follow the coding standards in [.sandcastle/CODING_STANDARDS.md](../.sandcastle/CODING_STANDARDS.md) and the formatting rules in `.editorconfig`.
-- Write commit messages in the `<type>(<scope>): <Summary>` format described in [git-commit-instructions.md](../.github/instructions/git-commit-instructions.md), and reference issues (e.g.,
+- Follow the coding standards in [CODING_STANDARDS.md](CODING_STANDARDS.md) and the formatting rules in `.editorconfig`.
+- Write commit messages in the `<type>(<scope>): <Summary>` format described in [git-commit.md](../.claude/rules/git-commit.md), and reference issues (e.g.,
   `Fixes #123`).
 - Add comments to explain *why* for complex logic.
 

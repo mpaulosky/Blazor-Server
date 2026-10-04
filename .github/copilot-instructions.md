@@ -1,22 +1,50 @@
-# Copilot Instructions
+<!-- Generated from .claude/skills/code-review/SKILL.md by scripts/sync-copilot-review.sh.
+     Edit the skill and rerun the script; scripts/gate.sh and CI fail when this file drifts. -->
 
-This repository is a GitHub template for a server-rendered Blazor Web App on .NET 10 and C# 14, with Tailwind CSS v4 theming and Auth0 authentication. See `CONTEXT.md` for the domain language (Template, Generated App, Theme, Palette, Visitor, User, Admin).
+# Code review
+
+Review the pull request against this repository's own sources of truth. The rules below point at them and add what
+they don't say. Every finding cites the file and rule it rests on.
 
 ## Sources of truth
 
-- **Coding standards:** [`.sandcastle/CODING_STANDARDS.md`](../.sandcastle/CODING_STANDARDS.md) covers style, .NET and Blazor rules, Auth0, error handling with `Result`, FluentValidation, Vertical Slice Architecture, Central Package Management, and testing. It wins when any other instruction file disagrees with it.
-- **Formatting and naming:** `.editorconfig`.
-- **Build settings and package versions:** `Directory.Build.props` and `Directory.Packages.props`.
-- **Path-specific guidance:** the files in [`.github/instructions/`](instructions/):
-  - `dotnet-project.instructions.md` (all files)
-  - `blazor.instructions.md` (Razor components)
-  - `markdown.instructions.md` (Markdown)
-  - `blog.instructions.md` (blog posts under `docs/blogs/`)
-  - `git-commit-instructions.md` (commit messages)
+Read the sections that govern the changed code before commenting on it:
 
-## Project layout
+- `docs/CODING_STANDARDS.md`: style, .NET and Blazor, Auth0, error handling with `Result`, FluentValidation,
+  Vertical Slice Architecture, Central Package Management, and testing. It wins when another rule file
+  disagrees.
+- `CONTEXT.md`: the domain language (Template, Generated App, Theme, Palette, Visitor, User, Admin, Shared Kernel).
+- `docs/adr/`: recorded decisions. A change that contradicts an ADR needs a new ADR that supersedes it.
+- `.claude/rules/`: the path-scoped rules (Blazor, .NET, Markdown, blog posts) and the commit message format.
 
-- `src/UI/`: the Blazor Web App.
-- `src/Core/`: feature slices and cross-cutting infrastructure.
-- `src/Domain/`: the Shared Kernel (`Result`/`Result<T>` and `ApplicationConstants`). It references no other project or package (see `docs/adr/0001-shared-kernel-in-domain-project.md`).
-- `tests/`: test projects named `<Project>.Tests.<Kind>`, for example `UI.Tests.Unit`, `UI.Tests.E2E`, and `Architecture.Tests`.
+## What to check
+
+**Domain language.** Code, UI text and docs use the `CONTEXT.md` terms with their defined meanings. Flag a synonym
+(for example "color scheme" for Palette) or a term used for its neighbour (Theme for Palette).
+
+**Shared Kernel boundary.** `src/Domain` holds only operation outcomes (`Result`, `Result<T>`, `ResultErrorCode`) and
+the names the Template relies on (`ApplicationConstants`), and it references no other project and no package. Flag
+entities, feature logic, validators, persistence types, or a new reference there; feature code belongs in
+`Core/Features/<Feature>/`.
+
+**Tests.** Every new or changed behaviour has a test, following the Testing section of `CODING_STANDARDS.md`. For a
+`Result`-returning handler, that means its success value and each error code it can return.
+
+**Markdown.** Lines outside tables stay within 200 characters; table rows can't wrap, so they're exempt. CI's
+markdownlint enforces this and the other rules in `.markdownlint-cli2.jsonc`, except in the paths it ignores, such as
+the generated posts in `docs/blogs/`.
+
+**Workflows and hooks.** Steps that publish anything (open a PR, push, tag, release) run only for `main`: a
+`github.ref == 'refs/heads/main'` check, or a merged-into-`main` condition as in `release.yml`. `workflow_dispatch`
+runs on any branch, and pull request runs check out a detached merge commit. Branch names in hooks, prompts and
+docs follow `feature/{issue}-{slug}`, `hotfix/{issue}-{slug}` or `chore/{slug}`.
+
+**Sandcastle prompts.** In `.sandcastle/*-prompt.md`, an exclamation mark followed by a backtick runs the text up to
+the next backtick as a shell command before the agent sees the prompt. Flag that sequence anywhere it isn't an
+intended command expansion, for example in inline code about the null-forgiving operator.
+
+## Out of scope
+
+Leave compiler and analyzer findings to the build: `TreatWarningsAsErrors` and `AnalysisMode=All` already fail CI on
+them, and Central Package Management rejects a `Version` on a `PackageReference`. Spend comments on behaviour,
+boundaries, tests and intent.
