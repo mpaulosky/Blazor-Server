@@ -7,8 +7,8 @@
       "Bash(dotnet restore:*)",
       "Bash(dotnet format:*)",
       "Bash(scripts/gate.sh)",
-      "Bash(npm run check:sandcastle)",
-      "Bash(npx markdownlint-cli2:*)",
+      "Bash(pnpm run check:sandcastle)",
+      "Bash(pnpm exec markdownlint-cli2:*)",
       "Bash(yamllint:*)",
       "Bash(actionlint:*)",
       "Bash(shellcheck:*)"

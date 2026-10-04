@@ -37,13 +37,9 @@ Thumbs.db
 appsettings.Development.json
 appsettings.Development.local.json
 user-secrets/
-# appsettings.Development.json under content/ is template source (no real secrets), not a local override.
-!content/**/appsettings.Development.json
 
-# Tailwind CLI (downloaded standalone binary) and its build output
+# Tailwind CLI (downloaded standalone binary)
 .tailwindcss/
-content/src/UI/wwwroot/app.css
-content/src/UI/Styles/palette.css
 
 # Logs & Artifacts
 logs/

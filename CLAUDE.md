@@ -26,10 +26,12 @@ itself is on the README roadmap.
 
 ## Commands
 
+The repo uses pnpm (pinned by `packageManager` in `package.json`); npm is refused. Run `pnpm install` first.
+
 ```bash
 dotnet build Blazor-Server.slnx
 dotnet test --solution Blazor-Server.slnx
-npm run check:sandcastle   # type-check and test .sandcastle/
+pnpm run check:sandcastle  # type-check and test .sandcastle/
 scripts/gate.sh            # everything the pre-push hook runs; needs a fresh `git fetch origin main`
 ```
 
