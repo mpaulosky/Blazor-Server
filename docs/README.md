@@ -39,7 +39,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 <!-- RELEASES_START -->
 
 | Version | Date | Title | Blog post |
-|---------|------|-------|-----------|
+| --------- | ------ | ------- | ----------- |
 | [v0.0.62](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.62) | 2026-10-04 | docs(README): Run each test project instead of dotnet test --solution | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-123-docs-readme-run-each-test-project-instead-of-dotnet-test-solution.md) |
 | [v0.0.61](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.61) | 2026-10-04 | ci(automerge): Stop waiting on Copilot after three review rounds | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-119-ci-automerge-stop-waiting-on-copilot-after-three-review-rounds.md) |
 | [v0.0.60](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.60) | 2026-10-04 | chore(claude): Make Claude Code the repo's agent setup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-118-chore-claude-make-claude-code-the-repo-s-agent-setup.md) |
@@ -96,8 +96,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 - Replace this README with one that describes your Generated App.
 - Repoint the badges at your own repository, or remove them.
 - Decide whether to keep the release automation: [release.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/release.yml) tags a release and
-  opens a release-notes PR for every merged PR, and [sync-readme.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/sync-readme.yml) copies
-  `README.md` to `docs/README.md`. Delete both workflows if you don't want them.
+  opens a release-notes PR for every merged PR, which also copies `README.md` to `docs/README.md`. Delete it if you don't want it.
 - The release-notes PR adds a blog post written by [release_post.py](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/scripts/release_post.py).
   Add an `ANTHROPIC_API_KEY` repository secret to open each post with a short AI summary; without it, posts skip the summary.
   Run [backfill-blog-posts.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/backfill-blog-posts.yml) by hand to write posts for
@@ -132,8 +131,8 @@ All of the following are *planned* and don't exist yet:
 
 ## Contributing
 
-- Name branches `feature/{issue}-{slug}` for issue work, `hotfix/{issue}-{slug}` for bug fixes, or `chore/{slug}`
-  for maintenance with no issue, for example `feature/14-add-root-readme`.
+- Name branches `feature/{issue}-{slug}` for issue work, `fix/{issue}-{slug}` for bug fixes, `hotfix/{issue}-{slug}` for
+  urgent fixes, or `chore/{slug}` for maintenance with no issue, for example `feature/14-add-root-readme`.
 - Issues labelled `Sandcastle` are worked by Sandcastle agents, which open a pull request for review.
 - Read [CONTRIBUTING.md](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CONTRIBUTING.md), the [Code of Conduct](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/CODE_OF_CONDUCT.md)
   and the [Security Policy](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/SECURITY.md) before contributing.
