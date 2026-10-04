@@ -320,3 +320,21 @@ test("keeps the cap reached through many re-reviews of one commit", async () => 
   assert.equal(merges.length, 1);
   assert.ok(queries.every((query) => query.includes("reviews(last: 100,")), "Copilot reviews are fetched 100 at a time");
 });
+
+test("doesn't log the cap when it didn't change the outcome", async () => {
+  const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two", HEAD) }));
+
+  assert.equal(merges.length, 1);
+  assert.ok(!logs.some((line) => line.includes("review cap")), logs.join("\n"));
+});
+
+test("logs both requirements the cap bypassed", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two", "three"), reviewThreads: threadsBy(COPILOT) });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.equal(merges.length, 1);
+  assert.ok(
+    logs.some((line) => line.includes("without a Copilot review of " + HEAD + " and past 1 unresolved Copilot thread(s)")),
+    logs.join("\n")
+  );
+});

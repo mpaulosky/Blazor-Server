@@ -244,13 +244,20 @@ jobs:
                 return;
               }
 
-              if (capReached) {
-                const headNote = reviewedCommits.has(pr.headRefOid)
-                  ? ""
-                  : `without a Copilot review of ${pr.headRefOid}, `;
+              // Log only when the cap changed the outcome: without it, this PR
+              // would still be waiting on Copilot.
+              const headReviewed = reviewedCommits.has(pr.headRefOid);
+              if (capReached && (!headReviewed || unresolvedCopilot > 0)) {
+                const bypassed = [];
+                if (!headReviewed) {
+                  bypassed.push(`without a Copilot review of ${pr.headRefOid}`);
+                }
+                if (unresolvedCopilot > 0) {
+                  bypassed.push(`past ${unresolvedCopilot} unresolved Copilot thread(s)`);
+                }
                 core.info(
                   `Copilot review cap (${COPILOT_REVIEW_CAP}) reached on PR #${pullNumber}: merging ` +
-                  `${headNote}past ${unresolvedCopilot} unresolved Copilot thread(s).`
+                  `${bypassed.join(" and ")}.`
                 );
               }
 
