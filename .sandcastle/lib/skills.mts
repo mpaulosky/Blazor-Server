@@ -43,17 +43,35 @@ export function skillMounts(
   return { mounts, missing };
 }
 
-let hostSkills: SkillMount[] | undefined;
+// What makeAgentSandbox needs from outside; tests pass stubs.
+export type SandboxHost<TProvider> = {
+  skillsDir: string;
+  docker(options: { mounts: SkillMount[] }): TProvider;
+  log(message: string): void;
+};
 
-// The Docker sandbox every role runs in, with the host's skills mounted. A
-// missing skill is reported once and skipped: the agent works without it.
-export function agentSandbox() {
-  if (!hostSkills) {
-    const { mounts, missing } = skillMounts(join(homedir(), ".claude", "skills"), SANDBOX_SKILLS);
-    if (missing.length > 0) {
-      console.log(`  ⚠ Skills not in ~/.claude/skills, so not in the sandbox: ${missing.join(", ")}`);
+// A factory for the Docker sandbox every role runs in, with the host's skills
+// mounted. The skills are looked up on the first call and reused after it, so
+// a missing skill is reported once and skipped: the agent works without it.
+export function makeAgentSandbox<TProvider>(
+  host: SandboxHost<TProvider>,
+  names: readonly string[] = SANDBOX_SKILLS,
+): () => TProvider {
+  let hostSkills: SkillMount[] | undefined;
+  return () => {
+    if (!hostSkills) {
+      const { mounts, missing } = skillMounts(host.skillsDir, names);
+      if (missing.length > 0) {
+        host.log(`  ⚠ Skills not in ~/.claude/skills, so not in the sandbox: ${missing.join(", ")}`);
+      }
+      hostSkills = mounts;
     }
-    hostSkills = mounts;
-  }
-  return docker({ mounts: hostSkills });
+    return host.docker({ mounts: hostSkills });
+  };
 }
+
+export const agentSandbox = makeAgentSandbox({
+  skillsDir: join(homedir(), ".claude", "skills"),
+  docker,
+  log: console.log,
+});
