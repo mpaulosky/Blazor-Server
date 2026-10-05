@@ -10,7 +10,6 @@
 // ---------------------------------------------------------------------------
 
 import * as sandcastle from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { hooks } from "./config.mts";
@@ -24,6 +23,7 @@ import {
   type SandcastleIssue,
 } from "./github.mts";
 import { critiquePromptArgs, type CritiquePromptArgs } from "./prompts.mts";
+import { agentSandbox } from "./skills.mts";
 
 const critiqueSchema = z.object({
   verdicts: z.array(
@@ -78,7 +78,7 @@ export type CritiqueRun = (promptArgs: CritiquePromptArgs) => Promise<CritiqueVe
 const runCritique: CritiqueRun = async (promptArgs) => {
   const critique = await runRole("critique", {
     hooks,
-    sandbox: docker(),
+    sandbox: agentSandbox(),
     promptFile: "./.sandcastle/critique-prompt.md",
     promptArgs,
     output: sandcastle.Output.object({ tag: "critique", schema: critiqueSchema }),

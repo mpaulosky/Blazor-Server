@@ -35,6 +35,11 @@ USER ${AGENT_UID}:${AGENT_GID}
 # Install Claude Code CLI
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
+# The host's skills are mounted under ~/.claude/skills (lib/skills.mts). Made
+# here so the agent owns ~/.claude, rather than Docker creating it as root for
+# the mounts, which would leave Claude Code unable to write its config.
+RUN mkdir -p /home/agent/.claude/skills
+
 # Install the .NET SDK. global.json pins 10.0.401 with rollForward latestMinor,
 # so the latest 10.0 SDK satisfies it.
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \

@@ -3,7 +3,6 @@
 // Nothing is merged locally: every change reaches main through a reviewed PR.
 
 import * as sandcastle from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
@@ -11,6 +10,7 @@ import { copyToWorktree, hooks } from "./config.mts";
 import { commentOnIssue, type SandcastleIssue } from "./github.mts";
 import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import { sh } from "./shell.mts";
+import { agentSandbox } from "./skills.mts";
 
 // Push an issue branch from its worktree and open (or reuse) the PR that closes
 // the issue. Pushing from the worktree matters: the pre-push hook refuses a
@@ -47,7 +47,7 @@ export type BuildHost = {
 };
 
 const liveHost: BuildHost = {
-  createSandbox: (branch) => sandcastle.createSandbox({ branch, sandbox: docker(), hooks, copyToWorktree }),
+  createSandbox: (branch) => sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree }),
   commitsAhead,
   commentOnIssue,
   publish,
