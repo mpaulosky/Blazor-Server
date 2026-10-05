@@ -1,5 +1,9 @@
-<!-- Generated from .claude/skills/code-review/SKILL.md by scripts/sync-copilot-review.sh.
-     Edit the skill and rerun the script; scripts/gate.sh and CI fail when this file drifts. -->
+---
+name: code-review
+description: >-
+  Code review for pull requests in this Blazor Server template. Use when reviewing a pull request or diff for
+  correctness, repository standards, domain language, architecture boundaries, tests, docs, and workflows.
+---
 
 # Code review
 

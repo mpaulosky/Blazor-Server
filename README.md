@@ -117,7 +117,7 @@ docs/CODING_STANDARDS.md         -- Coding standards
 CLAUDE.md, .claude/              -- Claude Code instructions, rules, skills and settings
 .github/workflows/               -- CI, code analysis, linting and release workflows
 .github/scripts/                 -- Release blog post generator, backfill and pytest tests
-.github/copilot-instructions.md  -- Copilot PR review checklist
+.github/copilot-instructions.md  -- Copilot PR review checklist, generated from the code-review skill
 ```
 
 ## Roadmap
