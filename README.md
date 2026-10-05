@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.69](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.69) | 2026-10-05 | chore: Use pnpm instead of npx in the gate and hooks | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-137-chore-use-pnpm-instead-of-npx-in-the-gate-and-hooks.md) |
 | [v0.0.68](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.68) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-136-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.67](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.67) | 2026-10-05 | chore(sandcastle): Correct why publish() pushes from the worktree | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-134-chore-sandcastle-correct-why-publish-pushes-from-the-worktree.md) |
 | [v0.0.66](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.66) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-132-chore-re-apply-the-repo-ci-baseline-template.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.62](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.62) | 2026-10-04 | docs(README): Run each test project instead of dotnet test --solution | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-123-docs-readme-run-each-test-project-instead-of-dotnet-test-solution.md) |
 | [v0.0.61](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.61) | 2026-10-04 | ci(automerge): Stop waiting on Copilot after three review rounds | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-119-ci-automerge-stop-waiting-on-copilot-after-three-review-rounds.md) |
 | [v0.0.60](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.60) | 2026-10-04 | chore(claude): Make Claude Code the repo's agent setup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-118-chore-claude-make-claude-code-the-repo-s-agent-setup.md) |
-| [v0.0.59](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.59) | 2026-09-29 | build: write a single-document pnpm lockfile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-115-build-write-a-single-document-pnpm-lockfile.md) |
 
 <!-- RELEASES_END -->
 
