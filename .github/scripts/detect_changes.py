@@ -6,10 +6,17 @@ request, from a full-history checkout of the PR merged into its base:
 
     python3 .github/scripts/detect_changes.py --base <base sha> --output "$GITHUB_OUTPUT"
 
-It appends "code=true" or "code=false" to the output file. A PR is docs-only
+It appends "code=true" or "code=false" to the output file, and skip_reason:
+"docs-only", "actions-bump", or empty when the build runs. A PR is docs-only
 when every changed path is under docs/ or ends in .md; the build, test matrix
 and coverage are then skipped. Everything else counts as code, including
 workflows, scripts and an empty diff, so an unexpected path runs the suite.
+
+A Dependabot GitHub Actions bump skips them too: it only moves pinned action
+SHAs, which the build and tests never read, while every other check still
+runs. All three must hold: the PR's author is dependabot[bot], its branch is
+dependabot/github_actions/..., and every changed path is a workflow or a local
+action. A NuGet or SDK bump changes what's built, so it always builds.
 
 Diffing HEAD against the base the event names can also pick up commits that
 reached main since, which only ever adds paths, so it errs toward building.
@@ -59,24 +66,39 @@ def is_code_change(paths):
     return not paths or first_code_path(paths) is not None
 
 
+def is_actions_bump(paths, author, head_ref):
+    """Whether this is a Dependabot GitHub Actions bump that changes only workflows and actions."""
+    return (author == "dependabot[bot]"
+            and head_ref.startswith("dependabot/github_actions/")
+            and bool(paths)
+            and all(path.startswith((".github/workflows/", ".github/actions/")) for path in paths))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", required=True, help="the PR's base commit")
     parser.add_argument("--head", default="HEAD", help="the PR merged into its base")
     parser.add_argument("--output", required=True, help="the file to append code=true|false to")
+    parser.add_argument("--author", default="", help="the PR author's login")
+    parser.add_argument("--head-ref", default="", help="the PR's head branch")
     args = parser.parse_args(argv)
 
     paths = changed_paths(args.base, args.head)
     code = is_code_change(paths)
-    if code and paths:
+    skip_reason = "" if code else "docs-only"
+    if code and is_actions_bump(paths, args.author, args.head_ref):
+        code, skip_reason = False, "actions-bump"
+        print(f"::notice::Dependabot GitHub Actions bump ({len(paths)} files); the build, tests and coverage are skipped.")
+    elif code and paths:
         print(f"Code change: {for_log(first_code_path(paths))}")
     elif not paths:
         print("No changed files; running the build and tests.")
     else:
         print(f"::notice::Docs-only change ({len(paths)} files); the build, tests and coverage are skipped.")
 
+    # skip_reason tells the summary which skip it was; code alone can't.
     with open(args.output, "a", encoding="utf-8") as output:
-        output.write(f"code={'true' if code else 'false'}\n")
+        output.write(f"code={'true' if code else 'false'}\nskip_reason={skip_reason}\n")
     return 0
 
 

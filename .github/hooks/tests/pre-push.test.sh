@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Tests for .github/hooks/pre-push.
-# Each case runs the hook in a throwaway repo, holding a copy of
-# scripts/gate.sh, with the refs git would pass on stdin. Stub `dotnet`, `npx`,
-# `markdownlint-cli2`, `yamllint`, `actionlint`, `zizmor` and `shellcheck`
-# binaries log each call, and fail when the call matches the FAIL glob, so no
+# Each case runs the hook in a throwaway repo, holding copies of
+# scripts/gate.sh, scripts/check-branch-name.sh and
+# .github/scripts/discover_tests.py, with the refs git would
+# pass on stdin. Stub `dotnet`, `npx`, `markdownlint-cli2`, `yamllint`,
+# `actionlint`, `zizmor` and `shellcheck` binaries log each call, and fail when the call matches the FAIL glob, so no
 # real build or network access is needed.
 # Usage: .github/hooks/tests/pre-push.test.sh
 set -uo pipefail
 
 HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/pre-push"
-GATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/scripts/gate.sh"
+SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/scripts"
+DISCOVER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/scripts/discover_tests.py"
 ZERO="0000000000000000000000000000000000000000"
 SHA="1111111111111111111111111111111111111111"
 
@@ -26,6 +28,8 @@ for tool in dotnet npx markdownlint-cli2 yamllint actionlint zizmor shellcheck; 
 #!/usr/bin/env bash
 call="$tool \$*"
 echo "\$call" >> "$LOG"
+[[ -z "\${GIT_DIR:-}" ]] || echo "GIT_DIR=\$GIT_DIR" >> "$LOG"
+[[ -z "\${GIT_INDEX_FILE:-}" ]] || echo "GIT_INDEX_FILE=\$GIT_INDEX_FILE" >> "$LOG"
 [[ -z "\${FAIL:-}" || "\$call" != \$FAIL ]]
 EOF
   chmod +x "$STUBS/$tool"
@@ -36,9 +40,14 @@ export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 
 git init -q -b main "$REPO"
-mkdir -p "$REPO/tests/Fake.Tests" "$REPO/scripts"
-echo '<Project />' > "$REPO/tests/Fake.Tests/Fake.Tests.csproj"
-cp "$GATE" "$REPO/scripts/gate.sh"
+mkdir -p "$REPO/tests/Fake.Tests" "$REPO/scripts" "$REPO/.github/scripts"
+echo '<Project><PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup></Project>' \
+  > "$REPO/tests/Fake.Tests/Fake.Tests.csproj"
+# A helper library under tests/: not a test project, so the gate never tests it.
+mkdir -p "$REPO/tests/Fake.Support"
+echo '<Project />' > "$REPO/tests/Fake.Support/Fake.Support.csproj"
+cp "$SCRIPTS/gate.sh" "$SCRIPTS/check-branch-name.sh" "$REPO/scripts/"
+cp "$DISCOVER" "$REPO/.github/scripts/"
 git -C "$REPO" add .
 git -C "$REPO" commit -q -m init
 git -C "$REPO" update-ref refs/remotes/origin/main main
@@ -159,6 +168,8 @@ expect "pushing main is refused" refused tests-skipped "Direct pushes to 'main' 
 
 run_hook feature/1-x "refs/heads/feature/1-x @HEAD@ refs/heads/feature/1-x $ZERO"
 expect "pushing a feature branch runs the gates" allowed tests-ran
+expect_log "the gate tests a project marked IsTestProject" ran 'dotnet test tests/Fake.Tests/Fake.Tests.csproj*'
+expect_log "the gate skips a helper library under tests/" not-ran 'dotnet test tests/Fake.Support/*'
 
 run_hook main "refs/heads/feature/1-x $SHA refs/heads/feature/1-x $ZERO"
 expect "pushing a branch that isn't checked out is refused" refused tests-skipped "is not the checked-out commit"
@@ -208,6 +219,19 @@ expect "without stdin, a main checkout is refused" refused tests-skipped "Direct
 
 run_hook_without_stdin feature/1-x
 expect "without stdin, a feature checkout runs the gates" allowed tests-ran
+
+# git runs hooks with GIT_DIR set (and GIT_INDEX_FILE in a linked worktree).
+# The build and tests must not inherit it, or a test that runs git in a temp
+# folder reads this repo instead.
+switch_to feature/1-x
+: > "$LOG"
+stdin="$(push_stdin feature/1-x)"
+stdin="${stdin//@HEAD@/$(git -C "$REPO" rev-parse HEAD)}"
+OUTPUT="$(cd "$REPO" && GIT_DIR="$REPO/.git" GIT_INDEX_FILE="$REPO/.git/index" PATH="$STUBS:$PATH" bash "$HOOK" <<< "$stdin" 2>&1)"
+STATUS=$?
+expect "with the hook's GIT_DIR and GIT_INDEX_FILE set, a feature push runs the gates" allowed tests-ran
+expect_log "the build and tests don't inherit the hook's GIT_DIR" not-ran 'GIT_DIR=*'
+expect_log "the build and tests don't inherit the hook's GIT_INDEX_FILE" not-ran 'GIT_INDEX_FILE=*'
 
 git -C "$REPO" switch -q -c feature/2-two-commits origin/main
 echo '# First' > "$REPO/first.md"

@@ -91,7 +91,7 @@ jobs:
           # main is rules-protected and requires a pull request. The
           # [skip-release] marker keeps this PR's merge from starting a
           # release.
-          TITLE="docs: backfill blog posts [skip-release]"
+          TITLE="docs: Backfill blog posts [skip-release]"
           git checkout -b "$BRANCH"
           for path in docs/blogs README.md docs/README.md docs/index.html; do
             if [ -e "$path" ]; then
@@ -116,6 +116,14 @@ jobs:
               --head "$BRANCH" \
               --title "$TITLE" \
               --body "Automated blog post backfill for past releases, opened by the Backfill blog posts workflow. Each post uses its Release's existing tag; no tags or Releases were created. The [skip-release] title marker keeps its merge from starting a release."
+          fi
+
+          # For visibility only (CI's Docs-only label job sets it too), so a
+          # missing label never fails the backfill.
+          # || keeps a failed lookup from ending the step under bash -e.
+          NUMBER=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty') || NUMBER=""
+          if [ -z "$NUMBER" ] || ! gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${NUMBER}/labels" -f "labels[]=docs-only" > /dev/null; then
+            echo "::warning::Couldn't add the docs-only label to the backfill PR."
           fi
 
           gh pr merge "$BRANCH" --auto --squash
