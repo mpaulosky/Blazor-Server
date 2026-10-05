@@ -3,7 +3,7 @@
 # Each case runs the hook in a throwaway repo, holding copies of
 # scripts/gate.sh, scripts/check-branch-name.sh and
 # .github/scripts/discover_tests.py, with the refs git would
-# pass on stdin. Stub `dotnet`, `npx`, `markdownlint-cli2`, `yamllint`,
+# pass on stdin. Stub `dotnet`, `pnpm`, `markdownlint-cli2`, `yamllint`,
 # `actionlint`, `zizmor` and `shellcheck` binaries log each call, and fail when the call matches the FAIL glob, so no
 # real build or network access is needed.
 # Usage: .github/hooks/tests/pre-push.test.sh
@@ -22,17 +22,22 @@ REPO="$WORK/repo"
 STUBS="$WORK/bin"
 LOG="$WORK/gates.log"
 
-mkdir -p "$STUBS"
-for tool in dotnet npx markdownlint-cli2 yamllint actionlint zizmor shellcheck; do
-  cat > "$STUBS/$tool" <<EOF
+# make_stub <dir> <tool>: a stub that logs its call and fails on a FAIL match.
+make_stub() {
+  cat > "$1/$2" <<EOF
 #!/usr/bin/env bash
-call="$tool \$*"
+call="$2 \$*"
 echo "\$call" >> "$LOG"
 [[ -z "\${GIT_DIR:-}" ]] || echo "GIT_DIR=\$GIT_DIR" >> "$LOG"
 [[ -z "\${GIT_INDEX_FILE:-}" ]] || echo "GIT_INDEX_FILE=\$GIT_INDEX_FILE" >> "$LOG"
 [[ -z "\${FAIL:-}" || "\$call" != \$FAIL ]]
 EOF
-  chmod +x "$STUBS/$tool"
+  chmod +x "$1/$2"
+}
+
+mkdir -p "$STUBS"
+for tool in dotnet pnpm markdownlint-cli2 yamllint actionlint zizmor shellcheck; do
+  make_stub "$STUBS" "$tool"
 done
 
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
@@ -244,6 +249,48 @@ FAIL='markdownlint-cli2*first.md*' run_hook feature/2-two-commits \
   "refs/heads/feature/2-two-commits @HEAD@ refs/heads/feature/2-two-commits $ZERO"
 expect "a lint error in the first of two unpushed commits refuses the push" refused any
 
+# Without markdownlint-cli2 installed, the gate lints through pnpm dlx, and never
+# falls back to npx. SYSTEM_BIN links every command on PATH except the machine's
+# own pnpm, npx and markdownlint-cli2, and npx is a stub that only records it was
+# called.
+NO_LINT_STUBS="$WORK/bin-no-markdownlint"
+mkdir -p "$NO_LINT_STUBS"
+for tool in dotnet pnpm yamllint actionlint zizmor shellcheck npx; do
+  make_stub "$NO_LINT_STUBS" "$tool"
+done
+SYSTEM_BIN="$WORK/system-bin"
+mkdir -p "$SYSTEM_BIN"
+IFS=: read -ra path_dirs <<< "$PATH"
+for dir in "${path_dirs[@]}"; do
+  for cmd in "$dir"/*; do
+    name="${cmd##*/}"
+    case "$name" in markdownlint-cli2 | pnpm | npx) continue ;; esac
+    # The first match on PATH wins, as it would for the shell.
+    [[ -x "$cmd" && ! -d "$cmd" && ! -e "$SYSTEM_BIN/$name" ]] && ln -s "$cmd" "$SYSTEM_BIN/$name"
+  done
+done
+
+# run_hook_with_path <stub dir> <checked-out branch> <stdin>
+run_hook_with_path() {
+  switch_to "$2"
+  : > "$LOG"
+  local stdin="${3//@HEAD@/$(git -C "$REPO" rev-parse HEAD)}"
+  OUTPUT="$(cd "$REPO" && PATH="$1:$SYSTEM_BIN" bash "$HOOK" <<< "$stdin" 2>&1)"
+  STATUS=$?
+}
+
+run_hook_with_path "$NO_LINT_STUBS" feature/2-two-commits \
+  "refs/heads/feature/2-two-commits @HEAD@ refs/heads/feature/2-two-commits $ZERO"
+expect "without markdownlint-cli2, the gate lints through pnpm" allowed tests-ran
+expect_log "without markdownlint-cli2, the gate runs pnpm dlx markdownlint-cli2" ran 'pnpm dlx markdownlint-cli2@* first.md'
+expect_log "without markdownlint-cli2, the gate never runs npx" not-ran 'npx*'
+
+rm "$NO_LINT_STUBS/pnpm"
+run_hook_with_path "$NO_LINT_STUBS" feature/2-two-commits \
+  "refs/heads/feature/2-two-commits @HEAD@ refs/heads/feature/2-two-commits $ZERO"
+expect "without markdownlint-cli2 or pnpm, a Markdown change refuses the push" refused any "Markdown lint needs pnpm"
+expect_log "without markdownlint-cli2 or pnpm, the gate never runs npx" not-ran 'npx*'
+
 FAIL='dotnet build*' run_hook feature/1-x "refs/heads/feature/1-x @HEAD@ refs/heads/feature/1-x $ZERO"
 expect "a failing build refuses the push" refused any
 
@@ -326,6 +373,52 @@ run_hook feature/1-x "$(push_stdin feature/1-x)"
 expect "a Sandcastle-gated HEAD with a dirty tree is still refused" refused tests-skipped "uncommitted or untracked changes"
 rm "$REPO/untracked.cs"
 git -C "$REPO" config --local --unset sandcastle.gatedHead
+
+# The ruleset makes a PR be up to date with main before it merges, so a branch
+# behind origin/main is refused before the gate: its PR couldn't merge as pushed.
+# The harness repo has no origin remote, so the hook's fetch fails and it checks
+# against the existing origin/main, as it does offline.
+MAIN_BEFORE="$(git -C "$REPO" rev-parse origin/main)"
+# advance_main: a new commit on origin/main, as if another PR had merged.
+advance_main() {
+  local tree commit
+  tree="$(git -C "$REPO" rev-parse "origin/main^{tree}")"
+  commit="$(git -C "$REPO" commit-tree -p origin/main -m "landed on main" "$tree")"
+  git -C "$REPO" update-ref refs/remotes/origin/main "$commit"
+}
+switch_to feature/10-behind
+advance_main
+run_hook feature/10-behind "$(push_stdin feature/10-behind)"
+expect "a branch behind origin/main is refused before the gates" refused tests-skipped "1 commit(s) behind origin/main"
+expect "the refusal says how to bring main in" refused tests-skipped "git merge origin/main"
+run_hook_without_stdin feature/10-behind
+expect "a branch behind origin/main is refused when run by hand" refused tests-skipped "behind origin/main"
+git -C "$REPO" merge -q --no-edit origin/main
+run_hook feature/10-behind "$(push_stdin feature/10-behind)"
+expect "a branch that merged origin/main runs the gate" allowed tests-ran
+git -C "$REPO" update-ref refs/remotes/origin/main "$MAIN_BEFORE"
+git -C "$REPO" switch -q feature/1-x
+
+# Without an origin/main (a fork's first push, say) there is nothing to compare,
+# so the check is skipped and the gate still runs.
+git -C "$REPO" update-ref -d refs/remotes/origin/main
+run_hook feature/1-x "$(push_stdin feature/1-x)"
+expect "without an origin/main the check is skipped and the gate runs" allowed tests-ran "No origin/main"
+git -C "$REPO" update-ref refs/remotes/origin/main "$MAIN_BEFORE"
+
+# The hook fetches main first, so it sees what merged since the last fetch.
+git init -q --bare "$WORK/origin.git"
+git -C "$REPO" push -q "$WORK/origin.git" "$MAIN_BEFORE:refs/heads/main"
+git -C "$REPO" remote add origin "$WORK/origin.git"
+switch_to feature/11-stale-fetch
+advance_main
+git -C "$REPO" push -q origin "origin/main:refs/heads/main"
+git -C "$REPO" update-ref refs/remotes/origin/main "$MAIN_BEFORE"
+run_hook feature/11-stale-fetch "$(push_stdin feature/11-stale-fetch)"
+expect "a branch behind main is refused even before origin/main was fetched" refused tests-skipped "behind origin/main"
+git -C "$REPO" remote remove origin
+git -C "$REPO" update-ref refs/remotes/origin/main "$MAIN_BEFORE"
+git -C "$REPO" switch -q feature/1-x
 
 echo
 echo "$PASSED passed, $FAILED failed"
