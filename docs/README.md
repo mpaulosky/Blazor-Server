@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.65](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.65) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-130-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.64](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.64) | 2026-10-04 | chore: Standardize on the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-127-chore-standardize-on-the-repo-ci-baseline-template.md) |
 | [v0.0.63](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.63) | 2026-10-04 | chore(deps-dev): bump @types/node from 26.6.2 to 26.6.3 in the all-npm group | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-126-chore-deps-dev-bump-types-node-from-26-6-2-to-26-6-3-in-the-all-npm-group.md) |
 | [v0.0.62](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.62) | 2026-10-04 | docs(README): Run each test project instead of dotnet test --solution | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-123-docs-readme-run-each-test-project-instead-of-dotnet-test-solution.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.58](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.58) | 2026-09-29 | fix(release): Start release posts with an H1 title | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-112-fix-release-start-release-posts-with-an-h1-title.md) |
 | [v0.0.57](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.57) | 2026-09-29 | build: switch the repo tooling from npm to pnpm | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-113-build-switch-the-repo-tooling-from-npm-to-pnpm.md) |
 | [v0.0.56](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.56) | 2026-09-28 | ci: Lint workflows and shell scripts before push and in CI | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-110-ci-lint-workflows-and-shell-scripts-before-push-and-in-ci.md) |
-| [v0.0.55](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.55) | 2026-09-28 | ci: Run the test suite on Dependabot PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-28-pr-106-ci-run-the-test-suite-on-dependabot-prs.md) |
 
 <!-- RELEASES_END -->
 
