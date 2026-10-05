@@ -599,6 +599,56 @@ def test_rebase_readme_links_leaves_fenced_code_in_block_quotes_alone():
     )
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Write `[x](docs/a.md)` for a link.\n",
+        'Use `<a href="docs/a.md">` or ``<img src="docs/b.png">``.\n',
+        "``[x](docs/a.md) with ` inside``\n",
+        "> - `[x](docs/a.md)`\n",
+        # A span may cross a line break inside a paragraph.
+        "See `[x](docs/a.md)\nand [y](docs/b.md)` here.\n",
+        "Use `<a\nhref=\"docs/a.md\">` there.\n",
+        # Indented code, at the top level, after a blank line in a list item, and in a quote.
+        "Example:\n\n    [x](docs/a.md)\n    [y]: docs/b.md\n    <img src=\"docs/c.png\">\n",
+        "- item\n\n      [x](docs/a.md)\n",
+        ">     [x](docs/a.md)\n",
+        # A fence in a list item, indented past the item's content column.
+        "1. item\n\n   ```\n   [x](docs/a.md)\n   ```\n",
+    ],
+)
+def test_rebase_readme_links_leaves_code_spans_and_indented_code_alone(text):
+    assert rp.rebase_readme_links(text) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Links around and after code spans are still rebased, and so is one whose text is code.
+        ("`docs/a.md` is [here](docs/a.md)\n", "`docs/a.md` is [here](a.md)\n"),
+        ("[`a.md`](docs/a.md) and `x` <img src=\"docs/b.png\">\n", "[`a.md`](a.md) and `x` <img src=\"b.png\">\n"),
+        # A blank line ends the paragraph, so these backticks pair with nothing across it.
+        ("a `[x](docs/a.md)\n\n[y](docs/b.md)` b\n", "a `[x](a.md)\n\n[y](b.md)` b\n"),
+        # So does a blank line with a CRLF ending, which keeps its "\r" in the README's lines.
+        ("a `[x](docs/a.md)\r\n\r\n[y](docs/b.md)` b\r\n", "a `[x](a.md)\r\n\r\n[y](b.md)` b\r\n"),
+        # After a span that crossed lines, the rest of its last line is text again.
+        ("`x\ny` [z](docs/a.md)\n", "`x\ny` [z](a.md)\n"),
+        # Backtick runs of different lengths don't pair, so this holds no code span.
+        ("``[x](docs/a.md)`\n", "``[x](a.md)`\n"),
+        # An escaped backtick opens no span.
+        ("\\`[x](docs/a.md)`\n", "\\`[x](a.md)`\n"),
+        # A reference definition is read before code spans, so code in its label doesn't hide it.
+        ("[`a`]: docs/a.md\n", "[`a`]: a.md\n"),
+        # Four spaces continuing a paragraph are text, not indented code.
+        ("Text\n    [x](docs/a.md)\n", "Text\n    [x](a.md)\n"),
+        # Backticks in a raw HTML block are text, not code spans.
+        ('<div>\n`<img src="docs/a.png">`\n</div>\n', '<div>\n`<img src="a.png">`\n</div>\n'),
+    ],
+)
+def test_rebase_readme_links_still_rebases_text_beside_code(text, expected):
+    assert rp.rebase_readme_links(text) == expected
+
+
 def test_run_rebases_links_in_docs_readme_only(tmp_path):
     make_repo(tmp_path)
     links = "[Architecture](docs/ARCHITECTURE.md), [props](Directory.Packages.props) and [docs](docs).\n"
@@ -949,3 +999,205 @@ def test_update_tables_without_a_new_release_lists_existing_releases(tmp_path):
     assert "v0.0.3" not in readme
     assert f"| [v0.0.2](https://github.com/{REPO}/releases/tag/v0.0.2) | 2026-09-20 | fix: Older change | — |" in readme
     assert "v0.0.2" in (tmp_path / "docs" / "index.html").read_text(encoding="utf-8")
+
+
+# Untrusted Markdown (mpaulosky/dotfiles#48)
+
+HOSTILE = [
+    "<script>alert(1)</script>",
+    "Text <img src=x onerror=alert(1)> more",
+    "<div>\n# x\n</div>",
+    # Escaping the HTML block's lines must not bring its fence line to life and expose the later code.
+    "<div>\n```\n</div>\n\n```\n<script>alert(1)</script>\n```",
+    "```js title\n<script>alert(1)</script>",  # unclosed, and kramdown reads no fence with a two-word info
+    "- item\n  ```\n  <script>alert(1)</script>\n  ```",
+    "> ```\n> <script>alert(1)</script>",
+    "x `y\n`<script>alert(1)</script>`",
+    "<!-- a --><script>alert(1)</script>",
+]
+
+
+def outside_code(post):
+    """The post's lines, after its front matter, that CommonMark reads as neither fenced nor indented code.
+
+    Raw HTML blocks count as outside: they are what must not get through.
+    """
+    lines = post.split("---\n", 2)[2].split("\n")
+    blocks = []
+    rp.scan_blocks(list(lines), [], blocks=blocks)
+    code = {index for block in blocks for index in range(block["lines"][0], block["lines"][-1] + 1)}
+    return [line for index, line in enumerate(lines) if index not in code]
+
+
+@pytest.mark.parametrize("body", HOSTILE)
+def test_no_raw_html_reaches_the_post_outside_code(body):
+    post = rp.render_post({"number": 7, "body": body}, "T", "v1.2.3", "2026-09-26", [], [], body, "m")
+    for line in outside_code(post):
+        # Only the raw-tag comments, the <code> spans the sanitizer writes, and safe autolinks.
+        assert not re.search(r"<(?!code>|/code>|https?://|mailto:|!-- \{% (?:end)?raw %\} -->)", line), line
+
+
+def test_the_pr_title_is_escaped_in_the_post_and_both_tables(tmp_path):
+    title = "feat: Add <b>bold</b> and {{ site.x }}"
+    post = rp.render_post({"number": 7}, title, "v1.2.3", "2026-09-26", [], [], None, "m")
+    assert "# feat: Add &lt;b>bold&lt;/b> and {{ site.x }}\n" in post  # inside {% raw %}
+    assert 'post_title: "feat: Add <b>bold</b> and {{ site.x }}"' in post  # YAML, never rendered as Markdown
+
+    rp.update_blog_index(tmp_path, "2026-09-26", title, "2026-09-26-pr-7-x.md")
+    row = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert "[feat: Add &lt;b>bold&lt;/b> and &#123;&#123; site.x }}](2026-09-26-pr-7-x.md)" in row
+
+    entry = {"tag": "v1.2.3", "url": "u", "date": "2026-09-26", "title": title, "post_url": ""}
+    assert "| feat: Add &lt;b>bold&lt;/b> and &#123;&#123; site.x }} |" in rp.render_releases_markdown([entry])
+
+
+def test_the_pr_body_is_escaped():
+    post = rp.render_post({"number": 7, "body": "Why <img src=x onerror=alert(1)>"}, "T", "v1", "2026-09-26", [], [], None, "m")
+    assert "Why &lt;img src=x onerror=alert(1)>" in rp.section(post, "PR description")
+
+
+def test_the_ai_summary_is_escaped():
+    post = rp.render_post({"number": 7}, "T", "v1", "2026-09-26", [], [], "Adds <iframe src=x></iframe>.", "m")
+    assert "Adds &lt;iframe src=x>&lt;/iframe>." in rp.section(post, "Summary")
+
+
+def test_commit_subjects_are_escaped():
+    commits = [{"sha": "abc1234def", "commit": {"message": "fix: Drop <script> {: .x}\n\nbody"}}]
+    assert "- fix: Drop &lt;script> &#123;: .x} (`abc1234`)" in rp.render_commits(commits)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("src/Web/Theme.cs", "`src/Web/Theme.cs`"),
+        ("docs/a b (1).md", "`docs/a b (1).md`"),
+        ("src/a`b.cs", "<code>src&#47;a&#96;b&#46;cs</code>"),  # a backtick can't close the span early
+        ("src/<x>.cs", "<code>src&#47;&#60;x&#62;&#46;cs</code>"),
+        (" a.md ", "<code> a&#46;md </code>"),  # a code span would trim one space from each end
+    ],
+)
+def test_file_names_are_code_that_cannot_break_out(name, expected):
+    assert rp.render_files([{"filename": name, "additions": 1, "deletions": 0}]).splitlines()[-1] == f"- {expected} (+1 / -0)"
+
+
+def test_code_keeps_its_text():
+    body = "```cs\nList<T> x = new();\n```\n\nUse `List<T>`, or `plain`.\n\n    indented <b>"
+    assert rp.sanitize_markdown(body) == (
+        "```cs\nList<T> x = new();\n```\n\n"
+        "Use <code>List&#60;T&#62;</code>, or `plain`.\n\n"
+        "```text\nindented <b>\n```"
+    )
+
+
+def test_a_code_block_is_rewritten_as_a_fence_both_parsers_agree_on():
+    # Unclosed, a two-word info string (kramdown reads no fence there), and backticks inside.
+    assert rp.sanitize_markdown("~~~js title\n````\n<b>") == "`````js\n````\n<b>\n`````"
+
+
+def test_a_code_block_in_a_list_moves_out_of_it():
+    body = "1. Run:\n   ```bash\n   cat <file>\n   ```\n2. Next"
+    assert rp.sanitize_markdown(body) == "1. Run:\n\n```bash\ncat <file>\n```\n\n2. Next"
+
+
+def test_a_fence_line_that_was_not_a_fence_is_escaped():
+    assert rp.sanitize_markdown("<div>\n```\n</div>") == "&lt;div>\n\\```\n&lt;/div>"
+
+
+def test_html_comments_are_dropped():
+    assert rp.sanitize_markdown("a <!-- hidden --> b\n<!--\nmulti\n-->\nc") == "a  b\n\nc"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("[a](javascript:alert(1))", "[a](#javascript:alert(1))"),
+        ("[a](JaVa&#115;cript:x)", "[a](#JaVa&#115;cript:x)"),  # entities decode in a destination
+        ("[a](java&#9;script:x)", "[a](#java&#9;script:x)"),  # browsers drop the tab
+        # Padding can push the scheme any distance from the start: the whole destination is read.
+        ("[a](j" + "&#9;" * 60 + "avascript:x)", "[a](#j" + "&#9;" * 60 + "avascript:x)"),
+        ("[a](java&#" + "0" * 250 + "9;script:x)", "[a](#java&#" + "0" * 250 + "9;script:x)"),
+        ("![a](data:text/html,x)", "![a](#data:text/html,x)"),
+        ("[a](<vbscript:x>)", "[a](&lt;#vbscript:x>)"),
+        ("[a]: javascript:x", "[a]: #javascript:x"),
+        ("> [a]:\n> javascript:x", "> [a]:\n> #javascript:x"),
+        ("[a](https://example.com) [b](mailto:a@b.c) [c](#top) [d](docs/x.md)",
+         "[a](https://example.com) [b](mailto:a@b.c) [c](#top) [d](docs/x.md)"),
+        ("[^1]: Note: a footnote", "[^1]: Note: a footnote"),
+    ],
+)
+def test_link_destinations_with_unsafe_schemes_are_neutralized(text, expected):
+    assert rp.sanitize_markdown(text) == expected
+
+
+def test_autolinks_keep_working():
+    assert rp.sanitize_markdown("See <https://example.com/a?b=1> or <mailto:a@b.c>, not <a@b.c>.") == (
+        "See <https://example.com/a?b=1> or <mailto:a@b.c>, not &lt;a@b.c>."
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('para\n{: onclick="alert(1)"}', 'para\n&#123;: onclick="alert(1)"}'),
+        ("*a*{: .x}", "*a*&#123;: .x}"),
+        ("{::nomarkdown}x{:/}", "&#123;::nomarkdown}x&#123;:/}"),
+        ("\\{: .x}", "\\&#123;: .x}"),
+        ("`{:x}`", "<code>&#123;&#58;x&#125;</code>"),
+    ],
+)
+def test_kramdown_attribute_lists_and_extensions_are_neutralized(text, expected):
+    assert rp.sanitize_markdown(text) == expected
+
+
+def test_the_post_is_liquid_raw_and_its_text_cannot_end_the_raw_block():
+    body = "Jinja: {{ x }} {% if y %}\n\n```\n{% endraw %}{%- endraw -%}\n```"
+    post = rp.render_post({"number": 7, "body": body}, "T", "v1", "2026-09-26", [], [], None, "m")
+    after_front_matter = post.split("---\n", 2)[2]
+    assert after_front_matter.startswith("<!-- {% raw %} -->\n# T\n")
+    assert post.endswith("\n<!-- {% endraw %} -->\n")
+    assert post.count("{% endraw %}") == 3  # the closing tag and one per broken {%
+    assert "{% endraw %}{{ '{%' }}{% raw %} endraw %}" in post
+    assert "{% endraw %}{{ '{%' }}{% raw %}- endraw -%}" in post
+
+
+def test_excerpts_read_escaped_text_as_the_text_it_stands_for():
+    post = rp.render_post({"number": 7, "body": "Returns `List<T>` for <id> & {: x}."}, "T", "v1", "2026-09-26", [], [], None, "m")
+    assert rp.post_excerpt(post) == "Returns List<T> for <id> & {: x}."
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("&#9; &#x9; &#0009; &#x0000a;", "\t \t \t \n"),
+        ("&#" + "0" * 5000 + "9;", "\t"),  # leading zeros past Python's 4300-digit limit
+        ("&#x" + "0" * 5000 + "41;", "A"),
+        ("&#" + "9" * 5000 + ";", "\ufffd"),  # no character has a number that long
+        ("&#; &#x; a &amp; b", "&#; &#x; a & b"),
+    ],
+)
+def test_safe_unescape_never_raises(text, expected):
+    assert rp.safe_unescape(text) == expected
+
+
+def test_an_oversized_character_reference_is_sanitized_not_fatal():
+    # html.unescape raises on it, which would stop the release before its post was written.
+    padded = "&#" + "0" * 5000 + "9;"
+    assert rp.neutralize_links(f"[a](java{padded}script:x)") == f"[a](#java{padded}script:x)"
+    post = rp.render_post({"number": 7, "body": f"Text {padded} [a](java{padded}script:x)"}, "T", "v1", "2026-09-26", [], [], None, "m")
+    assert "](#java" in post
+    assert rp.post_excerpt(post).startswith("Text")
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        # A code span may cross a line break; its text stays code, and a risky one becomes <code>
+        # with the break as the space CommonMark renders.
+        ("Use `List<T>\nand Map<K>` here", "Use <code>List&#60;T&#62; and Map&#60;K&#62;</code> here"),
+        ("Use `plain\ntext` and <b>", "Use `plain\ntext` and &lt;b>"),
+        # A blank line ends the paragraph, so these backticks open no span and <T> is escaped.
+        ("Use `a <T>\n\nb` c", "Use `a &lt;T>\n\nb` c"),
+    ],
+)
+def test_code_spans_may_cross_line_breaks(body, expected):
+    assert rp.sanitize_markdown(body) == expected
