@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.67](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.67) | 2026-10-05 | chore(sandcastle): Correct why publish() pushes from the worktree | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-134-chore-sandcastle-correct-why-publish-pushes-from-the-worktree.md) |
 | [v0.0.66](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.66) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-132-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.65](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.65) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-130-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.64](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.64) | 2026-10-04 | chore: Standardize on the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-127-chore-standardize-on-the-repo-ci-baseline-template.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.60](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.60) | 2026-10-04 | chore(claude): Make Claude Code the repo's agent setup | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-118-chore-claude-make-claude-code-the-repo-s-agent-setup.md) |
 | [v0.0.59](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.59) | 2026-09-29 | build: write a single-document pnpm lockfile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-115-build-write-a-single-document-pnpm-lockfile.md) |
 | [v0.0.58](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.58) | 2026-09-29 | fix(release): Start release posts with an H1 title | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-112-fix-release-start-release-posts-with-an-h1-title.md) |
-| [v0.0.57](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.57) | 2026-09-29 | build: switch the repo tooling from npm to pnpm | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-09-29-pr-113-build-switch-the-repo-tooling-from-npm-to-pnpm.md) |
 
 <!-- RELEASES_END -->
 
