@@ -6,7 +6,7 @@ paths:
 # Markdown Rules
 
 `markdownlint-cli2` enforces these rules in CI and in the pre-commit and pre-push hooks, using `.markdownlint-cli2.jsonc`.
-Its `ignores` list skips the vendored skills in `.claude/skills/` and the release blog posts in `docs/blogs/`, which the release workflow generates from PR bodies.
+Its `ignores` list skips the release blog posts in `docs/blogs/`, which the release workflow generates from PR bodies.
 `.sandcastle/.markdownlint-cli2.jsonc` also allows several top-level headings in the Sandcastle prompts.
 
 ## Structure

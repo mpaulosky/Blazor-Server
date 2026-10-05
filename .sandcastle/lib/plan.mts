@@ -1,10 +1,10 @@
 import * as sandcastle from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { hooks } from "./config.mts";
 import type { SandcastleIssue } from "./github.mts";
 import { plannerPromptArgs } from "./prompts.mts";
+import { agentSandbox } from "./skills.mts";
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts
 // and validates it against this schema. We use Zod here, but any Standard
@@ -25,7 +25,7 @@ export type PlannedIssue = z.infer<typeof planSchema>["issues"][number];
 export async function planRound(ready: SandcastleIssue[]): Promise<PlannedIssue[]> {
   const plan = await runRole("planner", {
     hooks,
-    sandbox: docker(),
+    sandbox: agentSandbox(),
     promptFile: "./.sandcastle/plan-prompt.md",
     promptArgs: plannerPromptArgs(ready),
     // Extract and validate the <plan> JSON into a typed object. Throws

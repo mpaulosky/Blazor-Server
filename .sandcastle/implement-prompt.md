@@ -40,7 +40,7 @@ Pay extra attention to test files that touch the relevant parts of the code.
 
 # SKILLS
 
-This repository ships .NET skills in `.claude/skills/`. Use them where they apply:
+These .NET skills are mounted into the sandbox from the host's `~/.claude/skills/`. Use them where they apply:
 
 - `dotnet-tdd`: the red-green-refactor loop with xUnit v3
 - `dotnet-add-testing`: scaffolding a new test project
