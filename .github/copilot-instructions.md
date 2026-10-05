@@ -1,6 +1,3 @@
-<!-- Generated from .claude/skills/code-review/SKILL.md by scripts/sync-copilot-review.sh.
-     Edit the skill and rerun the script; scripts/gate.sh and CI fail when this file drifts. -->
-
 # Code review
 
 Review the pull request against this repository's own sources of truth. The rules below point at them and add what

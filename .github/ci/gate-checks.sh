@@ -30,15 +30,6 @@ run_clean() {
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_PREFIX "$@"
 }
 
-# .github/copilot-instructions.md is generated from the code-review skill, so
-# GitHub's Copilot review and Claude Code review against the same rules.
-if changed .claude/skills/code-review/SKILL.md .github/copilot-instructions.md scripts/sync-copilot-review.sh; then
-  echo -e "${CYAN}🔁 Copilot review instructions sync...${RESET}"
-  scripts/sync-copilot-review.sh --check
-else
-  echo -e "${GREEN}✅ No Copilot review sync changes to check.${RESET}"
-fi
-
 if changed .sandcastle package.json ':(glob)pnpm-*.yaml'; then
   echo -e "${CYAN}🏰 Sandcastle TypeScript check...${RESET}"
   run_clean pnpm run check:sandcastle
