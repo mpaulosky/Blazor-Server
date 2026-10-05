@@ -13,8 +13,8 @@ import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import { sh } from "./shell.mts";
 
 // Push an issue branch from its worktree and open (or reuse) the PR that closes
-// the issue. Pushing from the worktree matters: the pre-push hook checks the
-// checked-out branch's name and runs lint and tests against that tree.
+// the issue. Pushing from the worktree matters: the pre-push hook refuses a
+// commit other than the checkout's HEAD, because its gate tests the working tree.
 function publish(
   issue: SandcastleIssue,
   branch: string,
