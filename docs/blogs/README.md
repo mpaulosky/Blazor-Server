@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-05 | [test(sandcastle): Cover the skill mounts reaching each sandbox](2026-10-05-pr-144-test-sandcastle-cover-the-skill-mounts-reaching-each-sandbox.md) | release,automation |
 | 2026-10-05 | [chore(claude): Move the .NET skills to the personal skills folder](2026-10-05-pr-142-chore-claude-move-the-net-skills-to-the-personal-skills-folder.md) | release,automation |
 | 2026-10-05 | [chore: Re-apply the repo-ci-baseline Template for the release-post fixes](2026-10-05-pr-140-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-fixes.md) | release,automation |
 | 2026-10-05 | [chore: Use pnpm instead of npx in the gate and hooks](2026-10-05-pr-137-chore-use-pnpm-instead-of-npx-in-the-gate-and-hooks.md) | release,automation |
