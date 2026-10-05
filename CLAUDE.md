@@ -44,16 +44,10 @@ check, each when its files changed), then a Release build and each test project 
 `scripts/gate.sh` is Owned by the repo-ci-baseline Template and overwritten on every Apply, so a new repo-only check
 goes in `gate-checks.sh`. Don't use `dotnet test --solution` as the check: under Microsoft Testing
 Platform it can report zero tests while the project runs pass. The pre-push hook runs the gate after its own branch
-checks (no pushes to `main`, `preview` or `dev`, the naming rules below, and a clean tree at the pushed commit), and
-skips it for a commit Sandcastle already gated. Enable the hooks once per clone with
-`git config core.hooksPath .github/hooks`.
+checks (no pushes to `main`, `preview` or `dev`, the branch names in `docs/PROCESS.md`, and a clean tree at the pushed
+commit), and skips it for a commit Sandcastle already gated.
 
 ## Git workflow
 
-- Never commit or push to `main`; the pre-push hook rejects it.
-- Branches: `feature/{issue}-{slug}`, `fix/{issue}-{slug}`, `hotfix/{issue}-{slug}`, or `chore/{slug}`, where a `chore/`
-  slug starts with a letter (lowercase kebab-case).
-- Commits: `<type>(<scope>): <Summary>` in the imperative, 72 characters or fewer, capitalized, no trailing period.
-  Full rules in `.claude/rules/git-commit.md`.
-- Every merged PR triggers `release.yml`, which tags a release and opens a release-blog PR. A `[skip-release]` marker
-  in the PR title opts out; the automated release-blog PRs use it so they don't release themselves.
+Branches, worktrees, commits, PR titles and descriptions, merging and releases follow
+[docs/PROCESS.md](docs/PROCESS.md). Commit messages follow `.github/instructions/git-commit-instructions.md`.
