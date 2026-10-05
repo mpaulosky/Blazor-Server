@@ -33,14 +33,10 @@ Please report unwanted behavior to [Project Maintainer](mailto:matthew.paulosky@
 ## Quick Start
 
 1. Fork the repository and clone your fork.
-2. Run `git config core.hooksPath .github/hooks` once, so the pre-commit and pre-push hooks run.
-3. Create a branch from `main` named `feature/{issue}-{slug}`, `fix/{issue}-{slug}`, `hotfix/{issue}-{slug}` or
-   `chore/{slug}` (e.g. `feature/123-add-search`); the pre-push hook enforces it.
-4. Make your changes, following the code style and guidelines below.
-5. Add or update tests as needed.
-6. Commit with clear messages (see below).
-7. Push your branch and open a Pull Request to `main`.
-8. Ensure all checks pass and respond to review feedback.
+2. Follow [PROCESS.md](PROCESS.md): the one-time hook setup, a branch named to the standard in its own worktree,
+   commit and PR title format, the PR description, and how checks, review, merging and releases work.
+3. Make your changes, following the code style and guidelines below, with tests.
+4. Push your branch and open a Pull Request to `main` using the template.
 
 ## What should I know before I get started
 
@@ -49,8 +45,8 @@ This project is a GitHub template for a server-rendered Blazor Web App built wit
 ### Code Style & Commit Messages
 
 - Follow the coding standards in [CODING_STANDARDS.md](CODING_STANDARDS.md) and the formatting rules in `.editorconfig`.
-- Write commit messages in the `<type>(<scope>): <Summary>` format described in [git-commit.md](../.claude/rules/git-commit.md), and reference issues (e.g.,
-  `Fixes #123`).
+- Commits and PR titles follow [git-commit-instructions.md](../.github/instructions/git-commit-instructions.md)
+  (`<type>(<scope>): <Summary>`); see [PROCESS.md](PROCESS.md#commits-and-pr-titles).
 - Add comments to explain *why* for complex logic.
 
 ### Project Folder Structure
@@ -140,7 +136,7 @@ This means one of several types of contributions:
 
 ### Create an Issue
 
-Create a [New Issue Here]( [your repository issues URL] ).
+Create a [New Issue Here](https://github.com/mpaulosky/Blazor-Server/issues).
 
 1. If you are reporting a `Bug` that you have found. Be sure to add the `Bug` label so that we can triage and track it.
 1. If you are reporting an `Enhancement` that you think would improve the project. Be sure to add the `Enhancement`
@@ -150,9 +146,9 @@ Please provide as much detail as possible, including steps to reproduce, expecte
 
 ### Respond to an Issue
 
-[Fork the Repository to your account]( [your repository fork URL] ).
+[Fork the Repository to your account](https://github.com/mpaulosky/Blazor-Server/fork).
 
-1. Create a new branch from `main` with a reference to the existing Issue number.
+1. Create a branch in its own worktree, named for the existing Issue number (`feature/{issue}-{slug}` or `fix/{issue}-{slug}`); see [PROCESS.md](PROCESS.md#branches-and-worktrees).
 1. Work on the issue.
 1. Create Unit, Integration tests for any code that require them. We use xUnit v3, FluentAssertions, NSubstitute, bUnit, and Playwright to test our code and components.
 1. When you are done, create a Pull Request from your branch to `main`.
@@ -178,10 +174,9 @@ Pull requests without unit tests will be delayed and asked for unit tests to pro
 
 ### Review Process
 
-1. All PRs are reviewed by maintainers and may require changes before merging.
-2. Automated checks (build, tests, lint) must pass before review.
-3. Be responsive to feedback and update your PR as needed.
-4. Once approved, your PR will be merged into `main`.
+Every PR is reviewed by Copilot on each push, and merges once its required checks pass and every review thread is
+resolved: a same-repo PR merges on its own, and the maintainer merges a fork's. The details are in
+[PROCESS.md](PROCESS.md#checks-review-and-merging).
 
 ### Write code
 

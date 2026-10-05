@@ -15,7 +15,9 @@ Read the sections that govern the changed code before commenting on it:
   disagrees.
 - `CONTEXT.md`: the domain language (Template, Generated App, Theme, Palette, Visitor, User, Admin, Shared Kernel).
 - `docs/adr/`: recorded decisions. A change that contradicts an ADR needs a new ADR that supersedes it.
-- `.claude/rules/`: the path-scoped rules (Blazor, .NET, Markdown, blog posts) and the commit message format.
+- `.claude/rules/`: the path-scoped rules (Blazor, .NET, Markdown and blog posts).
+- `docs/PROCESS.md`: branches, commits, PR titles and descriptions, and merging. The commit format is in
+  `.github/instructions/git-commit-instructions.md`.
 
 ## What to check
 

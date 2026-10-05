@@ -5,13 +5,14 @@ import pytest
 import release_queue as rq
 
 
-def pull(number, merged_at, title=None, sha=None, updated_at=None):
+def pull(number, merged_at, title=None, sha=None, updated_at=None, author="mpaulosky"):
     return {
         "number": number,
         "title": title or f"feat: PR {number}",
         "merged_at": merged_at,
         "updated_at": updated_at or merged_at or "2026-09-29T00:00:00Z",
         "merge_commit_sha": sha or f"sha{number}",
+        "author": author,
     }
 
 
@@ -45,11 +46,38 @@ def test_unreleased_prs_are_queued_oldest_merge_first():
 def test_released_and_skip_release_prs_are_left_out():
     pulls = [
         pull(10, "2026-09-29T10:00:00Z"),
-        pull(11, "2026-09-29T10:01:00Z", title="docs: add release blog for PR #10 [skip-release]"),
+        pull(11, "2026-09-29T10:01:00Z", title="docs: Add release blog for PR #10 [skip-release]"),
         pull(12, "2026-09-29T10:02:00Z"),
     ]
 
     assert rq.queue(pulls, released={10}, in_cutoff=never_contained, has_cutoff=True, main_order=order_of(pulls)) == [12]
+
+
+def test_a_dependabot_merge_is_folded_into_the_next_release():
+    # A dependency bump gets no Release of its own: the next PR's Release
+    # tags a later commit, so it contains the bump, and its generated notes
+    # list the bump's PR.
+    bump = pull(30, "2026-09-29T09:00:00Z", title="chore(deps): bump the all-nuget group with 3 updates",
+                author="dependabot[bot]")
+    trigger = pull(31, "2026-09-29T10:00:00Z")
+    pulls = [trigger, bump]
+
+    queued = rq.queue(pulls, released=set(), in_cutoff=never_contained, has_cutoff=True, trigger=31,
+                      trigger_pull=trigger, main_order=order_of(pulls))
+
+    assert queued == [31]
+
+
+def test_a_dependabot_pr_fetched_on_its_own_is_folded_in_too():
+    # A manual run names a PR fetched with its "user", not a listed "author".
+    bump = pull(30, "2026-09-29T09:00:00Z")
+    del bump["author"]
+    bump["user"] = {"login": "dependabot[bot]"}
+
+    queued = rq.queue([], released=set(), in_cutoff=never_contained, has_cutoff=True, trigger=30,
+                      trigger_pull=bump, main_order=order_of([bump]))
+
+    assert queued == []
 
 
 def test_prs_already_inside_the_cutoff_release_are_left_out():
@@ -163,6 +191,17 @@ def test_merged_pulls_pages_back_to_the_boundary_and_stops():
 
     assert numbers == [30, 28]
     assert gh.fetched == [1, 2]
+
+
+def test_merged_pulls_keeps_each_prs_author():
+    # The API names the author under "user"; the queue reads it as "author".
+    listed = pull(30, "2026-09-29T12:00:00Z")
+    listed["user"] = {"login": "dependabot[bot]"}
+    gh = PagedGitHub([[listed]])
+
+    [pr] = gh.merged_pulls(since="2026-09-29T09:00:00Z")
+
+    assert pr["author"] == "dependabot[bot]"
 
 
 def test_merged_pulls_keeps_paging_while_every_pr_is_newer_than_the_boundary():
