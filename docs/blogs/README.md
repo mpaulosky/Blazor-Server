@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-05 | [chore: Use pnpm instead of npx in the gate and hooks](2026-10-05-pr-137-chore-use-pnpm-instead-of-npx-in-the-gate-and-hooks.md) | release,automation |
 | 2026-10-05 | [chore: Re-apply the repo-ci-baseline Template](2026-10-05-pr-136-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-05 | [chore(sandcastle): Correct why publish() pushes from the worktree](2026-10-05-pr-134-chore-sandcastle-correct-why-publish-pushes-from-the-worktree.md) | release,automation |
 | 2026-10-05 | [chore: Re-apply the repo-ci-baseline Template](2026-10-05-pr-132-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
