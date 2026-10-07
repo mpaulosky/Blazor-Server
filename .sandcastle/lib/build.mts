@@ -1,4 +1,4 @@
-// Build one planned issue: implement, gate, review, gate again and publish it
+// Build one planned issue: test, implement, gate, review, gate again and publish it
 // from a single sandbox, so every role and the gate share the same worktree.
 // Nothing is merged locally: every change reaches main through a reviewed PR.
 
@@ -44,6 +44,7 @@ export type BuildHost = {
   commitsAhead(worktreePath: string): number;
   commentOnIssue(issueNumber: number, body: string): void;
   publish: typeof publish;
+  log(line: string): void;
 };
 
 const liveHost: BuildHost = {
@@ -51,14 +52,17 @@ const liveHost: BuildHost = {
   commitsAhead,
   commentOnIssue,
   publish,
+  log: console.log,
 };
 
 // The branch comes from prepareBranches, which has already fetched it when it
-// exists on origin. The implementer runs first; if the branch is then ahead of
-// main, the gate runs (checkpoint 1), the reviewer runs, and the gate runs
-// again (checkpoint 2) before the branch is pushed and gets a pull request
-// that closes its issue. Returns the PR's URL, or undefined when the branch
-// holds nothing to publish or a checkpoint's gate stayed red.
+// exists on origin. The tester commits failing tests for the acceptance
+// criteria, then the backend developer makes them pass. If the branch is then
+// ahead of main, the gate runs (checkpoint 1), the reviewer runs, and the gate
+// runs again (checkpoint 2) before the branch is pushed and gets a pull request
+// that closes its issue. Returns the PR's URL, or undefined when a developer
+// run failed, the branch holds nothing to publish or a checkpoint's gate
+// stayed red.
 export async function buildIssue(
   issue: SandcastleIssue,
   branch: string,
@@ -68,6 +72,30 @@ export async function buildIssue(
 
   const promptArgs = issuePromptArgs(issue, branch);
   const commits: { sha: string }[] = [];
+  const log = (line: string) => host.log(`  #${issue.number} ${line}`);
+
+  // Run the tester or the backend developer. Returns false when the run threw,
+  // timed out or used up its iterations without signalling completion: the
+  // tests aren't written or aren't green, so the issue stops for this round.
+  // Whatever the run committed stays on the branch for the next round.
+  async function developerFinishes(role: "tester" | "backend"): Promise<boolean> {
+    try {
+      const run = await runRoleInSandbox(sandbox, role, {
+        promptFile: `./.sandcastle/roles/${role}.md`,
+        promptArgs,
+      });
+      commits.push(...run.commits);
+      if (run.completionSignal === undefined) {
+        console.error(`  ✗ #${issue.number}: the ${role} ran out of iterations unfinished, so ${branch} isn't published.`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`  ✗ #${issue.number}: the ${role} failed, so ${branch} isn't published: ${error}`);
+      return false;
+    }
+    log(`${role} finished`);
+    return true;
+  }
 
   // Run a gate checkpoint, with the gate-fixer while the gate is red. When it's
   // still red past the fixer's attempts, nothing is published: the branch keeps
@@ -85,7 +113,7 @@ export async function buildIssue(
           commits.push(...fixer.commits);
         },
       },
-      (line) => console.log(`  #${issue.number} ${line}`),
+      log,
     );
     if (!result.passed) {
       console.error(`  ✗ #${issue.number}: the gate is still red at checkpoint ${checkpoint}, so ${branch} isn't published.`);
@@ -102,11 +130,8 @@ export async function buildIssue(
   }
 
   try {
-    const implement = await runRoleInSandbox(sandbox, "implementer", {
-      promptFile: "./.sandcastle/implement-prompt.md",
-      promptArgs,
-    });
-    commits.push(...implement.commits);
+    if (!(await developerFinishes("tester"))) return { commits, prUrl: undefined };
+    if (!(await developerFinishes("backend"))) return { commits, prUrl: undefined };
 
     // Gate, review and publish whenever the branch holds work that main
     // doesn't, not only when this run added commits: a re-run of a finished
@@ -130,6 +155,7 @@ export async function buildIssue(
         promptArgs,
       });
       commits.push(...review.commits);
+      log("reviewer finished");
     } catch (error) {
       // A failed review shouldn't strand finished work: publish anyway and
       // say so in the PR, which gets a human review regardless.
