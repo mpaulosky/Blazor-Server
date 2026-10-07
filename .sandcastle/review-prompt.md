@@ -48,7 +48,8 @@ Comments on the issue from the repository owner:
    - Are new/changed behaviours covered by tests?
    - Are there unsafe casts, null-forgiving operators, or unchecked assumptions?
    - Does it follow the red → green history the issue asks for, with tests covering every new or changed behaviour?
-   - Do the acceptance tests cover every acceptance criterion in the issue? The tester committed them red first. Name any criterion no test checks.
+   - Do the acceptance tests cover every acceptance criterion in the issue that can be tested automatically? The tester committed them red first. Name any criterion no test
+     checks. A criterion that can't be tested automatically, such as one about docs or a manual step, needs no test: check it against the change directly.
    - Did the developers weaken the tester's tests to make them pass? Compare each acceptance test with the tester's commit: look for removed or loosened assertions, tests that
      were skipped, commented out or deleted, and expected values changed to match the code.
    - Does the change introduce injection vulnerabilities, credential leaks, or other security issues?
@@ -66,8 +67,8 @@ Comments on the issue from the repository owner:
 
 # EXECUTION
 
-A missing acceptance test, or one that was weakened, is the one exception to preserving functionality: add the missing test, or restore what the tester's test checked, and commit
-it with `test(<scope>): <Summary>`. If the code then fails the test, don't change the test to match it. Say in the commit body what fails.
+A missing acceptance test, or one that was weakened, is the one exception to preserving functionality: add the missing test for a criterion that can be tested automatically, or
+restore what the tester's test checked, and commit it with `test(<scope>): <Summary>`. If the code then fails the test, don't change the test to match it. Say in the commit body what fails.
 
 If you find improvements to make:
 

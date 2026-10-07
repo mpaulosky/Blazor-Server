@@ -61,7 +61,10 @@ These .NET skills are mounted into the sandbox from the host's `~/.claude/skills
 6. Lint the files you changed: `pnpm exec markdownlint-cli2 <file>` for Markdown and `yamllint -c .yamllint.yml <file>` for YAML.
 7. Commit the tests and stubs red, with `test(<scope>): <Summary>`. Say in the body which test covers which criterion.
 
-When a criterion can't be tested automatically (for example, it's about docs or a manual step), say so in the commit body instead of writing a test that doesn't check it.
+When a criterion can't be tested automatically (for example, it's about docs or a manual step), don't write a test that doesn't check it. Name the criterion and why it can't be
+tested in the commit body, or in your final message when you have nothing to commit.
+
+On a re-run, the branch may already hold tests for some criteria. Keep them, and write tests only for the criteria nothing covers yet.
 
 Don't run `scripts/gate.sh`: your tests are red on purpose, so it would fail.
 
@@ -69,7 +72,8 @@ Don't run `scripts/gate.sh`: your tests are red on purpose, so it would fail.
 
 {{SHARED_RULES}}
 
-Once your failing tests are committed, output <promise>COMPLETE</promise>.
+Once every criterion that can be tested automatically has a committed test, output <promise>COMPLETE</promise>. That includes the case where you commit nothing, because earlier
+commits already cover every criterion or none can be tested automatically.
 
 # FINAL RULES
 
