@@ -28,13 +28,15 @@ function host(
   const sandbox = {
     worktreePath: "/worktree",
     run: async (options: SandboxRunOptions) => {
+      // runRoleInSandbox always names the run after its role.
+      const role = options.name!;
       runs.push(options);
-      steps.push(options.name === "gate-fixer" ? `gate-fixer ${options.promptArgs?.CHECKPOINT}` : options.name!);
-      if (failing.includes(options.name!)) throw new Error(`${options.name} timed out`);
+      steps.push(role === "gate-fixer" ? `gate-fixer ${options.promptArgs?.CHECKPOINT}` : role);
+      if (failing.includes(role)) throw new Error(`${role} timed out`);
       return {
         iterations: [],
-        commits: [{ sha: options.name! }],
-        completionSignal: unfinished.includes(options.name!) ? undefined : "<promise>COMPLETE</promise>",
+        commits: [{ sha: role }],
+        completionSignal: unfinished.includes(role) ? undefined : "<promise>COMPLETE</promise>",
       };
     },
     exec: async (command: string) => {
@@ -122,12 +124,14 @@ describe("buildIssue", () => {
   });
 
   for (const role of ["tester", "backend"]) {
+    const stepsUntilClose = role === "tester" ? ["tester", "close"] : ["tester", "backend", "close"];
+
     it(`publishes nothing and runs no gate when the ${role} fails`, async () => {
       const { steps, buildHost } = host([], { failing: [role] });
 
       const result = await buildIssue(issue, branch, buildHost);
 
-      assert.deepEqual(steps, role === "tester" ? ["tester", "close"] : ["tester", "backend", "close"]);
+      assert.deepEqual(steps, stepsUntilClose);
       assert.equal(result.prUrl, undefined);
     });
 
@@ -136,7 +140,7 @@ describe("buildIssue", () => {
 
       const result = await buildIssue(issue, branch, buildHost);
 
-      assert.deepEqual(steps, role === "tester" ? ["tester", "close"] : ["tester", "backend", "close"]);
+      assert.deepEqual(steps, stepsUntilClose);
       assert.equal(result.prUrl, undefined);
       assert.ok(!logs.includes(`  #69 ${role} finished`));
     });
