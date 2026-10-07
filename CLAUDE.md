@@ -21,6 +21,8 @@ guidance for Blazor, .NET, Markdown and blog posts, and load when you work on ma
   or package (see `docs/adr/0001-shared-kernel-in-domain-project.md`).
 - `tests/Architecture.Tests/`, `tests/Domain.Tests.Unit/`: test projects, named `<Project>.Tests.<Kind>`.
 - Planned, not yet created: `src/UI/` (the Blazor Web App) and `src/Core/` (feature slices).
+- `aspire.config.json` (the Aspire CLI's shared settings) is committed together with this repo's own AppHost, not
+  before. Until then, delete any copy the CLI writes: one that points at another repo's AppHost is per-machine noise.
 - `.sandcastle/`: the unattended agent pipeline (TypeScript, run with Claude Code).
 - `.github/workflows/`, `.github/scripts/`, `.github/hooks/`: CI, release blog tooling and git hooks.
 - `.claude/skills/code-review/`: the PR review checklist. GitHub's Copilot code review gets the same checklist through
@@ -46,6 +48,11 @@ goes in `gate-checks.sh`. Don't use `dotnet test --solution` as the check: under
 Platform it can report zero tests while the project runs pass. The pre-push hook runs the gate after its own branch
 checks (no pushes to `main`, `preview` or `dev`, the branch names in `docs/PROCESS.md`, and a clean tree at the pushed
 commit), and skips it for a commit Sandcastle already gated.
+
+Push from a checkout of the branch being pushed, with nothing uncommitted or untracked in it: the hook gates the
+checked-out commit, so it refuses `git push origin <other-branch>` from the `main` checkout. Push from the branch's
+worktree (see `docs/PROCESS.md`). To push a branch that has none, check it out in a temporary
+`git worktree add ../Blazor-Server-worktrees/<folder> <branch>` rather than stashing and switching in the main checkout.
 
 ## Git workflow
 
