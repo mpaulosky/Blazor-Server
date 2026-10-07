@@ -10,12 +10,12 @@ describe("UsageReport", () => {
     const report = new UsageReport();
 
     report.record("planner", [{ usage: usage(1, 2, 3, 4) }]);
-    report.record("implementer", [{ usage: usage(10, 20, 30, 40) }, { usage: usage(1, 1, 1, 1) }]);
-    report.record("implementer", [{ usage: usage(100, 0, 0, 0) }]);
+    report.record("backend", [{ usage: usage(10, 20, 30, 40) }, { usage: usage(1, 1, 1, 1) }]);
+    report.record("backend", [{ usage: usage(100, 0, 0, 0) }]);
 
     assert.deepEqual(report.totals(), new Map([
       ["planner", usage(1, 2, 3, 4)],
-      ["implementer", usage(111, 21, 31, 41)],
+      ["backend", usage(111, 21, 31, 41)],
     ]));
   });
 
