@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.76">v0.0.76</a></td>
+                <td>2026-10-07</td>
+                <td>chore: Re-apply the repo-ci-baseline Template for the release-post regressions</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-159-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-regressions.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.75">v0.0.75</a></td>
                 <td>2026-10-07</td>
                 <td>feat(sandcastle): Replace the implementer with a tester and a backend developer</td>
@@ -282,12 +288,6 @@
                 <td>chore(sandcastle): Correct why publish() pushes from the worktree</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-134-chore-sandcastle-correct-why-publish-pushes-from-the-worktree.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.66">v0.0.66</a></td>
-                <td>2026-10-05</td>
-                <td>chore: Re-apply the repo-ci-baseline Template</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-132-chore-re-apply-the-repo-ci-baseline-template.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-07">7 Oct 2026</time><span class="post-tag">v0.0.76</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-159-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-regressions.md">chore: Re-apply the repo-ci-baseline Template for the release-post regressions</a></h3>
+              <p class="post-excerpt">Three Apply commits, each the output of apply.sh, unedited. Only .github/scripts/release_post.py and its tests change. The second, after mpaulosky/dotfiles#78 merged, also reads inline HTML in…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/159">PR #159</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-07">7 Oct 2026</time><span class="post-tag">v0.0.75</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-134-chore-sandcastle-correct-why-publish-pushes-from-the-worktree.md">chore(sandcastle): Correct why publish() pushes from the worktree</a></h3>
               <p class="post-excerpt">The comment above publish() in .sandcastle/lib/build.mts said the pre-push hook &quot;checks the checked-out branch&#x27;s name&quot;. The hook doesn&#x27;t work that way. It gates the refs being pushed…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/134">PR #134</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-05">5 Oct 2026</time><span class="post-tag">v0.0.66</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-132-chore-re-apply-the-repo-ci-baseline-template.md">chore: Re-apply the repo-ci-baseline Template</a></h3>
-              <p class="post-excerpt">The Template&#x27;s release_post.py changed after the last re-Apply (#130). This brings in the fixes for untrusted Markdown in release blog posts (mpaulosky/dotfiles#48), after TicketManager as the live…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/132">PR #132</a></p>
             </article>
           </li>
         </ul>
