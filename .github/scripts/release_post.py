@@ -101,12 +101,27 @@ def commit_subject(commit):
     return message.splitlines()[0].strip() if message.strip() else "(no message)"
 
 
+# A commit subject that starts a list item this way, or after the quote or list
+# markers that nest a block in it, would start a definition there, and the item
+# (or the block) would render empty: to GitHub (cmark-gfm) a reference definition
+# whose title is the "(`sha`)" after it, and to kramdown, which takes anything after
+# "[label]:" as the destination, a reference, footnote or abbreviation definition.
+DEFINITION_LIKE_SUBJECT = re.compile(r"\*?\[(?:[^\]\\]|\\.)*\]:|\*?\[[^\]]+\]:")
+
+
 def render_commits(commits):
     lines = ["## Commits", ""]
     if not commits:
         lines.append("No commits were found.")
     for commit in commits:
-        lines.append(f"- {sanitize_inline(commit_subject(commit), definitions=True)} (`{commit.get('sha', '')[:7]}`)")
+        # Checked as it's published, so a comment the sanitizer drops can't hide one.
+        # Escaped, it can't start a definition, so it was rightly sanitized like a title.
+        subject = sanitize_inline(commit_subject(commit))
+        after = after_containers(subject, 0)
+        start = len(subject) - len(subject[after:].lstrip(" \t"))
+        if DEFINITION_LIKE_SUBJECT.match(subject, start):
+            subject = subject[:start] + "\\" + subject[start:]
+        lines.append(f"- {subject} (`{commit.get('sha', '')[:7]}`)")
     return "\n".join(lines) + "\n"
 
 
@@ -1158,9 +1173,9 @@ def span_text(content):
 def sanitize_inline(text, liquid=False, definitions=False):
     """A single line of untrusted text, such as a PR title or commit subject, made safe to publish.
 
-    It's rendered in a heading or table cell, where no reference definition
-    can start, so none is read unless `definitions` is set: a commit subject
-    starts a list item, where one can.
+    It's rendered in a heading, table cell or commit list item, where no
+    reference definition can start (render_commits escapes a subject that
+    would start one), so none is read unless `definitions` is set.
     """
     return sanitize_text(text, liquid=liquid, definitions=definitions)
 
