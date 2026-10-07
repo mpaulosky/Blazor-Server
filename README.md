@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.77](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.77) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-162-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.76](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.76) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template for the release-post regressions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-159-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-regressions.md) |
 | [v0.0.75](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.75) | 2026-10-07 | feat(sandcastle): Replace the implementer with a tester and a backend developer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-148-feat-sandcastle-replace-the-implementer-with-a-tester-and-a-backend-developer.md) |
 | [v0.0.74](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.74) | 2026-10-07 | docs: Say where to push from, and settle aspire.config.json | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-154-docs-say-where-to-push-from-and-settle-aspire-config-json.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.70](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.70) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template for the release-post fixes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-140-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-fixes.md) |
 | [v0.0.69](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.69) | 2026-10-05 | chore: Use pnpm instead of npx in the gate and hooks | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-137-chore-use-pnpm-instead-of-npx-in-the-gate-and-hooks.md) |
 | [v0.0.68](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.68) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-136-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.67](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.67) | 2026-10-05 | chore(sandcastle): Correct why publish() pushes from the worktree | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-134-chore-sandcastle-correct-why-publish-pushes-from-the-worktree.md) |
 
 <!-- RELEASES_END -->
 
