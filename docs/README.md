@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.74](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.74) | 2026-10-07 | docs: Say where to push from, and settle aspire.config.json | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-154-docs-say-where-to-push-from-and-settle-aspire-config-json.md) |
 | [v0.0.73](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.73) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-155-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.72](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.72) | 2026-10-05 | test(sandcastle): Cover the skill mounts reaching each sandbox | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-144-test-sandcastle-cover-the-skill-mounts-reaching-each-sandbox.md) |
 | [v0.0.71](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.71) | 2026-10-05 | chore(claude): Move the .NET skills to the personal skills folder | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-142-chore-claude-move-the-net-skills-to-the-personal-skills-folder.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.67](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.67) | 2026-10-05 | chore(sandcastle): Correct why publish() pushes from the worktree | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-134-chore-sandcastle-correct-why-publish-pushes-from-the-worktree.md) |
 | [v0.0.66](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.66) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-132-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.65](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.65) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-130-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.64](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.64) | 2026-10-04 | chore: Standardize on the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-04-pr-127-chore-standardize-on-the-repo-ci-baseline-template.md) |
 
 <!-- RELEASES_END -->
 
