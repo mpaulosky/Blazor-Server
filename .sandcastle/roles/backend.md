@@ -1,6 +1,6 @@
 # TASK
 
-Fix issue {{TASK_ID}}: {{ISSUE_TITLE}}
+Make the tests pass for issue {{TASK_ID}}: {{ISSUE_TITLE}}
 
 <issue>
 
@@ -20,6 +20,9 @@ Only work on the issue specified. You can't reach GitHub from here, and don't ne
 
 Work on branch {{BRANCH}}. It may already hold earlier commits for this issue. Build on them, don't redo them.
 
+You are the backend developer. The tester ran before you and committed failing tests for the issue's acceptance criteria, with stubs that throw `NotImplementedException`. Your job is to
+make those tests pass.
+
 # CONTEXT
 
 Here are the last 10 commits:
@@ -36,7 +39,7 @@ Explore the repo and fill your context window with relevant information that wil
 
 Read `CONTEXT.md` for the domain language, `docs/adr/` for recorded decisions, and `docs/CODING_STANDARDS.md` for the rules the code must follow.
 
-Pay extra attention to test files that touch the relevant parts of the code.
+Read the tester's commits on this branch first: their tests are the specification you implement.
 
 # SKILLS
 
@@ -51,12 +54,15 @@ These .NET skills are mounted into the sandbox from the host's `~/.claude/skills
 
 # EXECUTION
 
-Work test-first (red → green → refactor):
+Work test-first (red → green → refactor), one failing test at a time:
 
-1. RED: write one failing test and run it to watch it fail
+1. RED: pick a failing acceptance test, or write a smaller unit test of your own for a piece the acceptance tests need, and run it to watch it fail
 2. GREEN: write the least implementation that passes it
-3. REPEAT until the issue is done
+3. REPEAT until every test passes
 4. REFACTOR with the tests green
+
+Never weaken the tester's tests to make them pass: don't remove or loosen an assertion, add `Skip`, comment a test out, or delete one. When a test is wrong rather than the code, leave
+it as it is and say why in your commit body.
 
 # RULES
 
