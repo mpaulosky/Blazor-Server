@@ -1440,6 +1440,13 @@ def test_a_title_cannot_close_its_blog_index_link_when_its_backticks_pair_differ
         lambda n: "](((" * n,
         lambda n: "](" + "(a)" * n + "](" * n,
         lambda n: "[" * n + "[a](x)" * n,
+        # Raw inline HTML in the README: a tag in a quoted paragraph, and openers that never close.
+        lambda n: "> " + "<a\n> " * n,
+        lambda n: "- - > " + "<!X\n    > " * n,
+        lambda n: "> " + "<?\n> " * n,
+        lambda n: "<? " * n,
+        lambda n: "<!X " * n,
+        lambda n: "<![CDATA[ " * n,
     ],
 )
 def test_finding_code_stays_linear(shape):
@@ -1590,6 +1597,10 @@ def test_a_reference_definition_with_backticks_in_its_label_and_title_is_rebased
         ('[a]: docs/a.md "first\nsecond"\n', '[a]: a.md "first\nsecond"\n'),
         ('[a]: docs/a.md "first\r\nsecond"\r\n', '[a]: a.md "first\r\nsecond"\r\n'),
         ("[a]: docs/a.md\n  'T `'\n[b](docs/b.md) `\n", "[a]: a.md\n  'T `'\n[b](b.md) `\n"),
+        # A backslash before a title's line ending is a literal backslash, in each kind of title.
+        ('[a]: docs/a.md "first\\\nsecond"\n', '[a]: a.md "first\\\nsecond"\n'),
+        ("[a]: docs/a.md 'first\\\nsecond'\n", "[a]: a.md 'first\\\nsecond'\n"),
+        ("[a]: docs/a.md (first\\\r\nsecond)\r\n", "[a]: a.md (first\\\r\nsecond)\r\n"),
         # A blank line ends the title, so this is no definition; nor is a title with text after it.
         ('[a]: docs/a.md "first\n\nsecond"\n', '[a]: docs/a.md "first\n\nsecond"\n'),
         ('[a]: docs/a.md\n"t" x\n', '[a]: a.md\n"t" x\n'),
@@ -1630,6 +1641,34 @@ def test_a_close_bracket_without_a_label_is_not_rebased(text, expected):
         # A "<" that opens no tag is text, and so is an escaped one, so the backticks after it pair.
         ("[a < b](docs/a.md)\n", "[a < b](a.md)\n"),
         ('Use \\<span title="`">[x](docs/a.md)`\n', 'Use \\<span title="`">[x](docs/a.md)`\n'),
+        # So is a processing instruction, a CDATA section and a declaration.
+        ('[<?pi data="]"?>x](docs/a.md)\n', '[<?pi data="]"?>x](a.md)\n'),
+        ("[<![CDATA[a]b]]>x](docs/a.md)\n", "[<![CDATA[a]b]]>x](a.md)\n"),
+        ("[<!X a]b>x](docs/a.md)\n", "[<!X a]b>x](a.md)\n"),
+        ("[<!X\na]b>x](docs/a.md)\n", "[<!X\na]b>x](a.md)\n"),
+        # A declaration's name is uppercase letters then whitespace, as GitHub reads it; any other "<!" is text.
+        ("[<!x a]b>x](docs/a.md)\n", "[<!x a]b>x](docs/a.md)\n"),
+        ("[<!Xa]b>x](docs/a.md)\n", "[<!Xa]b>x](docs/a.md)\n"),
+        # An unclosed one is text.
+        ("[<? x](docs/a.md)\n", "[<? x](a.md)\n"),
+        # In a quote, a tag's later lines carry the quote's markers, which aren't the tag's end.
+        ('> [<span\n> title="]">x</span>](docs/a.md)\n', '> [<span\n> title="]">x</span>](a.md)\n'),
+        ('> > [<span\n> > title="]">x</span>](docs/a.md)\n', '> > [<span\n> > title="]">x</span>](a.md)\n'),
+        ('- > [<span\n  > title="]">x</span>](docs/a.md)\n', '- > [<span\n  > title="]">x</span>](a.md)\n'),
+        # Nested list items can indent a later line's quote marker 4 spaces or more.
+        ('- - > [<span\n    > title="]">x</span>](docs/a.md)\n', '- - > [<span\n    > title="]">x</span>](a.md)\n'),
+        ('1. - > [<span\n     > title="]">x</span>](docs/a.md)\n', '1. - > [<span\n     > title="]">x</span>](a.md)\n'),
+        ('10. > [<span\n    > title="]">x</span>](docs/a.md)\n', '10. > [<span\n    > title="]">x</span>](a.md)\n'),
+        ('>\t[<span\n>\ttitle="]">x</span>](docs/a.md)\n', '>\t[<span\n>\ttitle="]">x</span>](a.md)\n'),
+        # So do the other forms: a declaration, processing instruction and CDATA section.
+        ("> [<!X\n> a]b>x](docs/a.md)\n", "> [<!X\n> a]b>x](a.md)\n"),
+        ('> [<!X\n> data="]">x](docs/a.md)\n', '> [<!X\n> data="]">x](a.md)\n'),
+        ("> [<?pi\n> a]b?>x](docs/a.md)\n", "> [<?pi\n> a]b?>x](a.md)\n"),
+        ("- - > [<![CDATA[\n    > a]b]]>x](docs/a.md)\n", "- - > [<![CDATA[\n    > a]b]]>x](a.md)\n"),
+        # A lazy line has no marker to remove.
+        ('> [<span\ntitle="]">x</span>](docs/a.md)\n', '> [<span\ntitle="]">x</span>](a.md)\n'),
+        # Outside a quote, that ">" starts one, so there's no link.
+        ('[<span\n> title="]">x</span>](docs/a.md)\n', '[<span\n> title="]">x</span>](docs/a.md)\n'),
     ],
 )
 def test_inline_html_in_a_label_is_read_whole_in_the_docs_readme(text, expected):
@@ -1659,6 +1698,8 @@ def test_a_comment_after_a_close_bracket_without_a_label_is_dropped():
         ('[x](docs/a.md\r\n "title")\r\n', '[x](a.md\r\n "title")\r\n'),
         # A blank line ends the paragraph, and the link with it.
         ('[x](docs/a.md\n\n"t")\n', '[x](docs/a.md\n\n"t")\n'),
+        # A backslash before a line ending in a title is a literal backslash.
+        ('[x](docs/a.md "a\\\nb")\n', '[x](a.md "a\\\nb")\n'),
         ('[x](docs/a.md\r\n\r\n"t")\r\n', '[x](docs/a.md\r\n\r\n"t")\r\n'),
     ],
 )
@@ -1693,3 +1734,52 @@ def test_a_reference_definition_inside_a_code_span_is_left_alone():
 )
 def test_the_excerpt_skips_only_real_html_blocks(summary, expected):
     assert rp.first_paragraph(rp.sanitize_markdown(summary)) == expected
+
+
+def test_a_title_that_looks_like_a_reference_definition_keeps_its_code():
+    # A title is rendered in a heading or table cell, where no definition can start, so its code span pairs as usual.
+    assert rp.sanitize_inline("[Use `List<T>`]: support") == "[Use <code>List&#60;T&#62;</code>]: support"
+
+
+def test_a_commit_subject_that_looks_like_a_reference_definition_is_read_as_one():
+    # It starts a list item, and the SHA after it is a parenthesized title, so GitHub (cmark-gfm) reads the line as
+    # a definition: its label isn't rendered, and is left as written apart from the escaped "<".
+    commit = {"sha": "abc1234def", "commit": {"message": "[Use `List<T>`]: support"}}
+    assert rp.render_commits([commit]).splitlines()[2] == "- [Use `List&lt;T>`]: support (`abc1234`)"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # An autolink is read whole, so a "]" in it closes no label and the link around it is still rebased.
+        ("![<https://example.test/a]b>](docs/logo.png)\n", "![<https://example.test/a]b>](logo.png)\n"),
+        ("[<mailto:a]b@example.test>](docs/a.md)\n", "[<mailto:a]b@example.test>](a.md)\n"),
+    ],
+)
+def test_an_autolink_in_a_label_does_not_close_it(text, expected):
+    assert rp.rebase_readme_links(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Only a definition's destination is rebased: its label and title are text, even where they read like HTML.
+        ("[api]: docs/a.md \"Use href='docs/b.md'\"\n", "[api]: a.md \"Use href='docs/b.md'\"\n"),
+        ("[src='docs/b.md']: docs/a.md\n", "[src='docs/b.md']: a.md\n"),
+        ("[api]: docs/a.md\n(Use href='docs/b.md')\n", "[api]: a.md\n(Use href='docs/b.md')\n"),
+    ],
+)
+def test_a_reference_definition_keeps_its_label_and_title_as_written(text, expected):
+    assert rp.rebase_readme_links(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        # The sanitizer escapes this autolink's "<", so in the post it's text: its backtick pairs as the post reads it.
+        ("<https://x.test/a`b> `<i>`", "&lt;https://x.test/a`b> `&lt;i>`"),
+        ("[<https://x.test/a`]b> `<i>`](docs/a.md)", "[&lt;https://x.test/a<code>&#93;b&#62; </code>&lt;i>`](docs/a.md)"),
+    ],
+)
+def test_an_autolink_the_sanitizer_escapes_is_scanned_as_text(body, expected):
+    assert rp.sanitize_markdown(body) == expected

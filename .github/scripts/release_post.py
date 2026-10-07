@@ -106,7 +106,7 @@ def render_commits(commits):
     if not commits:
         lines.append("No commits were found.")
     for commit in commits:
-        lines.append(f"- {sanitize_inline(commit_subject(commit))} (`{commit.get('sha', '')[:7]}`)")
+        lines.append(f"- {sanitize_inline(commit_subject(commit), definitions=True)} (`{commit.get('sha', '')[:7]}`)")
     return "\n".join(lines) + "\n"
 
 
@@ -232,6 +232,11 @@ HTML_BLOCK_TAGS = (
 HTML_ATTRIBUTE = r"""\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?"""
 # A complete open or close tag, as CommonMark reads raw inline HTML.
 INLINE_HTML_TAG = re.compile(rf"<[A-Za-z][A-Za-z0-9-]*(?:{HTML_ATTRIBUTE})*\s*/?>|</[A-Za-z][A-Za-z0-9-]*\s*>", re.A)
+# CommonMark's other raw inline HTML: a processing instruction, CDATA section or
+# declaration, by its opener and the text that closes it. A declaration's name
+# is uppercase letters then whitespace, as GitHub (cmark-gfm) reads it.
+INLINE_HTML_CLOSES = (("<?", "?>"), ("<![CDATA[", "]]>"))
+INLINE_HTML_DECLARATION = re.compile(r"<![A-Z]+\s", re.A)
 HTML_BLOCKS = [
     (re.compile(r" {0,3}<(?:pre|script|style|textarea)(?:\s|>|$)", re.I | re.A), re.compile(r"</(?:pre|script|style|textarea)>", re.I | re.A)),
     (re.compile(r" {0,3}<!--", re.A), re.compile(r"-->", re.A)),
@@ -368,6 +373,16 @@ def from_column(raw, column):
     return " " * max(col - column, 0)
 
 
+def raw_offset(raw, column):
+    """Where a column of a line's tab-expanded form falls in the raw line, past any tab that straddles it."""
+    col = 0
+    for pos, char in enumerate(raw):
+        if col >= column:
+            return pos
+        col = col + 4 - col % 4 if char == "\t" else col + 1
+    return len(raw)
+
+
 def fence_content(raw, offset, rest, block):
     """A fenced code line's text, from the raw line, with its containers and the opener's indent removed.
 
@@ -377,7 +392,7 @@ def fence_content(raw, offset, rest, block):
     return from_column(raw, offset + min(spaces, block["indent"]))
 
 
-def scan_blocks(lines, headings, code=None, blocks=None, continued=None):
+def scan_blocks(lines, headings, code=None, blocks=None, continued=None, prefixes=None):
     """Finds the headings in Markdown lines, including those inside block quotes and list items.
 
     Appends (line index, prefix, level, rest of line) to `headings` for each
@@ -393,7 +408,9 @@ def scan_blocks(lines, headings, code=None, blocks=None, continued=None):
     from the indented code line before it (a ">" line is blank inside its
     quote). When `continued` is a set, the indexes of the lines that
     continue an open paragraph, lazily or not, are added to it; every other
-    line starts a block or is blank.
+    line starts a block or is blank. When `prefixes` is a dict, each
+    paragraph line's index maps to the length of its container prefix in the
+    raw line: the markers and indent of the quotes and list items it matched.
 
     This follows CommonMark's block parsing in one pass: each line first
     matches the open quotes and list items, may lazily continue an open
@@ -419,6 +436,10 @@ def scan_blocks(lines, headings, code=None, blocks=None, continued=None):
     def mark_content():
         if stack and stack[-1]["kind"] == "list":
             stack[-1]["has_content"] = True
+
+    def paragraph_line(index, raw, offset):
+        if prefixes is not None:
+            prefixes[index] = raw_offset(raw, offset)
 
     for index, raw in enumerate(lines):
         # A trailing "\r" is the rest of a CRLF line ending; tabs expand so
@@ -457,6 +478,7 @@ def scan_blocks(lines, headings, code=None, blocks=None, continued=None):
             if paragraph is not None and rest.strip(" ") and not opens_block:
                 paragraph.append((index, line[:offset], rest))
                 continued.add(index)
+                paragraph_line(index, raw, offset)
                 continue
             del stack[matched:]
             while quote_levels and quote_levels[-1] >= matched:
@@ -548,6 +570,7 @@ def scan_blocks(lines, headings, code=None, blocks=None, continued=None):
             else:
                 paragraph.append((index, line[:offset], rest))
                 continued.add(index)
+                paragraph_line(index, raw, offset)
             continue
         if INDENTED_CODE.match(rest):
             if blocks is not None:
@@ -561,6 +584,7 @@ def scan_blocks(lines, headings, code=None, blocks=None, continued=None):
         if THEMATIC_BREAK.match(rest):
             continue
         paragraph = [(index, line[:offset], rest)]
+        paragraph_line(index, raw, offset)
 
 
 # Untrusted Markdown. A PR's title, description and commits, and the AI
@@ -583,11 +607,18 @@ LINK_DESTINATION_START = re.compile(r"\]\(|\]:")
 # A footnote definition's start, with kramdown's footnote ID (\w[\w-]*, and Ruby's \w is
 # ASCII): GitHub Pages reads any other "[^...]:" as a reference definition, a link.
 FOOTNOTE_DEFINITION = re.compile(r"[ \t>]*\[\^[A-Za-z0-9_][A-Za-z0-9_-]*\]:")
-# What inline_code() stops at: a backtick run, a comment's opener, the "](" before a link
-# destination, and the brackets that open and close a link's label.
-INLINE_MARK = re.compile(r"`+|<!--|\]\(|\[|\]")
-# The same, and the "<" that may open an inline HTML tag, for inline_code(html=True).
-INLINE_MARK_HTML = re.compile(r"`+|<!--|</?[A-Za-z]|\]\(|\[|\]")
+# What inline_code() stops at: a backtick run, a comment's opener, the "<" that may open
+# an autolink or an inline HTML tag, the "](" before a link destination, and the brackets
+# that open and close a link's label.
+INLINE_MARK = re.compile(r"`+|<!--|<|\]\(|\[|\]")
+# A CommonMark autolink, URI or email, which inline_code() reads whole: a "]" or backtick
+# in it closes no label and opens no span. Wider than AUTOLINK, which is what the
+# sanitizer lets keep its angle brackets.
+INLINE_AUTOLINK = re.compile(
+    r"<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\x00-\x20<>]*>"
+    r"|<[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>"
+)
 CONTAINER_MARKER = re.compile(r"[ \t]*(?:>|(?:[-+*]|[0-9]{1,9}[.)])(?=[ \t]|$))")
 BACKTICKS = re.compile(r"`+")
 # Characters that make a code span unsafe to leave between backticks: a parser
@@ -598,6 +629,9 @@ CODE_SPAN_RISK = re.compile(r"[<{\]]")
 # and for a bare one.
 ANGLE_DESTINATION = object()
 BARE_DESTINATION = object()
+# What it yields for the rest of a reference definition: its label, before the destination,
+# and its title, after it. Both are text, never HTML, so README rebasing leaves them alone.
+DEFINITION_TEXT = object()
 # The space a link may hold between its parts: spaces and tabs, and at most one line
 # ending (LF or CRLF, which the README's lines keep), after which the next line's quote
 # markers and indentation are skipped too.
@@ -608,7 +642,8 @@ LINK_SPACE = re.compile(r"[ \t]*(?:\r?\n[ \t>]*)?")
 LINK_DEFINITION_LABEL = re.compile(r"[ \t]*\[(?!\^[A-Za-z0-9_][A-Za-z0-9_-]*\])((?:[^\[\]\\\n]|\\.){1,999})\]:[ \t]*")
 # What may follow a definition's destination: a title, on its line or the next, then
 # nothing on the title's last line. A title may hold line endings, but not a blank line.
-LINK_TITLE_LINE_ENDING = r"\r?\n(?![ \t>]*\r?$)"
+# A backslash before one is a literal backslash.
+LINK_TITLE_LINE_ENDING = r"\\?\r?\n(?![ \t>]*\r?$)"
 LINK_DEFINITION_TAIL = re.compile(
     rf"""(?:(?:[ \t]+|[ \t]*\r?\n[ \t>]*)(?:"(?:[^"\\\r\n]|\\.|{LINK_TITLE_LINE_ENDING})*"|'(?:[^'\\\r\n]|\\.|{LINK_TITLE_LINE_ENDING})*'"""
     rf"""|\((?:[^()\\\r\n]|\\.|{LINK_TITLE_LINE_ENDING})*\)))?[ \t]*\r?$""",
@@ -852,11 +887,85 @@ def reference_definitions(text, breaks):
     return definitions
 
 
-def inline_code(text, continues=None, html=False):
+class _End:
+    """A match's end, for a span that isn't one regex match."""
+
+    def __init__(self, end):
+        self._end = end
+
+    def end(self):
+        return self._end
+
+
+def other_inline_html(text, start, limit, closes):
+    """A processing instruction, CDATA section or declaration at text[start], ending before `limit`, or None.
+
+    `closes` caches where each closer next occurs, so text full of unclosed
+    openers is still read in linear time.
+    """
+    if INLINE_HTML_DECLARATION.match(text, start):
+        opener, closer = "<!", ">"
+    else:
+        opener, closer = next(((o, c) for o, c in INLINE_HTML_CLOSES if text.startswith(o, start)), (None, None))
+        if opener is None:
+            return None
+    after = start + len(opener)
+    close = closes.get(closer)
+    if close is None or 0 <= close < after:
+        close = closes[closer] = text.find(closer, after)
+    if close < 0 or close + len(closer) > limit:
+        return None
+    return _End(close + len(closer))
+
+
+class ParagraphText:
+    """A paragraph's text with its later lines' container prefixes removed, built once per paragraph.
+
+    CommonMark matches raw inline HTML in a paragraph's text, which leaves
+    out each line's quote markers and list item indent: in
+    "> [<span\n> title="]">", the second ">" is the quote's, not the tag's
+    end, and so is the one in "- - > [<span\n    > title=...". `prefixes`
+    holds each line's prefix length, as scan_blocks() reports it, and `line`
+    is the index of the paragraph's first line.
+    """
+
+    def __init__(self, text, start, end, prefixes, line):
+        pieces = []
+        self.text_starts = []  # where each piece starts in text
+        self.kept_starts = []  # and in self.kept
+        self.closes = {}  # as other_inline_html() caches them, in self.kept
+        kept = 0
+        pos = start
+        while pos < end:
+            if pos > start:
+                line += 1
+                pos = min(pos + (prefixes[line] if line < len(prefixes) else 0), end)
+            newline = text.find("\n", pos, end)
+            line_end = end if newline < 0 else newline + 1
+            self.text_starts.append(pos)
+            self.kept_starts.append(kept)
+            pieces.append(text[pos:line_end])
+            kept += line_end - pos
+            pos = line_end
+        self.kept = "".join(pieces)
+
+    def html(self, start):
+        """The tag, processing instruction, CDATA section or declaration at text[start], as a match-like end, or None."""
+        piece = bisect.bisect_right(self.text_starts, start) - 1
+        at = self.kept_starts[piece] + start - self.text_starts[piece]
+        whole = INLINE_HTML_TAG.match(self.kept, at) or other_inline_html(self.kept, at, len(self.kept), self.closes)
+        if not whole:
+            return None
+        piece = bisect.bisect_left(self.kept_starts, whole.end()) - 1
+        return _End(self.text_starts[piece] + whole.end() - self.kept_starts[piece])
+
+
+def inline_code(text, continues=None, html=False, definitions=True, prefixes=None):
     """Each code span, HTML comment and link destination in Markdown text, as (start, end, content).
 
-    content is None for a comment, and ANGLE_DESTINATION or BARE_DESTINATION
-    for the destination of an inline link or reference definition.
+    content is None for a comment, ANGLE_DESTINATION or BARE_DESTINATION
+    for the destination of an inline link or reference definition, and
+    DEFINITION_TEXT for the rest of a reference definition.
 
     The text is read left to right, as CommonMark reads it, and whatever
     starts first wins: a backtick before "<!--" opens a span that may hold the
@@ -872,15 +981,26 @@ def inline_code(text, continues=None, html=False):
     backticks pair. As in CommonMark, a link deactivates the link (not image)
     openers before it, since a link can't hold a link. A reference definition
     is read before anything else on its line, as reference_definitions()
-    finds it. With `html` set, a complete inline HTML tag is skipped as
-    GitHub reads a README's, so a "]" or backtick in its attributes is
-    neither a label's end nor a span's; the post sanitizer, which escapes
-    every tag, leaves it unset.
+    finds it; unset `definitions` for text that can't hold one, such as a
+    title rendered in a heading or table cell. An autolink is skipped whole.
+    With `html` set, complete raw inline HTML is skipped too, as GitHub
+    reads a README's: a tag, a processing instruction, CDATA section or
+    declaration, even one whose later lines carry container markers, which
+    `prefixes` (each line's, as scan_blocks() reports it) says where to
+    skip. So a "]" or
+    backtick in it is neither a label's end nor a span's, and an autolink is
+    any INLINE_AUTOLINK. The
+    post sanitizer leaves `html` unset: it escapes every tag, and the "<" of
+    any autolink but an AUTOLINK, so only an AUTOLINK is one in what it
+    publishes, and only that is skipped.
 
     Runs and paragraph ends are indexed once, and bare_destination_end() caps
     how far a link is read, so the scan stays linear.
     """
     breaks = paragraph_breaks(text.split("\n"), continues)
+    paragraph_starts = [0, *breaks]
+    paragraph_texts = {}  # each paragraph's ParagraphText, by its index, built at its first "<"
+    line_starts = [0, *(match.end() for match in re.finditer("\n", text))] if html else []
     starts_by_length = {}
     for match in BACKTICKS.finditer(text):
         starts_by_length.setdefault(len(match.group()), []).append(match.start())
@@ -888,18 +1008,19 @@ def inline_code(text, continues=None, html=False):
     labels = []  # the "["s still open in labels_paragraph: whether each is an image's ("![")
     inactive_below = 0  # labels[:inactive_below] that aren't images' can't make a link any more
     labels_paragraph = 0
-    definitions = reference_definitions(text, breaks)
+    found = reference_definitions(text, breaks) if definitions else []
     next_definition = 0
-    marks = INLINE_MARK_HTML if html else INLINE_MARK
     pos = 0
     while True:
-        mark = marks.search(text, pos)
+        mark = INLINE_MARK.search(text, pos)
         # A definition a comment hid is text; the next one is read before any mark on its line.
-        while next_definition < len(definitions) and definitions[next_definition][0] < pos:
+        while next_definition < len(found) and found[next_definition][0] < pos:
             next_definition += 1
-        if next_definition < len(definitions) and (not mark or definitions[next_definition][0] <= mark.start()):
-            _, destination, end, pos = definitions[next_definition]
+        if next_definition < len(found) and (not mark or found[next_definition][0] <= mark.start()):
+            start, destination, end, pos = found[next_definition]
+            yield start, destination, DEFINITION_TEXT
             yield destination, end, ANGLE_DESTINATION if text[destination] == "<" else BARE_DESTINATION
+            yield end, pos, DEFINITION_TEXT
             next_definition += 1
             continue
         if not mark:
@@ -929,10 +1050,21 @@ def inline_code(text, continues=None, html=False):
                         inactive_below = len(labels)
                     destination, end, pos = link
                     yield destination, end, ANGLE_DESTINATION if text[destination] == "<" else BARE_DESTINATION
-        elif token[0] == "<" and token != "<!--":
-            tag = None if odd_backslashes_before(text, start) else INLINE_HTML_TAG.match(text, start, paragraph_end)
-            if tag:
-                pos = tag.end()
+        elif token == "<":
+            if not odd_backslashes_before(text, start):
+                if html:
+                    if paragraph not in paragraph_texts:
+                        paragraph_start = paragraph_starts[paragraph]
+                        first = bisect.bisect_left(line_starts, paragraph_start)
+                        paragraph_texts[paragraph] = ParagraphText(
+                            text, paragraph_start, paragraph_end, prefixes or [], first
+                        )
+                    # An autolink can't cross a line, so it's read in place.
+                    whole = paragraph_texts[paragraph].html(start) or INLINE_AUTOLINK.match(text, start, paragraph_end)
+                else:
+                    whole = AUTOLINK.match(text, start, paragraph_end)
+                if whole:
+                    pos = whole.end()
         elif token == "<!--":
             close = text.find("-->", pos) if comments_can_close else -1
             if close < 0:
@@ -977,7 +1109,7 @@ def link_label(markdown):
     return "".join(out).replace("]", "&#93;")
 
 
-def sanitize_text(text, continues=None, liquid=False):
+def sanitize_text(text, continues=None, liquid=False, definitions=True):
     """Untrusted Markdown text (no code blocks) made safe to publish; HTML comments are dropped.
 
     Code spans and comments are found first, on the raw text, so code keeps
@@ -985,19 +1117,19 @@ def sanitize_text(text, continues=None, liquid=False):
     crossed a line break has it as a space, as CommonMark renders it. The rest
     is prose: the comments are dropped from it, so a destination a comment
     split is read whole, then its links are neutralized and its HTML escaped.
-    `continues` is as for paragraph_breaks().
+    `continues` and `definitions` are as for paragraph_breaks() and inline_code().
     """
     out = []
     prose = []  # the prose since the last span, without its comments
     at_line_start = True
     done = 0
-    for start, end, content in inline_code(text, continues):
+    for start, end, content in inline_code(text, continues, definitions=definitions):
         prose.append(text[done:start])
         done = end
         if content is ANGLE_DESTINATION:
             prose.append(bare_destination(text[start + 1:end - 1]))
             continue
-        if content is BARE_DESTINATION:
+        if content is BARE_DESTINATION or content is DEFINITION_TEXT:
             prose.append(text[start:end])
             continue
         if content is None:
@@ -1023,9 +1155,14 @@ def span_text(content):
     return " ".join([first, *(line.lstrip(" \t>") for line in later)])
 
 
-def sanitize_inline(text, liquid=False):
-    """A single line of untrusted text, such as a PR title or commit subject, made safe to publish."""
-    return sanitize_text(text, liquid=liquid)
+def sanitize_inline(text, liquid=False, definitions=False):
+    """A single line of untrusted text, such as a PR title or commit subject, made safe to publish.
+
+    It's rendered in a heading or table cell, where no reference definition
+    can start, so none is read unless `definitions` is set: a commit subject
+    starts a list item, where one can.
+    """
+    return sanitize_text(text, liquid=liquid, definitions=definitions)
 
 
 def code_fence(content, info):
@@ -1563,7 +1700,7 @@ def update_index_html(path, entries, posts, repository):
 # (title), then the closing parenthesis. As in LINK_SPACE, each space between
 # them may hold a line ending and the next line's containers.
 LINK_INLINE_TAIL = re.compile(
-    r"""(?:(?:[ \t]*\r?\n[ \t>]*|[ \t]+)(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\)))?"""
+    r"""(?:(?:[ \t]*\r?\n[ \t>]*|[ \t]+)(?:"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'|\((?:[^()\\]|\\[\s\S])*\)))?"""
     r"""[ \t]*(?:\r?\n[ \t>]*)?\)"""
 )
 LINK_ANGLE_DESTINATION = re.compile(r"<((?:[^<>\n\\]|\\.)+)>")
@@ -1650,7 +1787,7 @@ def rebase_html_attribute(match):
             return match.group(1) + quote + rebase_link(match.group(group)) + quote
 
 
-def rebase_text_links(lines, continues=None):
+def rebase_text_links(lines, continues=None, prefixes=None):
     """Lines of Markdown text with their links rebased; code spans, which may cross lines, are left alone.
 
     Links are found as inline_code() finds them: a reference definition is
@@ -1659,14 +1796,21 @@ def rebase_text_links(lines, continues=None):
     its title doesn't either (#58). A "](" with no open label is text, and so
     is a line that only starts like a definition. An inline HTML tag is read
     whole, as GitHub reads it, so a "]" in its attributes closes no label.
-    `continues` is as for paragraph_breaks().
+    `continues` is as for paragraph_breaks(), and `prefixes` as for
+    inline_code(); a caller that scanned the whole document passes both,
+    otherwise the lines are scanned on their own.
     """
     if not lines:
         return []
+    if continues is None:
+        continued, found = set(), {}
+        scan_blocks(list(lines), [], continued=continued, prefixes=found)
+        continues = [index in continued for index in range(len(lines))]
+        prefixes = [found.get(index, 0) for index in range(len(lines))]
     text = "\n".join(lines)
     out = []
     done = 0
-    for start, end, content in inline_code(text, continues, html=True):
+    for start, end, content in inline_code(text, continues, html=True, prefixes=prefixes):
         out.append(LINK_HTML_ATTRIBUTE.sub(rebase_html_attribute, text[done:start]))
         if content is ANGLE_DESTINATION:
             out.append("<" + rebase_link(text[start + 1:end - 1]) + ">")
@@ -1691,11 +1835,13 @@ def rebase_readme_links(markdown):
     raw = set()
     blocks = []
     continued = set()
-    scan_blocks(list(lines), [], raw, blocks, continued)
+    prefixes = {}
+    scan_blocks(list(lines), [], raw, blocks, continued, prefixes)
     code = {index for block in blocks for index in block["lines"]}
 
     def text(first, end):
-        return rebase_text_links(lines[first:end], [i in continued for i in range(first, end)])
+        span = range(first, end)
+        return rebase_text_links(lines[first:end], [i in continued for i in span], [prefixes.get(i, 0) for i in span])
 
     out = []
     first = 0  # the first line of the run of text since the last code or HTML line
