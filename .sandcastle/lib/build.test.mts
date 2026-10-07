@@ -135,6 +135,18 @@ describe("buildIssue", () => {
       assert.equal(result.prUrl, undefined);
     });
 
+    it(`comments on the issue with the error when the ${role} fails`, async () => {
+      const { comments, buildHost } = host([], { failing: [role] });
+
+      await buildIssue(issue, branch, buildHost);
+
+      assert.equal(comments.length, 1);
+      assert.equal(comments[0]!.issueNumber, 69);
+      assert.match(comments[0]!.body, new RegExp(`the ${role} failed`));
+      assert.match(comments[0]!.body, new RegExp(`${role} timed out`));
+      assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
+    });
+
     it(`publishes nothing and runs no gate when the ${role} runs out of iterations unfinished`, async () => {
       const { steps, logs, buildHost } = host([], { unfinished: [role] });
 
@@ -143,6 +155,17 @@ describe("buildIssue", () => {
       assert.deepEqual(steps, stepsUntilClose);
       assert.equal(result.prUrl, undefined);
       assert.ok(!logs.includes(`  #69 ${role} finished`));
+    });
+
+    it(`comments on the issue when the ${role} runs out of iterations unfinished`, async () => {
+      const { comments, buildHost } = host([], { unfinished: [role] });
+
+      await buildIssue(issue, branch, buildHost);
+
+      assert.equal(comments.length, 1);
+      assert.equal(comments[0]!.issueNumber, 69);
+      assert.match(comments[0]!.body, new RegExp(`the ${role} ran out of iterations`));
+      assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
     });
   }
 

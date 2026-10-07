@@ -38,6 +38,11 @@ function publish(
   );
 }
 
+// The issue comment for a tester or backend run that stopped the build.
+function developerFailureComment(failure: string, branch: string): string {
+  return `Sandcastle stopped building this issue: ${failure}, so \`${branch}\` wasn't pushed. The branch keeps its commits.`;
+}
+
 // What buildIssue needs from outside the pipeline; tests pass stubs.
 export type BuildHost = {
   createSandbox(branch: string): Promise<sandcastle.Sandbox>;
@@ -77,24 +82,27 @@ export async function buildIssue(
   // Run the tester or the backend developer. Returns false when the run threw,
   // timed out or used up its iterations without signalling completion: the
   // tests aren't written or aren't green, so the issue stops for this round.
-  // Whatever the run committed stays on the branch for the next round.
+  // Whatever the run committed stays on the branch for the next round, and the
+  // issue gets a comment, as it does when a checkpoint stays red.
   async function developerFinishes(role: "tester" | "backend"): Promise<boolean> {
+    let failure: string;
     try {
       const run = await runRoleInSandbox(sandbox, role, {
         promptFile: `./.sandcastle/roles/${role}.md`,
         promptArgs,
       });
       commits.push(...run.commits);
-      if (run.completionSignal === undefined) {
-        console.error(`  ✗ #${issue.number}: the ${role} ran out of iterations unfinished, so ${branch} isn't published.`);
-        return false;
+      if (run.completionSignal !== undefined) {
+        log(`${role} finished`);
+        return true;
       }
+      failure = `the ${role} ran out of iterations unfinished`;
     } catch (error) {
-      console.error(`  ✗ #${issue.number}: the ${role} failed, so ${branch} isn't published: ${error}`);
-      return false;
+      failure = `the ${role} failed: ${error}`;
     }
-    log(`${role} finished`);
-    return true;
+    console.error(`  ✗ #${issue.number}: ${failure}, so ${branch} isn't published.`);
+    host.commentOnIssue(issue.number, developerFailureComment(failure, branch));
+    return false;
   }
 
   // Run a gate checkpoint, with the gate-fixer while the gate is red. When it's

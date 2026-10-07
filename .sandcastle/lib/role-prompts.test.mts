@@ -27,11 +27,21 @@ describe("developer role prompts", () => {
 });
 
 describe("review prompt", () => {
+  // Match key terms anywhere in the review process, so rewording a check
+  // doesn't break these tests but dropping it does.
+  const reviewProcess = () => {
+    const prompt = read("review-prompt.md");
+    const start = prompt.indexOf("# REVIEW PROCESS");
+    assert.notEqual(start, -1, "review-prompt.md has no REVIEW PROCESS section");
+    const end = prompt.indexOf("\n# ", start + 1);
+    return prompt.slice(start, end === -1 ? undefined : end);
+  };
+
   it("checks that the acceptance tests cover every acceptance criterion", () => {
-    assert.match(read("review-prompt.md"), /cover every acceptance criterion/);
+    assert.match(reviewProcess(), /acceptance tests[\s\S]*every acceptance criterion/i);
   });
 
   it("checks that the developers didn't weaken the acceptance tests", () => {
-    assert.match(read("review-prompt.md"), /weaken/);
+    assert.match(reviewProcess(), /weaken/i);
   });
 });
