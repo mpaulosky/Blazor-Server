@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-07 | [docs: Say where to push from, and settle aspire.config.json](2026-10-07-pr-154-docs-say-where-to-push-from-and-settle-aspire-config-json.md) | release,automation |
 | 2026-10-07 | [chore: Re-apply the repo-ci-baseline Template](2026-10-07-pr-155-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-05 | [test(sandcastle): Cover the skill mounts reaching each sandbox](2026-10-05-pr-144-test-sandcastle-cover-the-skill-mounts-reaching-each-sandbox.md) | release,automation |
 | 2026-10-05 | [chore(claude): Move the .NET skills to the personal skills folder](2026-10-05-pr-142-chore-claude-move-the-net-skills-to-the-personal-skills-folder.md) | release,automation |
