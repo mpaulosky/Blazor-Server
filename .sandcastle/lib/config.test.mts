@@ -19,7 +19,6 @@ describe("ROLE_AGENTS", () => {
       reviewer: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
       "gate-fixer": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 20 },
       "follow-up": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 30 },
-      implementer: { model: opus, effort: "high", maxIterations: 100, timeoutMinutes: 45 },
     });
   });
 });

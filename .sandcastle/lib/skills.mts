@@ -9,7 +9,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
-// The skills implement-prompt.md tells the agent to use.
+// The skills the tester and backend role prompts (roles/tester.md and
+// roles/backend.md) tell the agent to use.
 export const SANDBOX_SKILLS = [
   "dotnet-tdd",
   "dotnet-add-testing",

@@ -15,8 +15,10 @@
 //                               host names each remaining pick's branch and
 //                               fetches it if it exists.
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
-//                               createSandbox(). The implementer runs first.
-//                               If the branch is then ahead of main (this
+//                               createSandbox(). The tester commits failing
+//                               tests, then the backend developer makes them
+//                               pass; if either fails, the issue stops for the
+//                               round. If the branch is then ahead of main (this
 //                               run's commits or earlier ones), the host runs
 //                               scripts/gate.sh in the sandbox (checkpoint 1),
 //                               a reviewer runs, and the gate runs again

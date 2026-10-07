@@ -30,9 +30,6 @@ export const ROLE_AGENTS = {
   reviewer: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
   "gate-fixer": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 20 },
   "follow-up": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 30 },
-  // Temporary: does the tester's and backend's work until the role team
-  // replaces it (#71).
-  implementer: { model: opus, effort: "high", maxIterations: 100, timeoutMinutes: 45 },
 } as const satisfies Record<string, RoleAgent>;
 
 export type Role = keyof typeof ROLE_AGENTS;
