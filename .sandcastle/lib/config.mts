@@ -34,6 +34,11 @@ export const ROLE_AGENTS = {
 
 export type Role = keyof typeof ROLE_AGENTS;
 
+// The ref each issue branch is compared with: every issue PR targets main,
+// and fetchMain() refreshes origin/main before each round. The sandbox mounts
+// the host's .git, so the ref resolves there too.
+export const BASE_BRANCH = "origin/main";
+
 // Maximum number of plan→execute→merge cycles before stopping.
 // Raise this if your backlog is large; lower it for a quick smoke-test run.
 export const MAX_ITERATIONS = 10;
