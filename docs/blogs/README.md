@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-08 | [fix(sandcastle): Name bug branches fix/ rather than hotfix/](2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md) | release,automation |
 | 2026-10-08 | [fix(sandcastle): Diff the reviewer's branch against origin/main](2026-10-08-pr-182-fix-sandcastle-diff-the-reviewer-s-branch-against-origin-main.md) | release,automation |
 | 2026-10-08 | [chore: Re-apply the repo-ci-baseline Template](2026-10-08-pr-178-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-08 | [chore: Re-apply the repo-ci-baseline Template](2026-10-08-pr-176-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
