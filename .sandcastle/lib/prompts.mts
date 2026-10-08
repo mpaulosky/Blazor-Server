@@ -3,8 +3,12 @@
 // lost every comment but the owner's (see ownerApproved).
 
 import type { Checkpoint } from "./checkpoint.mts";
+import { BASE_BRANCH } from "./config.mts";
 import type { SandcastleIssue } from "./github.mts";
 
+// Sandcastle sets {{TARGET_BRANCH}} itself (to the sandbox's own branch inside
+// createSandbox) and refuses an override, so the branch to compare against
+// goes in as {{BASE_BRANCH}}.
 export function issuePromptArgs(issue: SandcastleIssue, branch: string) {
   return {
     TASK_ID: String(issue.number),
@@ -12,6 +16,7 @@ export function issuePromptArgs(issue: SandcastleIssue, branch: string) {
     ISSUE_BODY: issue.body,
     ISSUE_COMMENTS: issue.comments.length > 0 ? issue.comments.join("\n\n---\n\n") : "(no comments)",
     BRANCH: branch,
+    BASE_BRANCH,
   };
 }
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { SANDBOX_SKILLS } from "./skills.mts";
 
@@ -44,4 +44,26 @@ describe("review prompt", () => {
   it("checks that the developers didn't weaken the acceptance tests", () => {
     assert.match(reviewProcess(), /weaken/i);
   });
+
+  it("diffs the branch against {{BASE_BRANCH}}", () => {
+    const prompt = read("review-prompt.md");
+
+    assert.match(prompt, /git diff \{\{BASE_BRANCH\}\}\.\.\.\{\{BRANCH\}\}/);
+    assert.match(prompt, /git log \{\{BASE_BRANCH\}\}\.\.\{\{BRANCH\}\}/);
+  });
+});
+
+describe("every prompt", () => {
+  // Inside createSandbox(), Sandcastle sets {{TARGET_BRANCH}} to the sandbox's
+  // own branch, so a diff against it is always empty. Use {{BASE_BRANCH}}.
+  const prompts = [
+    ...readdirSync(sandcastleFile("")).filter((name) => name.endsWith(".md")),
+    ...readdirSync(sandcastleFile("roles/")).filter((name) => name.endsWith(".md")).map((name) => `roles/${name}`),
+  ];
+
+  for (const prompt of prompts) {
+    it(`${prompt} doesn't use Sandcastle's TARGET_BRANCH`, () => {
+      assert.doesNotMatch(read(prompt), /TARGET_BRANCH/);
+    });
+  }
 });
