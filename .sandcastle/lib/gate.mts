@@ -89,7 +89,7 @@ export function unfinishedReason(blocker: Blocker): string | undefined {
 }
 
 // Why an issue waits for review rather than an agent, or undefined when no open
-// PR's head is its feature/{n}-* or hotfix/{n}-* branch.
+// PR's head is its feature/{n}-*, fix/{n}-* or hotfix/{n}-* branch.
 export function openPrReason(issueNumber: number, openPrs: OpenPullRequest[]): string | undefined {
   const pr = openPrFor(issueNumber, openPrs);
   return pr ? prReason(pr) : undefined;
