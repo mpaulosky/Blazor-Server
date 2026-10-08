@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Post Claude Review's findings as one PR review on the head commit.
 
-Called by .github/workflows/claude-review.yml once Claude has reviewed the PR:
+Called by .github/workflows/claude-review.yml's post job, once Claude has
+reviewed the PR:
 
     FINDINGS='{"summary": ..., "findings": [...]}' \\
         python3 .github/scripts/post_claude_review.py --repo owner/name --pr 42 --head <sha>
@@ -14,12 +15,23 @@ diff, so the PR records it the same way it records Copilot's.
 
 GitHub rejects a whole review if one comment sits on a line outside the
 diff, so a finding whose line isn't in the diff goes into the review body
-instead. A body finding opens no review thread to hold the merge, so the
+instead. A finding on a changed file whose line isn't a line of that file
+at all (past its end) is Claude citing the wrong number, not a finding
+about unchanged code: it goes on the file's nearest line in the diff, as a
+thread, with a note. A body finding opens no review thread to hold the merge, so the
 body's second line is OFF_DIFF_MARKER, which PR Auto-Merge holds on while
 that review is the latest of the head, up to the review cap. The step
 passes with a warning: a failed check would leave the PR UNSTABLE, which
 PR Auto-Merge never merges, so it couldn't merge past the cap either. Only
-malformed findings or a failed API call fail the step. The body always
+malformed findings, a failed API call or empty findings fail the step: the
+post job runs only once Claude has answered, so empty findings mean the
+answer quoted a secret of the review job and was withheld.
+
+The review job's check, inline in claude-review.yml, is what withholds it,
+and it redacts anything shaped like a credential before the answer becomes
+the FINDINGS the post job's log prints. This script redacts again with the
+same CREDENTIAL, which must match the workflow's, and warns: those matches
+are public text from the PR far more often than leaks. The body always
 starts with MARKER: the review is posted as github-actions[bot], and the
 marker is how PR Auto-Merge and the skill's landing decision tell it apart
 from anything else posted under that login.
@@ -33,6 +45,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 
 # Accepted limit (repo-ci-baseline's ADR 0004): the marker proves the login,
 # not that Claude wrote the review; see claude-review.yml.
@@ -42,6 +55,21 @@ OFF_DIFF_MARKER = "<!-- claude-review:off-diff -->"
 
 # The new-side start of a hunk: "@@ -a,b +c,d @@" (",d" is optional).
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+# Text shaped like a credential, in the formats the tokens are issued in, so
+# a long snake_case name such as ghs_installation_token_value isn't one:
+# Anthropic keys and OAuth tokens, GitHub tokens (classic, fine-grained and
+# today's ghs_<digits>_<JWT> installation tokens), and JWTs. No boundary on
+# the left, so text run up against a token (token_ghp_..., x-eyJ...) can't
+# hide it; a match only warns, so redacting a little too much costs little.
+CREDENTIAL = re.compile(
+    r"sk-ant-[A-Za-z0-9_-]{20,}"
+    r"|gh[pousr]_[0-9]+_eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
+    r"|gh[pousr]_[A-Za-z0-9]{36,}"
+    r"|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}"
+    r"|eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
+)
+REDACTED = "[redacted]"
 
 
 class MalformedFindings(ValueError):
@@ -53,6 +81,22 @@ class GitHub:
 
     def __init__(self, repository):
         self.repository = repository
+
+    def line_count(self, path, ref):
+        """How many lines the file has at ref, or None when it can't be read."""
+        try:
+            data = subprocess.run(
+                ["gh", "api", "-H", "Accept: application/vnd.github.raw",
+                 f"repos/{self.repository}/contents/{urllib.parse.quote(path)}?ref={ref}"],
+                check=True,
+                capture_output=True,
+            ).stdout
+        except (subprocess.CalledProcessError, OSError):
+            return None
+        # Line numbers count newlines only, as in diff_lines(); a last line
+        # without one still counts. Counted in bytes, so a file that isn't
+        # UTF-8 can't fail the step, and a lone \r isn't read as a newline.
+        return data.count(b"\n") + (0 if data.endswith(b"\n") or not data else 1)
 
     def pull_files(self, number):
         output = subprocess.run(
@@ -113,14 +157,36 @@ def diff_lines(files):
     return lines
 
 
-def build_review(summary, findings, commentable, head):
-    """The review to post: inline comments for findings on the diff, the rest in the body."""
+def redact(summary, findings):
+    """The summary and findings with credential-shaped text replaced, and how many were replaced."""
+    count = 0
+    def clean(text):
+        nonlocal count
+        text, n = CREDENTIAL.subn(REDACTED, text)
+        count += n
+        return text
+    summary = clean(summary)
+    findings = [{**f, "path": clean(f["path"]), "body": clean(f["body"])} for f in findings]
+    return summary, findings, count
+
+
+def build_review(summary, findings, commentable, head, line_count=lambda path: None):
+    """The review to post: inline comments for findings on the diff, the rest in the body.
+
+    line_count(path) is the file's length at the head, or None if unknown.
+    """
     comments = []
     off_diff = []
     for finding in findings:
         path, line, body = finding["path"], finding["line"], finding["body"]
-        if line in commentable.get(path, ()):
+        lines = commentable.get(path, ())
+        if line in lines:
             comments.append({"path": path, "line": line, "side": "RIGHT", "body": body})
+        elif lines and (line < 1 or (length := line_count(path)) is not None and line > length):
+            # Not a line of the file: Claude got the number wrong.
+            nearest = min(lines, key=lambda n: (abs(n - line), n))
+            note = f"_Claude cited line {line}, which isn't a line of this file, so this is on the nearest line in the diff._"
+            comments.append({"path": path, "line": nearest, "side": "RIGHT", "body": f"{note}\n\n{body}"})
         else:
             off_diff.append(f"- `{path}:{line}`: {body}")
 
@@ -137,20 +203,37 @@ def build_review(summary, findings, commentable, head):
 
 def main(argv=None, gh=None, findings=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--repo", required=True, help="owner/name")
-    parser.add_argument("--pr", type=int, required=True, help="the PR to review")
-    parser.add_argument("--head", required=True, help="the head commit Claude reviewed")
+    parser.add_argument("--repo", help="owner/name")
+    parser.add_argument("--pr", type=int, help="the PR to review")
+    parser.add_argument("--head", help="the head commit Claude reviewed")
     args = parser.parse_args(argv)
+    if not (args.repo and args.pr and args.head):
+        parser.error("--repo, --pr and --head are required to post")
 
     text = os.environ.get("FINDINGS", "") if findings is None else findings
+    if not text.strip():
+        print("post_claude_review.py: Claude Review's findings are empty, though Claude answered: the answer "
+              "quoted a secret of the review job and was withheld.", file=sys.stderr)
+        print("::error::Claude's review reached the post job empty: it quoted a secret of the review job, so the "
+              "review job's check (or GitHub's masking) withheld it. A prompt-injected diff may have got Claude to "
+              "quote CLAUDE_CODE_OAUTH_TOKEN, the only long-lived secret in that job (its GITHUB_TOKEN expires with "
+              "the job): check the PR and the review job's log, and rotate CLAUDE_CODE_OAUTH_TOKEN.")
+        sys.exit(1)
     try:
         summary, parsed = parse_findings(text)
     except MalformedFindings as error:
         print(f"post_claude_review.py: Claude Review's findings are malformed: {error}", file=sys.stderr)
         sys.exit(1)
 
+    summary, parsed, redacted = redact(summary, parsed)
+    # The review job's check redacts first; this counts what it did too.
+    redacted += int(os.environ.get("REDACTED") or 0)
+    if redacted:
+        summary += f"\n\n{redacted} credential-shaped string(s) were redacted from this review."
+
     gh = gh or GitHub(args.repo)
-    review = build_review(summary, parsed, diff_lines(gh.pull_files(args.pr)), args.head)
+    review = build_review(summary, parsed, diff_lines(gh.pull_files(args.pr)), args.head,
+                          lambda path: gh.line_count(path, args.head))
     gh.create_review(args.pr, review)
     in_body = len(parsed) - len(review["comments"])
     print(f"Posted Claude's review of {args.head} on PR #{args.pr}: {len(review['comments'])} inline, {in_body} in the body.")
@@ -159,6 +242,10 @@ def main(argv=None, gh=None, findings=None):
             f"::warning::{in_body} finding(s) outside the diff are in the review body; "
             "its off-diff marker holds the merge until the next push or the review cap."
         )
+    if redacted:
+        print(f"::warning::Redacted {redacted} credential-shaped string(s) from Claude's review. They aren't this "
+              "job's secrets (an answer quoting those is withheld), so they are most likely sample or placeholder "
+              "tokens from the PR.")
     return review
 
 
