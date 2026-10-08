@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.82](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.82) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-172-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.81](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.81) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-170-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.80](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.80) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-168-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.79](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.79) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-166-chore-re-apply-the-repo-ci-baseline-template.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.75](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.75) | 2026-10-07 | feat(sandcastle): Replace the implementer with a tester and a backend developer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-148-feat-sandcastle-replace-the-implementer-with-a-tester-and-a-backend-developer.md) |
 | [v0.0.74](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.74) | 2026-10-07 | docs: Say where to push from, and settle aspire.config.json | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-154-docs-say-where-to-push-from-and-settle-aspire-config-json.md) |
 | [v0.0.73](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.73) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-155-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.72](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.72) | 2026-10-05 | test(sandcastle): Cover the skill mounts reaching each sandbox | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-144-test-sandcastle-cover-the-skill-mounts-reaching-each-sandbox.md) |
 
 <!-- RELEASES_END -->
 
