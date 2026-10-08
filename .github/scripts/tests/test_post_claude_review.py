@@ -1,9 +1,12 @@
 import json
 import os
+import random
 import re
+import string
 import subprocess
 import sys
 import textwrap
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -350,8 +353,13 @@ def parse_outputs(text):
     return outputs
 
 
-SECRET = "sk-ant-" + "oat01-" + "Zq9" * 20
-JOB_TOKEN = "ghs_" + "98765_" + "eyJ" + "hbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9" + "." + "eyJ" + "pc3MiOiJnaXRodWIifQ" + "." + "Xy7" * 15
+# No character repeats in either secret part, so a 16-character window
+# matches at one offset only, and a check that compared only some windows
+# would fail these tests.
+ALPHANUMERIC = string.ascii_letters + string.digits
+SECRET = "sk-ant-" + "oat01-" + "".join(random.Random(7).sample(ALPHANUMERIC, 62))
+JOB_TOKEN = ("ghs_" + "98765_" + "eyJ" + "hbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9" + "." + "eyJ" + "pc3MiOiJnaXRodWIifQ" + "."
+             + "".join(random.Random(11).sample(ALPHANUMERIC, 45)))
 
 
 def withheld(tmp_path, answer, secrets):
@@ -422,14 +430,17 @@ def test_a_secret_spelled_out_in_line_numbers_is_withheld(tmp_path):
     assert withheld(tmp_path, {"summary": "s", "findings": findings}, [SECRET])
 
 
-@pytest.mark.parametrize("quote", [SECRET, SECRET[13:29], "x" + SECRET[30:50] + "y"])
+# The whole secret, its body's first window, a middle one and its last one.
+@pytest.mark.parametrize("quote", [SECRET, SECRET[13:29], "x" + SECRET[40:56] + "y", SECRET[-16:]])
 def test_an_answer_quoting_a_secret_even_in_part_is_withheld(tmp_path, quote):
     answer = {"summary": "s", "findings": [{"path": "a.py", "line": 1, "body": f"The token is {quote}."}]}
 
     assert withheld(tmp_path, answer, [SECRET])
 
 
-@pytest.mark.parametrize("separator", ["`", "\n", "` `", "-", "\t"])
+# Accented letters too, which NFKD would split into a base letter between the
+# pieces and a mark; the NFKC comparison strips them whole.
+@pytest.mark.parametrize("separator", ["`", "\n", "` `", "-", "\t", "é", "ạ"])
 def test_a_secret_quoted_in_short_pieces_is_withheld(tmp_path, separator):
     body = SECRET[13:]
     pieces = separator.join(body[i:i + 15] for i in range(0, len(body), 15))
@@ -439,7 +450,7 @@ def test_a_secret_quoted_in_short_pieces_is_withheld(tmp_path, separator):
 
 @pytest.mark.parametrize("offset", [0xFEE0, None])
 def test_a_secret_in_look_alike_characters_is_withheld(tmp_path, offset):
-    # Fullwidth, or mathematical bold: both NFKC-normalise to ASCII.
+    # Fullwidth, or mathematical bold: both normalise to ASCII under NFKC and NFKD.
     def look_alike(c):
         if offset:
             return chr(ord(c) + offset)
@@ -449,8 +460,52 @@ def test_a_secret_in_look_alike_characters_is_withheld(tmp_path, offset):
     assert withheld(tmp_path, {"summary": "".join(map(look_alike, SECRET[13:33])), "findings": []}, [SECRET])
 
 
+# Each letter followed by a dot below: as written, and composed into one
+# character where Unicode has one. NFKC composes both into non-ASCII letters
+# and strips them; the NFKD comparison strips only the marks.
+@pytest.mark.parametrize("form", [None, "NFC"])
+def test_a_secret_with_a_mark_on_each_letter_is_withheld(tmp_path, form):
+    quote = "".join(c + "\u0323" for c in SECRET[13:33])
+    if form:
+        quote = unicodedata.normalize(form, quote)
+        assert any(ord(c) > 127 and not unicodedata.combining(c) for c in quote)
+
+    assert withheld(tmp_path, {"summary": quote, "findings": []}, [SECRET])
+
+
 def test_a_secret_in_an_extra_field_is_withheld_too(tmp_path):
     assert withheld(tmp_path, {"summary": "s", "findings": [], SECRET[20:40]: 1}, [SECRET])
+
+
+# Six of the accepted limits in repo-ci-baseline's ADR 0004, pinned so a
+# change to them is deliberate. Pieces are joined by a character of the body
+# that isn't next to them in it, so no window across a join is a window of
+# the secret, whatever order the seed gives.
+BODY = SECRET[13:]
+SEPARATED = "".join(BODY[j:j + 15] + BODY[j + 20] for j in range(0, 45, 15))
+
+
+@pytest.mark.parametrize("answer", [
+    # Pieces split by letters or digits.
+    {"summary": SEPARATED, "findings": []},
+    # Pieces in separate fields, with the keys' letters between them.
+    {"summary": BODY[:15], "findings": [{"path": "a.py", "line": 1, "body": BODY[15:30]}]},
+    # Character codes written as digits.
+    {"summary": " ".join(str(ord(c)) for c in BODY[:20]), "findings": []},
+    # A reversed quote.
+    {"summary": BODY[::-1], "findings": []},
+    # Both Unicode tricks at once: a mark on each letter, and pieces joined by
+    # an accented letter, built from a body character that isn't next to them.
+    {"summary": "".join("".join(c + "\u0323" for c in BODY[j:j + 15]) + BODY[j + 20] + "\u0301"
+                        for j in range(0, 45, 15)), "findings": []},
+    # Pieces joined by a fullwidth letter, which both forms map to ASCII.
+    {"summary": "".join(BODY[j:j + 15] + chr(ord(BODY[j + 20]) + 0xFEE0) for j in range(0, 45, 15)), "findings": []},
+])
+def test_the_accepted_limits_get_through(tmp_path, answer):
+    # The keys between the separate fields start "findings" and end "body";
+    # a seed where they'd continue the body would test nothing.
+    assert BODY[15] != "f" and BODY[14] != "y", "pick another seed for SECRET"
+    assert not withheld(tmp_path, answer, [SECRET])
 
 
 def test_a_short_overlap_with_a_secret_isnt_a_leak(tmp_path):
