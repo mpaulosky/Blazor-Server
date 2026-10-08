@@ -39,7 +39,9 @@ else
   echo -e "${GREEN}✅ No Copilot review sync changes to check.${RESET}"
 fi
 
-if changed .sandcastle package.json ':(glob)pnpm-*.yaml'; then
+# branches.test.mts checks Sandcastle's branch names against the branch
+# standard, so a change to the standard reruns it.
+if changed .sandcastle package.json ':(glob)pnpm-*.yaml' scripts/check-branch-name.sh; then
   echo -e "${CYAN}🏰 Sandcastle TypeScript check...${RESET}"
   run_clean pnpm run check:sandcastle
 else

@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { branchFor, parseHeads, prepareBranches, slugFor } from "./branches.mts";
+import { branchFor, isIssueBranch, parseHeads, prepareBranches, slugFor } from "./branches.mts";
 
-// The pre-push hook's rule for issue branches (.github/hooks/pre-push).
-const prePushBranch = /^(feature|hotfix)\/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$/;
+// The branch standard, from the script the pre-push hook and CI's Branch name check share.
+const checkBranchName = fileURLToPath(new URL("../../scripts/check-branch-name.sh", import.meta.url));
+const passesBranchStandard = (branch: string) => {
+  try {
+    execFileSync("bash", [checkBranchName, branch], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const issue = (number: number, title: string, labels: string[] = ["Sandcastle"]) => ({ number, title, labels });
 
@@ -50,6 +60,17 @@ describe("slugFor", () => {
   });
 });
 
+describe("isIssueBranch", () => {
+  it("matches the issue's feature, fix and hotfix branches, not another issue's", () => {
+    assert.ok(isIssueBranch("feature/4-add-search", 4));
+    assert.ok(isIssueBranch("fix/4-stop-the-crash", 4));
+    assert.ok(isIssueBranch("hotfix/4-stop-the-crash", 4));
+    assert.ok(!isIssueBranch("feature/42-add-search", 4));
+    assert.ok(!isIssueBranch("fix/42-stop-the-crash", 4));
+    assert.ok(!isIssueBranch("chore/4-add-search", 4));
+  });
+});
+
 describe("branchFor", () => {
   it("names an issue without the bug label feature/{n}-{slug}", () => {
     const branch = branchFor(issue(28, "feat(sandcastle): Hold back issues whose blockers haven't landed"), []);
@@ -57,27 +78,31 @@ describe("branchFor", () => {
     assert.equal(branch, "feature/28-hold-back-issues-whose-blockers-havent-landed");
   });
 
-  it("names an issue with the bug label hotfix/{n}-{slug}", () => {
+  it("names an issue with the bug label fix/{n}-{slug}", () => {
     const branch = branchFor(issue(7, "fix(ci): Merge PRs again", ["Sandcastle", "bug"]), []);
 
-    assert.equal(branch, "hotfix/7-merge-prs-again");
+    assert.equal(branch, "fix/7-merge-prs-again");
   });
 
   it("reuses the issue's existing remote branch, even under another slug", () => {
-    const branch = branchFor(issue(28, "Hold back issues"), ["feature/2-other", "feature/28-other-slug", "hotfix/280-x"]);
+    const branch = branchFor(issue(28, "Hold back issues"), ["feature/2-other", "feature/28-other-slug", "fix/280-x", "hotfix/280-y"]);
 
     assert.equal(branch, "feature/28-other-slug");
   });
 
-  it("reuses an existing hotfix branch even when the issue has lost its bug label", () => {
-    assert.equal(branchFor(issue(9, "Fix it"), ["hotfix/9-fix-the-thing"]), "hotfix/9-fix-the-thing");
+  it("reuses an existing fix branch even when the issue has lost its bug label", () => {
+    assert.equal(branchFor(issue(9, "Fix it"), ["fix/9-fix-the-thing"]), "fix/9-fix-the-thing");
+  });
+
+  it("reuses an existing hotfix branch rather than starting a fix branch", () => {
+    assert.equal(branchFor(issue(9, "Fix it", ["bug"]), ["hotfix/9-fix-the-thing"]), "hotfix/9-fix-the-thing");
   });
 
   it("ignores remote branches for other issues whose numbers share a prefix", () => {
     assert.equal(branchFor(issue(2, "Add a thing"), ["feature/28-other", "feature/2x-odd"]), "feature/2-add-a-thing");
   });
 
-  it("generates names the pre-push hook accepts", () => {
+  it("generates names scripts/check-branch-name.sh accepts", () => {
     const titles = [
       "feat(sandcastle): Hold back issues whose blockers haven't landed",
       "fix: Don’t crash on an empty body!",
@@ -89,7 +114,7 @@ describe("branchFor", () => {
     for (const title of titles) {
       for (const labels of [[], ["bug"]]) {
         const branch = branchFor(issue(42, title, labels), []);
-        assert.match(branch, prePushBranch, `${JSON.stringify(title)} gave ${branch}`);
+        assert.ok(passesBranchStandard(branch), `${JSON.stringify(title)} gave ${branch}, which fails the branch standard`);
       }
     }
   });
@@ -97,9 +122,9 @@ describe("branchFor", () => {
 
 describe("parseHeads", () => {
   it("reads branch names from git ls-remote --heads output", () => {
-    const output = "abc123\trefs/heads/feature/66-split-main\ndef456\trefs/heads/hotfix/9-fix-it\n";
+    const output = "abc123\trefs/heads/feature/66-split-main\ndef456\trefs/heads/fix/9-fix-it\n";
 
-    assert.deepEqual(parseHeads(output), ["feature/66-split-main", "hotfix/9-fix-it"]);
+    assert.deepEqual(parseHeads(output), ["feature/66-split-main", "fix/9-fix-it"]);
   });
 
   it("returns nothing for empty output", () => {
@@ -114,7 +139,7 @@ describe("prepareBranches", () => {
 
     const work = prepareBranches([issue(7, "feat: New title"), issue(8, "fix: Something", ["bug"])], git);
 
-    assert.deepEqual(work.map((w) => w.branch), ["feature/7-old-title", "hotfix/8-something"]);
+    assert.deepEqual(work.map((w) => w.branch), ["feature/7-old-title", "fix/8-something"]);
     assert.deepEqual(fetched, ["feature/7-old-title"]);
   });
 });

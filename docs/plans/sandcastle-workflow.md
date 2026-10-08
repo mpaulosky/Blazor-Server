@@ -32,7 +32,7 @@ so Sandcastle builds its own upgrade.
 | `sandcastle:ready` | Host (intake) | The issue passed the Definition of Ready and isn't re-checked. | Human (forces a re-check), or the host when it applies an issue-level `sandcastle:needs-human` |
 | `sandcastle:needs-info` | Host (intake) | The issue's text is the problem: answer the questions and edit the issue. | Human, which re-queues the issue |
 | `sandcastle:needs-human` | Host | Sandcastle tried and couldn't. On an issue: two failed builds, a PR closed without merging, or a push touching `.github/workflows/**`. On a PR: follow-up gave up. | Human, which re-queues the issue or PR |
-| `bug` | Human or host (intake) | The issue is a fix, so its branch is `hotfix/`. | Human |
+| `bug` | Human or host (intake) | The issue is a fix, so its branch is `fix/`. | Human |
 
 The host creates any missing `sandcastle:*` label at startup. The wayfinder map and its tickets must never carry `Sandcastle`.
 
@@ -78,7 +78,7 @@ settled PR for follow-up. With none, the run exits 0 at once. Scheduled and even
 Decided in [How Sandcastle follows up on an open PR until it can merge](https://github.com/mpaulosky/Blazor-Server/issues/60). API facts are in
 [GitHub APIs for automated PR review follow-up](https://github.com/mpaulosky/Blazor-Server/issues/55).
 
-**Scope.** Open, non-draft, same-repo PRs into `main` whose head is `feature/{n}-…` or `hotfix/{n}-…`, where `#n` is an open issue in scope. PRs labelled `sandcastle:needs-human` are
+**Scope.** Open, non-draft, same-repo PRs into `main` whose head is `feature/{n}-…`, `fix/{n}-…` or `hotfix/{n}-…`, where `#n` is an open issue in scope. PRs labelled `sandcastle:needs-human` are
 skipped. A PR is Sandcastle's only when the repository owner opened it (the host publishes with the owner's PAT) and its body carries the `<!-- sandcastle:pr -->` marker the host
 writes when it publishes, so a collaborator's PR on a matching branch is never swept. The Copilot-review and CI-completion triggers only start a run; this check decides which PRs it
 touches.
@@ -161,8 +161,8 @@ The "skip issues with an open PR" rule moves out of `plan-prompt.md` into this g
 
 The planner (unchanged in purpose) picks the ready issues to build in parallel this round. Two changes:
 
-- **It stops emitting branch names.** The host names the branch `hotfix/{n}-{slug}` when the issue has `bug` and `feature/{n}-{slug}` otherwise, with the slug computed from the title.
-  An existing `feature/{n}-*` or `hotfix/{n}-*` branch on the remote is reused and fetched before `createSandbox()`
+- **It stops emitting branch names.** The host names the branch `fix/{n}-{slug}` when the issue has `bug` and `feature/{n}-{slug}` otherwise, with the slug computed from the title.
+  An existing `feature/{n}-*`, `fix/{n}-*` or `hotfix/{n}-*` branch on the remote is reused and fetched before `createSandbox()`
   ([critique decision](https://github.com/mpaulosky/Blazor-Server/issues/57)).
 - **It picks the optional roles.** Each picked issue gets a `roles` field listing any of `architect`, `ui`, `scribe`. The host validates it and runs every role when it's missing or
   invalid ([team decision](https://github.com/mpaulosky/Blazor-Server/issues/58)).
@@ -313,7 +313,7 @@ both Claude secrets are missing. Triggers:
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
 - `pull_request_review` submitted by Copilot, and `workflow_run` completed for `Build and Test Suite` (the `name:` of `ci.yml`,
-  since `workflow_run` matches workflow names, not file names), only for same-repo `feature/*` / `hotfix/*` heads, so a fork never runs with secrets;
+  since `workflow_run` matches workflow names, not file names), only for same-repo `feature/*` / `fix/*` / `hotfix/*` heads, so a fork never runs with secrets;
 - `workflow_dispatch`, and `schedule` every 2 hours as a backstop for blockers cleared by merges and PRs that fall behind `main` (`push: main` deliberately isn't a trigger).
 
 Event triggers can't filter by label name, so every `labeled` / `unlabeled` event starts the workflow. The job's `if:` checks `github.event.label.name` against the

@@ -7,6 +7,10 @@ import { sh } from "./shell.mts";
 
 const maxSlugLength = 50;
 
+// The branch prefixes that name an issue, per docs/PROCESS.md: feature/ for new
+// behaviour, fix/ for a bug fix and hotfix/ for an urgent fix.
+const issuePrefixes = ["feature", "fix", "hotfix"] as const;
+
 // The parts of an issue its branch name depends on.
 type BranchIssue = Pick<SandcastleIssue, "number" | "title" | "labels">;
 
@@ -28,22 +32,23 @@ export function slugFor(title: string): string {
   return boundary > 0 ? cut.slice(0, boundary) : slug.slice(0, maxSlugLength);
 }
 
-// Whether a branch belongs to the issue: feature/{n}-* or hotfix/{n}-*.
+// Whether a branch belongs to the issue: feature/{n}-*, fix/{n}-* or hotfix/{n}-*.
 export function isIssueBranch(branch: string, issueNumber: number): boolean {
-  return branch.startsWith(`feature/${issueNumber}-`) || branch.startsWith(`hotfix/${issueNumber}-`);
+  return issuePrefixes.some((prefix) => branch.startsWith(`${prefix}/${issueNumber}-`));
 }
 
-// The issue's branch: its existing feature/{n}-* or hotfix/{n}-* branch on the
+// The issue's branch: its existing feature/, fix/ or hotfix/{n}-* branch on the
 // remote when there is one, even if the title or labels have changed since, so
-// earlier work is built on rather than redone. Otherwise hotfix/{n}-{slug} for
-// a bug and feature/{n}-{slug} for everything else.
+// earlier work is built on rather than redone. Otherwise fix/{n}-{slug} for a
+// bug and feature/{n}-{slug} for everything else. No label marks a fix as
+// urgent, so Sandcastle never names a hotfix/ branch itself.
 export function branchFor(issue: BranchIssue, remoteBranches: readonly string[]): string {
   const existing = remoteBranches
     .filter((branch) => isIssueBranch(branch, issue.number))
     .sort()[0];
   if (existing) return existing;
 
-  const prefix = issue.labels.includes("bug") ? "hotfix" : "feature";
+  const prefix = issue.labels.includes("bug") ? "fix" : "feature";
   return `${prefix}/${issue.number}-${slugFor(issue.title)}`;
 }
 
@@ -57,7 +62,7 @@ export function parseHeads(lsRemote: string): string[] {
 
 // The remote git operations prepareBranches needs; tests pass a stub.
 export type RemoteGit = {
-  // The feature/* and hotfix/* branches on origin.
+  // The feature/*, fix/* and hotfix/* branches on origin.
   issueBranches(): string[];
   // Fetch origin's branch into its remote-tracking ref.
   fetch(branch: string): void;
@@ -65,7 +70,9 @@ export type RemoteGit = {
 
 const originGit: RemoteGit = {
   issueBranches: () =>
-    parseHeads(sh(process.cwd(), "git", "ls-remote", "--heads", "origin", "refs/heads/feature/*", "refs/heads/hotfix/*")),
+    parseHeads(
+      sh(process.cwd(), "git", "ls-remote", "--heads", "origin", ...issuePrefixes.map((prefix) => `refs/heads/${prefix}/*`)),
+    ),
   fetch: (branch) => {
     sh(process.cwd(), "git", "fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
   },
