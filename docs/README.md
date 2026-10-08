@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.84](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.84) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-176-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.83](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.83) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-174-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.82](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.82) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-172-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.81](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.81) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-170-chore-re-apply-the-repo-ci-baseline-template.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.77](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.77) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-162-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.76](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.76) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template for the release-post regressions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-159-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-regressions.md) |
 | [v0.0.75](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.75) | 2026-10-07 | feat(sandcastle): Replace the implementer with a tester and a backend developer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-148-feat-sandcastle-replace-the-implementer-with-a-tester-and-a-backend-developer.md) |
-| [v0.0.74](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.74) | 2026-10-07 | docs: Say where to push from, and settle aspire.config.json | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-154-docs-say-where-to-push-from-and-settle-aspire-config-json.md) |
 
 <!-- RELEASES_END -->
 
