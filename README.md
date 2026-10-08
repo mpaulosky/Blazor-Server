@@ -114,7 +114,7 @@ docs/adr/                        -- Architecture decision records
 CONTEXT.md                       -- Domain language
 .sandcastle/                     -- Sandcastle agent setup
 docs/CODING_STANDARDS.md         -- Coding standards
-CLAUDE.md, .claude/              -- Claude Code instructions, rules, skills and settings
+CLAUDE.md, .claude/              -- Claude Code instructions, rules and skills
 .github/workflows/               -- CI, code analysis, linting and release workflows
 .github/scripts/                 -- Release blog post generator, backfill and pytest tests
 .github/copilot-instructions.md  -- Copilot PR review checklist, generated from the code-review skill

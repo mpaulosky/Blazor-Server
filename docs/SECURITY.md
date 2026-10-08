@@ -15,8 +15,9 @@ Only the latest release is supported: security fixes land on `main` and ship in 
 Blazor-Server is a template for a server-rendered Blazor Web App; so far it holds the shared domain types (`src/Domain`).
 The repository itself is protected as follows:
 
-- **Secrets stay out of source control.** `.env` files are git-ignored at any depth, and the Claude Code settings deny
-  reading or editing them. Local secrets belong in user secrets or `.env`.
+- **Secrets stay out of source control.** `.env` files are git-ignored at any depth. The repo ships no Claude Code
+  settings, since permissions are set per user: deny reading and editing `.env` files in your own
+  `~/.claude/settings.json`. Local secrets belong in user secrets or `.env`.
 - **CodeQL** analyzes the C# code and the GitHub Actions workflows whenever a pull request or push to `main` changes them.
 - **Workflow hardening.** Actions are pinned to commit SHAs, and `zizmor` and `actionlint` check every workflow change.
 - **Dependabot** proposes dependency updates after a seven-day cooldown, so a compromised release is usually caught
