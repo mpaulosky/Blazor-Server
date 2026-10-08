@@ -43,6 +43,7 @@ function readyPr(overrides = {}) {
     mergeStateStatus: "CLEAN",
     autoMergeRequest: null,
     copilotReviews: { nodes: [{ commit: { oid: HEAD } }] },
+    claudeReviews: { nodes: [] },
     reviewThreads: { totalCount: 0, nodes: [] },
     labels: { totalCount: 0, nodes: [] },
     ...overrides
@@ -60,16 +61,46 @@ function copilotReviewsOf(...commits) {
   };
 }
 
+// Claude Review's reviews (github-actions[bot] with the marker) of each given
+// commit, oldest first, with ids claude-1, claude-2, ... A { oid, merge: true }
+// entry is a merge commit; { oid, marked: false } is a github-actions[bot]
+// review without the marker; { oid, offDiff: true } has findings outside the diff.
+function claudeReviewsOf(...commits) {
+  return {
+    nodes: commits.map((commit, index) => {
+      const { oid, merge, marked, offDiff } = typeof commit === "string" ? { oid: commit } : commit;
+      const body = marked === false
+        ? "Some other workflow's review."
+        : offDiff
+          ? CLAUDE_MARKER + "\n" + OFF_DIFF_MARKER + "\n**Claude Review**"
+          : CLAUDE_MARKER + "\nNo findings.";
+      return { id: `claude-${index + 1}`, body, commit: { oid, parents: { totalCount: merge ? 2 : 1 } } };
+    })
+  };
+}
+
 // Review threads, each opened by the given login, all unresolved unless marked.
+// { login, review } opens the thread in the review with that id.
 function threadsBy(...authors) {
   const nodes = authors.map((author) => ({
     isResolved: author.resolved ?? false,
-    comments: { nodes: [{ author: author.login === null ? null : { login: author.login ?? author } }] }
+    comments: {
+      nodes: [
+        {
+          author: author.login === null ? null : { login: author.login ?? author },
+          pullRequestReview: author.review ? { id: author.review } : null
+        }
+      ]
+    }
   }));
   return { totalCount: nodes.length, nodes };
 }
 
 const COPILOT = "copilot-pull-request-reviewer";
+// GraphQL reports github-actions[bot] without the "[bot]" suffix.
+const ACTIONS = "github-actions";
+const CLAUDE_MARKER = "<!-- claude-review -->";
+const OFF_DIFF_MARKER = "<!-- claude-review:off-diff -->";
 
 function labelled(...names) {
   return { totalCount: names.length, nodes: names.map((name) => ({ name })) };
@@ -274,7 +305,7 @@ test("waits for a Copilot review of the head below the review cap", async () => 
   const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two") }));
 
   assert.deepEqual(merges, []);
-  assert.ok(logs.some((line) => line.includes("no Copilot review of " + HEAD)), logs.join("\n"));
+  assert.ok(logs.some((line) => line.includes("no Copilot or Claude review of " + HEAD)), logs.join("\n"));
 });
 
 test("waits on an unresolved Copilot thread below the review cap", async () => {
@@ -290,7 +321,7 @@ test("merges without a review of the head once Copilot reviewed three commits", 
 
   assert.equal(merges.length, 1);
   assert.ok(
-    logs.some((line) => line.includes("review cap (3) reached") && line.includes("without a Copilot review of " + HEAD)),
+    logs.some((line) => line.includes("Review cap (3) reached") && line.includes("without a review of " + HEAD)),
     logs.join("\n")
   );
 });
@@ -342,7 +373,7 @@ test("doesn't count Copilot reviews of merge commits toward the cap", async () =
   const { merges, logs } = await evaluate(readyPr({ copilotReviews: reviews }));
 
   assert.deepEqual(merges, []);
-  assert.ok(logs.some((line) => line.includes("no Copilot review of " + HEAD)), logs.join("\n"));
+  assert.ok(logs.some((line) => line.includes("no Copilot or Claude review of " + HEAD)), logs.join("\n"));
 });
 
 test("accepts a Copilot review of a merge commit at the head below the cap", async () => {
@@ -370,7 +401,7 @@ test("doesn't log the cap when it didn't change the outcome", async () => {
   const { merges, logs } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two", HEAD) }));
 
   assert.equal(merges.length, 1);
-  assert.ok(!logs.some((line) => line.includes("review cap")), logs.join("\n"));
+  assert.ok(!logs.some((line) => line.includes("Review cap")), logs.join("\n"));
 });
 
 test("logs both requirements the cap bypassed", async () => {
@@ -379,7 +410,137 @@ test("logs both requirements the cap bypassed", async () => {
 
   assert.equal(merges.length, 1);
   assert.ok(
-    logs.some((line) => line.includes("without a Copilot review of " + HEAD + " and past 1 unresolved Copilot thread(s)")),
+    logs.some((line) => line.includes("without a review of " + HEAD + " and past 1 unresolved Copilot thread(s)")),
     logs.join("\n")
   );
+});
+
+test("merges on a Claude review of the head with no threads", async () => {
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf(), claudeReviews: claudeReviewsOf(HEAD) }));
+
+  assert.equal(merges.length, 1);
+});
+
+test("waits on an unresolved Claude thread", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf(),
+    claudeReviews: claudeReviewsOf(HEAD),
+    reviewThreads: threadsBy({ login: ACTIONS, review: "claude-1" })
+  });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("1 unresolved review thread(s)")), logs.join("\n"));
+});
+
+test("waits on a Claude review of an older head", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf(), claudeReviews: claudeReviewsOf("older") });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("no Copilot or Claude review of " + HEAD)), logs.join("\n"));
+});
+
+test("ignores a github-actions[bot] review without the marker", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf(), claudeReviews: claudeReviewsOf({ oid: HEAD, marked: false }) });
+  const { merges } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+});
+
+test("doesn't count unmarked github-actions[bot] reviews toward the cap", async () => {
+  const claude = claudeReviewsOf({ oid: "two", marked: false }, { oid: "three", marked: false });
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one"), claudeReviews: claude }));
+
+  assert.deepEqual(merges, []);
+});
+
+test("counts mixed Copilot and Claude rounds toward the cap", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two"), claudeReviews: claudeReviewsOf("three") });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.equal(merges.length, 1);
+  assert.ok(
+    logs.some((line) => line.includes("Review cap (3) reached") && line.includes("without a review of " + HEAD)),
+    logs.join("\n")
+  );
+});
+
+test("counts a commit both reviewers reviewed as one round", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two"), claudeReviews: claudeReviewsOf("two") });
+  const { merges } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+});
+
+test("doesn't count Claude reviews of merge commits toward the cap", async () => {
+  const claude = claudeReviewsOf({ oid: "merge-main", merge: true });
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf("one", "two"), claudeReviews: claude }));
+
+  assert.deepEqual(merges, []);
+});
+
+test("merges past unresolved Copilot and Claude threads at the cap and names each reviewer", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two"),
+    claudeReviews: claudeReviewsOf(HEAD),
+    reviewThreads: threadsBy(COPILOT, { login: ACTIONS, review: "claude-1" }, { login: ACTIONS, review: "claude-1" })
+  });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.equal(merges.length, 1);
+  assert.ok(
+    logs.some((line) => line.includes("past 1 unresolved Copilot thread(s) and 2 unresolved Claude thread(s)")),
+    logs.join("\n")
+  );
+});
+
+test("still waits at the cap on a github-actions thread outside a Claude review", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two", HEAD),
+    claudeReviews: claudeReviewsOf({ oid: "two", marked: false }),
+    reviewThreads: threadsBy({ login: ACTIONS, review: "claude-1" })
+  });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("1 unresolved review thread(s)")), logs.join("\n"));
+});
+
+test("follows Claude Review's runs", () => {
+  const workflow = readFileSync(WORKFLOW, "utf8");
+
+  assert.match(workflow, /workflows: \[[^\]]*"Claude Review"[^\]]*\]/);
+});
+
+test("waits on a Claude review of the head with findings outside the diff", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf(HEAD), claudeReviews: claudeReviewsOf({ oid: HEAD, offDiff: true }) });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.deepEqual(merges, []);
+  assert.ok(logs.some((line) => line.includes("findings outside the diff")), logs.join("\n"));
+});
+
+test("judges off-diff findings by the latest Claude review of the head", async () => {
+  const blocked = claudeReviewsOf(HEAD, { oid: HEAD, offDiff: true });
+  const cleared = claudeReviewsOf({ oid: HEAD, offDiff: true }, HEAD);
+
+  assert.equal((await evaluate(readyPr({ copilotReviews: copilotReviewsOf(), claudeReviews: blocked }))).merges.length, 0);
+  assert.equal((await evaluate(readyPr({ copilotReviews: copilotReviewsOf(), claudeReviews: cleared }))).merges.length, 1);
+});
+
+test("ignores off-diff findings on an older head", async () => {
+  const claude = claudeReviewsOf({ oid: "older", offDiff: true });
+  const { merges } = await evaluate(readyPr({ copilotReviews: copilotReviewsOf(HEAD), claudeReviews: claude }));
+
+  assert.equal(merges.length, 1);
+});
+
+test("merges past off-diff findings at the review cap and says so", async () => {
+  const pr = readyPr({ copilotReviews: copilotReviewsOf("one", "two"), claudeReviews: claudeReviewsOf({ oid: HEAD, offDiff: true }) });
+  const { merges, logs } = await evaluate(pr);
+
+  assert.equal(merges.length, 1);
+  assert.ok(logs.some((line) => line.includes("Review cap (3) reached") && line.includes("past Claude's findings outside the diff")),
+    logs.join("\n"));
 });
