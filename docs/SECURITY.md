@@ -19,7 +19,8 @@ The repository itself is protected as follows:
   secrets or `.env`.
 - **Keep Claude Code out of `.env` files.** The repo ships no Claude Code settings, since permissions are set per user
   (the repo-ci-baseline Template doesn't ship them either). Add these rules to your own `~/.claude/settings.json`, so
-  no session on your machine can read or edit a `.env` at any depth, `.sandcastle/.env` included:
+  Claude Code's file tools can't read or edit a `.env` under the project a session runs in, `.sandcastle/.env`
+  included:
 
   ```json
   {
@@ -29,8 +30,10 @@ The repository itself is protected as follows:
   }
   ```
 
-  They cover sessions on your machine only. A Sandcastle sandbox starts with its own Claude Code settings, and it gets
-  `.sandcastle/.env`'s values as environment variables in any case.
+  The `.env.*` rules also hide committed `.env.example` files, such as `.sandcastle/.env.example`; edit those by hand.
+  The rules don't stop shell commands such as `cat .env`: deny those too, or turn on Claude Code's sandbox, if you
+  need that. They cover sessions on your machine only. A Sandcastle sandbox starts with its own Claude Code settings,
+  and it gets `.sandcastle/.env`'s values as environment variables in any case.
 - **CodeQL** analyzes the C# code and the GitHub Actions workflows whenever a pull request or push to `main` changes them.
 - **Workflow hardening.** Actions are pinned to commit SHAs, and `zizmor` and `actionlint` check every workflow change.
 - **Dependabot** proposes dependency updates after a seven-day cooldown, so a compromised release is usually caught
