@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.87](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.87) | 2026-10-08 | fix(sandcastle): Name bug branches fix/ rather than hotfix/ | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md) |
 | [v0.0.86](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.86) | 2026-10-08 | fix(sandcastle): Diff the reviewer's branch against origin/main | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-182-fix-sandcastle-diff-the-reviewer-s-branch-against-origin-main.md) |
 | [v0.0.85](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.85) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-178-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.84](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.84) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-176-chore-re-apply-the-repo-ci-baseline-template.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.80](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.80) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-168-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.79](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.79) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-166-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.78](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.78) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-164-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.77](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.77) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-162-chore-re-apply-the-repo-ci-baseline-template.md) |
 
 <!-- RELEASES_END -->
 
