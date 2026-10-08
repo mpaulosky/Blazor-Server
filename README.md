@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.79](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.79) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-166-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.78](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.78) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-164-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.77](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.77) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-162-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.76](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.76) | 2026-10-07 | chore: Re-apply the repo-ci-baseline Template for the release-post regressions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-07-pr-159-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-regressions.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.72](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.72) | 2026-10-05 | test(sandcastle): Cover the skill mounts reaching each sandbox | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-144-test-sandcastle-cover-the-skill-mounts-reaching-each-sandbox.md) |
 | [v0.0.71](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.71) | 2026-10-05 | chore(claude): Move the .NET skills to the personal skills folder | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-142-chore-claude-move-the-net-skills-to-the-personal-skills-folder.md) |
 | [v0.0.70](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.70) | 2026-10-05 | chore: Re-apply the repo-ci-baseline Template for the release-post fixes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-140-chore-re-apply-the-repo-ci-baseline-template-for-the-release-post-fixes.md) |
-| [v0.0.69](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.69) | 2026-10-05 | chore: Use pnpm instead of npx in the gate and hooks | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-05-pr-137-chore-use-pnpm-instead-of-npx-in-the-gate-and-hooks.md) |
 
 <!-- RELEASES_END -->
 
