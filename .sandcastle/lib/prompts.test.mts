@@ -27,6 +27,12 @@ describe("issuePromptArgs", () => {
     assert.equal(args.BRANCH, "feature/3-add-a-thing");
   });
 
+  it("gives the role origin/main as the base to diff against, since Sandcastle's TARGET_BRANCH is the sandbox's own branch", () => {
+    const args = issuePromptArgs(issue, "feature/3-add-a-thing");
+
+    assert.equal(args.BASE_BRANCH, "origin/main");
+  });
+
   it("includes the owner's comments and no one else's", () => {
     const args = issuePromptArgs(issue, "feature/3-add-a-thing");
 

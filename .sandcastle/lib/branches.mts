@@ -2,6 +2,7 @@
 // so re-planning an issue always lands on the branch that holds its earlier work.
 
 import type { SandcastleIssue } from "./github.mts";
+import { BASE_BRANCH } from "./config.mts";
 import { sh } from "./shell.mts";
 
 const maxSlugLength = 50;
@@ -77,11 +78,11 @@ const originGit: RemoteGit = {
   },
 };
 
-// Count the commits on the worktree's branch that origin/main doesn't have.
-// origin/main is refreshed once per round, before the pipelines start, because
+// Count the commits on the worktree's branch that BASE_BRANCH doesn't have,
+// the same range the reviewer diffs. origin/main is refreshed once per round, before the pipelines start, because
 // concurrent fetches from each pipeline would contend on the same ref lock.
 export function commitsAhead(worktreePath: string): number {
-  return Number(sh(worktreePath, "git", "rev-list", "--count", "origin/main..HEAD"));
+  return Number(sh(worktreePath, "git", "rev-list", "--count", `${BASE_BRANCH}..HEAD`));
 }
 
 export function fetchMain(): void {
