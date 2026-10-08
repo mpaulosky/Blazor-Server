@@ -1,5 +1,7 @@
 # Copilot stops holding the merge after three review rounds
 
+Amended by [ADR 0004](0004-claude-review-shares-the-review-cap.md): the cap now counts Claude Review's rounds and threads with Copilot's.
+
 `pr-automerge.yml` merges a same-repo PR into `main` once its required checks pass, Copilot has reviewed its head commit, and every review thread is resolved. Copilot re-reviews every
 push and can raise something new each time, so fixing its comments triggers another round, and a PR can chase its reviews without ever merging.
 
