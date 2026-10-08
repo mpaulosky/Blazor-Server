@@ -15,9 +15,22 @@ Only the latest release is supported: security fixes land on `main` and ship in 
 Blazor-Server is a template for a server-rendered Blazor Web App; so far it holds the shared domain types (`src/Domain`).
 The repository itself is protected as follows:
 
-- **Secrets stay out of source control.** `.env` files are git-ignored at any depth. The repo ships no Claude Code
-  settings, since permissions are set per user: deny reading and editing `.env` files in your own
-  `~/.claude/settings.json`. Local secrets belong in user secrets or `.env`.
+- **Secrets stay out of source control.** `.env` files are git-ignored at any depth. Local secrets belong in user
+  secrets or `.env`.
+- **Keep Claude Code out of `.env` files.** The repo ships no Claude Code settings, since permissions are set per user
+  (the repo-ci-baseline Template doesn't ship them either). Add these rules to your own `~/.claude/settings.json`, so
+  no session on your machine can read or edit a `.env` at any depth, `.sandcastle/.env` included:
+
+  ```json
+  {
+    "permissions": {
+      "deny": ["Read(**/.env)", "Read(**/.env.*)", "Edit(**/.env)", "Edit(**/.env.*)"]
+    }
+  }
+  ```
+
+  They cover sessions on your machine only. A Sandcastle sandbox starts with its own Claude Code settings, and it gets
+  `.sandcastle/.env`'s values as environment variables in any case.
 - **CodeQL** analyzes the C# code and the GitHub Actions workflows whenever a pull request or push to `main` changes them.
 - **Workflow hardening.** Actions are pinned to commit SHAs, and `zizmor` and `actionlint` check every workflow change.
 - **Dependabot** proposes dependency updates after a seven-day cooldown, so a compromised release is usually caught
