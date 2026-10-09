@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-09 | [chore: Re-apply the repo-ci-baseline Template](2026-10-09-pr-190-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-09 | [fix(sandcastle): Keep agent-written code from running on the host](2026-10-09-pr-188-fix-sandcastle-keep-agent-written-code-from-running-on-the-host.md) | release,automation |
 | 2026-10-08 | [chore(claude): Remove the shared .claude/settings.json](2026-10-08-pr-184-chore-claude-remove-the-shared-claude-settings-json.md) | release,automation |
 | 2026-10-08 | [fix(sandcastle): Name bug branches fix/ rather than hotfix/](2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md) | release,automation |
