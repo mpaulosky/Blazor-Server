@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
-import { buildIssue, type BuildHost } from "./build.mts";
+import { buildIssue, publicErrorText, type BuildHost } from "./build.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [] };
 const branch = "feature/69-run-the-gate";
+// The commit fetchMain() resolved origin/main to.
+const base = "f".repeat(40);
 
 // A host whose sandbox records each role run and gate run in `steps`, and
 // answers the gate with the queued exit codes in order. A role in `failing`
@@ -16,7 +18,18 @@ function host(
     statuses = [""],
     failing = [],
     unfinished = [],
-  }: { ahead?: number | number[]; statuses?: string[]; failing?: string[]; unfinished?: string[] } = {},
+    leaksSecret = false,
+    worktreeProblems = [],
+    publishError,
+  }: {
+    ahead?: number | number[];
+    statuses?: string[];
+    failing?: string[];
+    unfinished?: string[];
+    leaksSecret?: boolean;
+    worktreeProblems?: string[];
+    publishError?: string;
+  } = {},
 ) {
   const steps: string[] = [];
   const runs: SandboxRunOptions[] = [];
@@ -25,12 +38,21 @@ function host(
   const aheadCounts = Array.isArray(ahead) ? [...ahead] : [ahead];
   const worktreeStatuses = [...statuses];
   let aheadIndex = 0;
+  // Each role run commits, so HEAD is a new commit after every run.
+  let headNumber = 0;
+  const head = () => headNumber.toString(16).padStart(40, "0");
+  const aheadBranches: string[] = [];
+  const aheadBases: string[] = [];
+  const scanned: string[] = [];
+  const scannedBases: string[] = [];
+  const pushed: { branch: string; commit: string }[] = [];
   const sandbox = {
     worktreePath: "/worktree",
     run: async (options: SandboxRunOptions) => {
       // runRoleInSandbox always names the run after its role.
       const role = options.name!;
       runs.push(options);
+      headNumber++;
       steps.push(role === "gate-fixer" ? `gate-fixer ${options.promptArgs?.CHECKPOINT}` : role);
       if (failing.includes(role)) throw new Error(`${role} timed out`);
       return {
@@ -44,9 +66,8 @@ function host(
         const stdout = worktreeStatuses.shift() ?? "";
         return { stdout, stderr: "", exitCode: 0 };
       }
-      if (command.startsWith("git config --local sandcastle.gatedHead")) {
-        steps.push("record gated head");
-        return { stdout: "", stderr: "", exitCode: 0 };
+      if (command === "git rev-parse HEAD") {
+        return { stdout: `${head()}\n`, stderr: "", exitCode: 0 };
       }
       steps.push(`gate: ${command}`);
       const exitCode = gateExitCodes.shift();
@@ -60,26 +81,37 @@ function host(
   } as unknown as Sandbox;
   const buildHost: BuildHost = {
     createSandbox: async () => sandbox,
-    commitsAhead: () => {
+    commitsAhead: (aheadBranch, aheadBase) => {
+      aheadBranches.push(aheadBranch);
+      aheadBases.push(aheadBase);
       const current = aheadCounts[Math.min(aheadIndex, aheadCounts.length - 1)] ?? 0;
       aheadIndex++;
       return current;
     },
     commentOnIssue: (issueNumber, body) => void comments.push({ issueNumber, body }),
     log: (line) => void logs.push(line),
-    publish: (_issue, _branch, _worktreePath, reviewed) => {
+    leaksSecret: (scanBase, commit) => {
+      scannedBases.push(scanBase);
+      scanned.push(commit);
+      return leaksSecret;
+    },
+    publish: (_issue, publishedBranch, commit, reviewed) => {
+      if (publishError) throw new Error(publishError);
+      pushed.push({ branch: publishedBranch, commit });
       steps.push(`publish${reviewed ? "" : " unreviewed"}`);
       return "https://github.com/o/r/pull/1";
     },
+    worktreeProblems: () => worktreeProblems,
+    publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), () => false),
   };
-  return { steps, runs, logs, comments, buildHost };
+  return { steps, runs, logs, comments, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head };
 }
 
 describe("buildIssue", () => {
   it("runs the tester, the backend developer, checkpoint 1, the reviewer and checkpoint 2 before publishing", async () => {
     const { steps, comments, buildHost } = host([0, 0]);
 
-    const result = await buildIssue(issue, branch, buildHost);
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.deepEqual(steps, [
       "tester",
@@ -87,7 +119,6 @@ describe("buildIssue", () => {
       "gate: scripts/gate.sh 2>&1",
       "reviewer",
       "gate: scripts/gate.sh 2>&1",
-      "record gated head",
       "publish",
       "close",
     ]);
@@ -98,7 +129,7 @@ describe("buildIssue", () => {
   it("logs each role and checkpoint of a built issue in the order they ran", async () => {
     const { logs, buildHost } = host([0, 0]);
 
-    await buildIssue(issue, branch, buildHost);
+    await buildIssue(issue, branch, base, buildHost);
 
     assert.deepEqual(logs, [
       "  #69 tester finished",
@@ -112,7 +143,7 @@ describe("buildIssue", () => {
   it("runs the tester and the backend developer from their role prompts, with the shared rules", async () => {
     const { runs, buildHost } = host([0, 0]);
 
-    await buildIssue(issue, branch, buildHost);
+    await buildIssue(issue, branch, base, buildHost);
 
     for (const role of ["tester", "backend"]) {
       const run = runs.find((options) => options.name === role)!;
@@ -129,7 +160,7 @@ describe("buildIssue", () => {
     it(`publishes nothing and runs no gate when the ${role} fails`, async () => {
       const { steps, buildHost } = host([], { failing: [role] });
 
-      const result = await buildIssue(issue, branch, buildHost);
+      const result = await buildIssue(issue, branch, base, buildHost);
 
       assert.deepEqual(steps, stepsUntilClose);
       assert.equal(result.prUrl, undefined);
@@ -138,7 +169,7 @@ describe("buildIssue", () => {
     it(`comments on the issue with the error when the ${role} fails`, async () => {
       const { comments, buildHost } = host([], { failing: [role] });
 
-      await buildIssue(issue, branch, buildHost);
+      await buildIssue(issue, branch, base, buildHost);
 
       assert.equal(comments.length, 1);
       assert.equal(comments[0]!.issueNumber, 69);
@@ -150,7 +181,7 @@ describe("buildIssue", () => {
     it(`publishes nothing and runs no gate when the ${role} runs out of iterations unfinished`, async () => {
       const { steps, logs, buildHost } = host([], { unfinished: [role] });
 
-      const result = await buildIssue(issue, branch, buildHost);
+      const result = await buildIssue(issue, branch, base, buildHost);
 
       assert.deepEqual(steps, stepsUntilClose);
       assert.equal(result.prUrl, undefined);
@@ -160,7 +191,7 @@ describe("buildIssue", () => {
     it(`comments on the issue when the ${role} runs out of iterations unfinished`, async () => {
       const { comments, buildHost } = host([], { unfinished: [role] });
 
-      await buildIssue(issue, branch, buildHost);
+      await buildIssue(issue, branch, base, buildHost);
 
       assert.equal(comments.length, 1);
       assert.equal(comments[0]!.issueNumber, 69);
@@ -172,7 +203,7 @@ describe("buildIssue", () => {
   it("keeps the commits of a developer run that came before the failure", async () => {
     const { buildHost } = host([], { failing: ["backend"] });
 
-    const result = await buildIssue(issue, branch, buildHost);
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.deepEqual(result.commits.map((commit) => commit.sha), ["tester"]);
   });
@@ -180,7 +211,7 @@ describe("buildIssue", () => {
   it("gives a red gate to the gate-fixer and carries on once it passes", async () => {
     const { steps, buildHost } = host([1, 0, 1, 1, 0]);
 
-    const result = await buildIssue(issue, branch, buildHost);
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.deepEqual(steps.filter((step) => !step.startsWith("gate:")), [
       "tester",
@@ -189,7 +220,6 @@ describe("buildIssue", () => {
       "reviewer",
       "gate-fixer 2",
       "gate-fixer 2",
-      "record gated head",
       "publish",
       "close",
     ]);
@@ -201,7 +231,7 @@ describe("buildIssue", () => {
   it("publishes nothing and comments on the issue when checkpoint 1 stays red", async () => {
     const { steps, comments, buildHost } = host([1, 1, 1]);
 
-    const result = await buildIssue(issue, branch, buildHost);
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.deepEqual(steps.filter((step) => !step.startsWith("gate:")), ["tester", "backend", "gate-fixer 1", "gate-fixer 1", "close"]);
     assert.equal(result.prUrl, undefined);
@@ -214,7 +244,7 @@ describe("buildIssue", () => {
   it("publishes nothing and comments on the issue when checkpoint 2 stays red", async () => {
     const { steps, comments, buildHost } = host([0, 1, 1, 1]);
 
-    const result = await buildIssue(issue, branch, buildHost);
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.ok(!steps.includes("publish"));
     assert.equal(result.prUrl, undefined);
@@ -224,7 +254,7 @@ describe("buildIssue", () => {
   it("skips the gate when the branch holds nothing main doesn't", async () => {
     const { steps, buildHost } = host([], { ahead: 0 });
 
-    const result = await buildIssue(issue, branch, buildHost);
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.deepEqual(steps, ["tester", "backend", "close"]);
     assert.equal(result.prUrl, undefined);
@@ -236,12 +266,102 @@ describe("buildIssue", () => {
       statuses: [" M src/App.razor\n", " M src/App.razor\n", " M src/App.razor\n", " M src/App.razor\n"],
     });
 
-    const result = await buildIssue(issue, branch, buildHost);
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.deepEqual(steps.filter((step) => !step.startsWith("gate:")), ["tester", "backend", "gate-fixer 1", "gate-fixer 1", "close"]);
     assert.equal(result.prUrl, undefined);
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /checkpoint 1/);
     assert.match(comments[0]!.body, /uncommitted changes/);
+  });
+});
+
+describe("buildIssue publishing", () => {
+  it("counts the branch's commits by ref from the pinned base, not in the worktree", async () => {
+    const { aheadBranches, aheadBases, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(aheadBranches.length > 0);
+    assert.ok(aheadBranches.every((counted) => counted === branch));
+    assert.ok(aheadBases.every((counted) => counted === base));
+  });
+
+  it("scans and pushes the commit checkpoint 2's gate passed on", async () => {
+    const { pushed, scanned, scannedBases, head, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    // tester, backend and reviewer each committed once.
+    assert.equal(head(), (3).toString(16).padStart(40, "0"));
+    assert.deepEqual(pushed, [{ branch, commit: head() }]);
+    assert.deepEqual(scanned, [head()]);
+    assert.deepEqual(scannedBases, [base]);
+  });
+
+  it("pushes the commit after the gate-fixer's when checkpoint 2 needed it", async () => {
+    const { pushed, head, buildHost } = host([0, 1, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(head(), (4).toString(16).padStart(40, "0"));
+    assert.deepEqual(pushed, [{ branch, commit: head() }]);
+  });
+
+  it("publishes nothing when a commit holds a secret, and doesn't quote it", async () => {
+    const { steps, comments, buildHost } = host([0, 0], { leaksSecret: true });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(!steps.includes("publish"));
+    assert.equal(result.prUrl, undefined);
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.body, /holds one of the sandbox's secrets/);
+    assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
+  });
+
+  it("comments on the issue, and closes the sandbox, when the push is rejected", async () => {
+    const { steps, comments, buildHost } = host([0, 0], {
+      publishError: "git push --quiet origin abc:refs/heads/x failed:\n ! [rejected] abc -> x (non-fast-forward)",
+    });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.prUrl, undefined);
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.body, new RegExp(`couldn't publish \`${branch}\``));
+    assert.match(comments[0]!.body, /non-fast-forward/);
+    assert.equal(steps.at(-1), "close");
+  });
+
+  it("closes the sandbox when its worktree still points at this repository", async () => {
+    const { steps, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(steps.at(-1), "close");
+  });
+
+  it("leaves a worktree that no longer points at this repository, and says so on the issue", async () => {
+    const { steps, comments, buildHost } = host([0, 0], { worktreeProblems: ["/worktree/.git doesn't point into /repo/.git/worktrees"] });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(!steps.includes("close"));
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.body, /no longer points at this repository/);
+  });
+});
+
+describe("publicErrorText", () => {
+  it("strips colour codes and the credentials in a URL", () => {
+    assert.equal(
+      publicErrorText("\u001b[31merror\u001b[0m: failed to push to 'https://x-access:abc123@github.com/o/r.git'", () => false),
+      "error: failed to push to 'https://***@github.com/o/r.git'",
+    );
+  });
+
+  it("withholds an error that holds a secret", () => {
+    assert.match(publicErrorText("token abcdefgh12345 rejected", (text) => text.includes("abcdefgh12345")), /isn't shown/);
   });
 });

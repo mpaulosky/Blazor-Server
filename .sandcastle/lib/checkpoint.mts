@@ -9,7 +9,8 @@ import { GATE_COMMENT_LINES, GATE_FIXER_ATTEMPTS } from "./config.mts";
 
 export type Checkpoint = 1 | 2;
 
-export type GateRun = { passed: boolean; output: string };
+// A gate run, and on a pass the commit it passed on: the one the host pushes.
+export type GateRun = { passed: boolean; output: string; head?: string };
 
 // What a checkpoint does in the sandbox; tests pass stubs.
 export type CheckpointSteps = {
@@ -21,11 +22,24 @@ export type CheckpointSteps = {
 // issue comment.
 const ansiEscape = /\u001b\[[0-9;]*[A-Za-z]/g;
 
+// A full commit id, SHA-1 or SHA-256.
+const commitId = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+
+// The sandbox's HEAD commit, or undefined when it can't be read.
+async function headOf(sandbox: Pick<Sandbox, "exec">): Promise<string | undefined> {
+  const { stdout, exitCode } = await sandbox.exec("git rev-parse HEAD");
+  const commit = stdout.trim();
+  return exitCode === 0 && commitId.test(commit) ? commit : undefined;
+}
+
 // Run the gate with stderr folded into stdout, so the output keeps the order
 // it was printed in. A passing gate over a dirty worktree still fails: the gate
 // checks BASE..HEAD and publish() pushes only commits, so uncommitted edits
-// would be gated but never pushed.
+// would be gated but never pushed. So does one during which HEAD moved, or
+// whose HEAD can't be read: the host pushes the commit the gate passed on, by
+// its id, so that commit must be known.
 export async function runGate(sandbox: Pick<Sandbox, "exec">): Promise<GateRun> {
+  const before = await headOf(sandbox);
   const { stdout, exitCode } = await sandbox.exec("scripts/gate.sh 2>&1");
   const output = stdout.replace(ansiEscape, "");
   if (exitCode !== 0) return { passed: false, output };
@@ -42,7 +56,14 @@ export async function runGate(sandbox: Pick<Sandbox, "exec">): Promise<GateRun> 
         `them if they don't belong, so the pushed branch is exactly what the gate checked:\n${status.stdout}`,
     };
   }
-  return { passed: true, output };
+  const after = await headOf(sandbox);
+  if (before === undefined || after !== before) {
+    return {
+      passed: false,
+      output: `${output}\n❌ The gate passed, but HEAD ${before === undefined ? "couldn't be read" : "moved while it ran"}, so the commit it checked isn't known.`,
+    };
+  }
+  return { passed: true, output, head: before };
 }
 
 // Run the gate, and the gate-fixer while it's red and attempts are left.

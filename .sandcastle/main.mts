@@ -25,8 +25,11 @@
 //                               (checkpoint 2). A red gate gets two gate-fixer
 //                               attempts per checkpoint; past that the issue
 //                               gets a comment and nothing is pushed.
-//                               Otherwise the branch is pushed and gets a pull
-//                               request that closes its issue. All issue
+//                               Otherwise the host scans the commits for the
+//                               sandbox's secrets, pushes the commit the gate
+//                               passed on from the main checkout with git hooks
+//                               off, and opens a pull request that closes its
+//                               issue (lib/host-safety.mts). All issue
 //                               pipelines run concurrently via
 //                               Promise.allSettled().
 //
@@ -49,9 +52,11 @@ import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
 import { gateIssues } from "./lib/gate.mts";
+import { protectHostGit } from "./lib/host-safety.mts";
 import { planRound } from "./lib/plan.mts";
 import { usageReport } from "./lib/report.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
+import { forgetGatedHead } from "./lib/shell.mts";
 
 const envFile = ".sandcastle/.env";
 const leakedTokens = existsSync(envFile) ? githubTokensIn(readFileSync(envFile, "utf8")) : [];
@@ -61,6 +66,14 @@ if (leakedTokens.length > 0) {
       "Remove it: the host uses its own gh auth, and agents must not reach GitHub.",
   );
 }
+
+// Every git command this process starts, Sandcastle's included, runs with hooks
+// off and its config pinned to this repository's .git: agents can write hooks
+// and files that point git elsewhere. Throws if .git/commondir exists. See
+// lib/host-safety.mts, which also keeps .git/config and .git/hooks read-only in
+// every sandbox.
+protectHostGit();
+forgetGatedHead();
 
 try {
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
@@ -121,7 +134,7 @@ try {
     //
     // Promise.allSettled means one failing pipeline doesn't cancel the others.
     // -----------------------------------------------------------------------
-    fetchMain();
+    const base = fetchMain();
     const work = prepareBranches(issues);
 
     console.log(
@@ -132,7 +145,7 @@ try {
     }
 
     const settled = await Promise.allSettled(
-      work.map(({ issue, branch }) => buildIssue(issue, branch)),
+      work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
     );
 
     // Log any agents that threw (network error, sandbox crash, timeout, etc.).

@@ -69,6 +69,25 @@ describe("isIssueBranch", () => {
     assert.ok(!isIssueBranch("fix/42-stop-the-crash", 4));
     assert.ok(!isIssueBranch("chore/4-add-search", 4));
   });
+
+  it("matches only a name the branch standard allows, since the name reaches a shell in the sandbox", () => {
+    for (const branch of [
+      "feature/4-",
+      "feature/4-Add-Search",
+      "feature/4-add--search",
+      "feature/4-add-search-",
+      "feature/4-add_search",
+      "feature/4-$(touch-x)",
+      "feature/4-add;rm",
+      "feature/4-add`id`",
+      "feature/4-add search",
+      "feature/4-add-search/more",
+      "xfeature/4-add-search",
+    ]) {
+      assert.ok(!isIssueBranch(branch, 4), branch);
+      assert.ok(!passesBranchStandard(branch), branch);
+    }
+  });
 });
 
 describe("branchFor", () => {
@@ -96,6 +115,12 @@ describe("branchFor", () => {
 
   it("reuses an existing hotfix branch rather than starting a fix branch", () => {
     assert.equal(branchFor(issue(9, "Fix it", ["bug"]), ["hotfix/9-fix-the-thing"]), "hotfix/9-fix-the-thing");
+  });
+
+  it("doesn't reuse a remote branch whose name the branch standard refuses", () => {
+    const branch = branchFor(issue(4, "Add search"), ["feature/4-$(touch-x)", "fix/4-Add-Search"]);
+
+    assert.equal(branch, "feature/4-add-search");
   });
 
   it("ignores remote branches for other issues whose numbers share a prefix", () => {

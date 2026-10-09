@@ -47,7 +47,8 @@ check, each when its files changed), then a Release build and each test project 
 goes in `gate-checks.sh`. Don't use `dotnet test --solution` as the check: under Microsoft Testing
 Platform it can report zero tests while the project runs pass. The pre-push hook runs the gate after its own branch
 checks (no pushes to `main`, `preview` or `dev`, the branch names in `docs/PROCESS.md`, and a clean tree at the pushed
-commit), and skips it for a commit Sandcastle already gated.
+commit). Sandcastle doesn't go through the hook: it pushes the commit its sandbox gated from the main checkout, with git
+hooks off.
 
 Push from a checkout of the branch being pushed, with nothing uncommitted or untracked in it: the hook gates the
 checked-out commit, so it refuses `git push origin <other-branch>` from the `main` checkout. Push from the branch's
