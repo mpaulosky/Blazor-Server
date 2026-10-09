@@ -18,6 +18,7 @@ function host(
     unfinished = [],
     leaksSecret = false,
     worktreeProblems = [],
+    publishError,
   }: {
     ahead?: number | number[];
     statuses?: string[];
@@ -25,6 +26,7 @@ function host(
     unfinished?: string[];
     leaksSecret?: boolean;
     worktreeProblems?: string[];
+    publishError?: string;
   } = {},
 ) {
   const steps: string[] = [];
@@ -88,6 +90,7 @@ function host(
       return leaksSecret;
     },
     publish: (_issue, publishedBranch, commit, reviewed) => {
+      if (publishError) throw new Error(publishError);
       pushed.push({ branch: publishedBranch, commit });
       steps.push(`publish${reviewed ? "" : " unreviewed"}`);
       return "https://github.com/o/r/pull/1";
@@ -306,6 +309,18 @@ describe("buildIssue publishing", () => {
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /holds one of the sandbox's secrets/);
     assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
+  });
+
+  it("comments on the issue, and closes the sandbox, when the push is rejected", async () => {
+    const { steps, comments, buildHost } = host([0, 0], { publishError: "! [rejected] (non-fast-forward)" });
+
+    const result = await buildIssue(issue, branch, buildHost);
+
+    assert.equal(result.prUrl, undefined);
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.body, new RegExp(`couldn't publish \`${branch}\``));
+    assert.match(comments[0]!.body, /non-fast-forward/);
+    assert.equal(steps.at(-1), "close");
   });
 
   it("closes the sandbox when its worktree still points at this repository", async () => {

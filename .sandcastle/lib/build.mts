@@ -24,7 +24,8 @@ import { agentSandbox } from "./skills.mts";
 // The sandbox already ran the gate on this commit, and CI runs it again on the
 // PR. The commit is pushed by its id, so nothing committed after the gate can
 // ride along, and without force: a push that doesn't fast-forward origin's
-// branch fails and is reported, rather than drop the work already there.
+// branch fails, and buildIssue reports it on the issue, rather than drop the
+// work already there.
 function publish(issue: SandcastleIssue, branch: string, commit: string, reviewed: boolean): string {
   git("push", "--quiet", "origin", `${commit}:refs/heads/${branch}`);
   return openPullRequest(
@@ -201,7 +202,20 @@ export async function buildIssue(
       return { commits, prUrl: undefined };
     }
 
-    return { commits, prUrl: host.publish(issue, branch, gated, reviewed) };
+    // A push that doesn't fast-forward origin's branch (an agent rewrote a
+    // commit an earlier round pushed) fails, and so can gh. Either needs a
+    // person, so the issue says so rather than only the run log.
+    try {
+      return { commits, prUrl: host.publish(issue, branch, gated, reviewed) };
+    } catch (error) {
+      console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);
+      host.commentOnIssue(
+        issue.number,
+        `Sandcastle couldn't publish \`${branch}\`: ${error}\n\nIf origin's branch has commits the local one doesn't ` +
+          "(an agent rewrote one an earlier round pushed), a person needs to reconcile the two before Sandcastle can push it.",
+      );
+      return { commits, prUrl: undefined };
+    }
   } finally {
     // Sandcastle's close() runs git in the worktree; leave one that no longer
     // points at this repository, with its sandbox, for a person to look at.

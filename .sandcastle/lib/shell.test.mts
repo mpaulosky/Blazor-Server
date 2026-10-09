@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { hostGitInvocation } from "./shell.mts";
+import { forgetGatedHead, hostGitInvocation } from "./shell.mts";
 
 describe("hostGitInvocation", () => {
   it("turns hooks off with -c and in the environment, and pins the git directories to the main checkout", () => {
@@ -46,5 +46,26 @@ describe("hostGitInvocation", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("forgetGatedHead", () => {
+  it("unsets the marker an earlier Sandcastle left", () => {
+    const calls: string[][] = [];
+
+    forgetGatedHead((...args) => {
+      calls.push(args);
+      return "";
+    });
+
+    assert.deepEqual(calls, [["config", "--local", "--unset-all", "sandcastle.gatedHead"]]);
+  });
+
+  it("carries on when there's no marker to unset", () => {
+    assert.doesNotThrow(() =>
+      forgetGatedHead(() => {
+        throw new Error("exit 5");
+      }),
+    );
   });
 });

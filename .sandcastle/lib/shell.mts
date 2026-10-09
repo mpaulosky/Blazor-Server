@@ -37,3 +37,15 @@ export function git(...args: string[]): string {
     maxBuffer: 512 * 1024 * 1024,
   }).trim();
 }
+
+// Remove a sandcastle.gatedHead marker an earlier version of Sandcastle left in
+// .git/config. The pre-push hook skips the gate for the commit it names, and
+// nothing writes or clears it any more: the host now pushes with hooks off.
+// git exits non-zero when the key isn't set, which is the usual case.
+export function forgetGatedHead(run: (...args: string[]) => string = git): void {
+  try {
+    run("config", "--local", "--unset-all", "sandcastle.gatedHead");
+  } catch {
+    // Not set.
+  }
+}

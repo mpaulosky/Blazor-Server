@@ -242,10 +242,10 @@ validation, marker counting) that unit tests can pin down.
 authority, not what an agent reports. At each checkpoint the gate-fixer gets **2 attempts**, with the gate re-run after each. Past that, nothing is published, the branch keeps its
 commits, and the build counts as failed.
 
-**Pushing.** When checkpoint 2 exits 0, the host writes a gate-pass marker for the `HEAD` SHA it gated, inside the git common dir (never committed). The gate ran on that commit's
-whole tree, so the marker vouches for the tip, not for each ancestor. The pre-push hook always checks the branch name, and it skips lint, build and tests only when the tip SHA
-of every branch being pushed (the hook's `local_sha`) has a marker. Follow-up pushes that passed the gate get markers too. CI stays the independent check
-([model and budget decision](https://github.com/mpaulosky/Blazor-Server/issues/64)).
+**Pushing.** When checkpoint 2 exits 0, the host pushes the commit that gate ran on, by its id (`<sha>:refs/heads/<branch>`) and without force, from the main checkout with git
+hooks off. It never runs git or `gh` in the agent's worktree: git there would run the branch's own pre-push hook, `scripts/gate.sh` and test code, files the agents wrote, on the
+host. The gate already ran in the sandbox, and CI stays the independent check ([model and budget decision](https://github.com/mpaulosky/Blazor-Server/issues/64)). No gate-pass
+marker is written: `.git/config` is read-only in the sandbox, and no hook runs on the host's push. See `.sandcastle/lib/host-safety.mts`.
 
 ## Roles, models and budgets
 

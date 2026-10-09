@@ -56,6 +56,7 @@ import { protectHostGit } from "./lib/host-safety.mts";
 import { planRound } from "./lib/plan.mts";
 import { usageReport } from "./lib/report.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
+import { forgetGatedHead } from "./lib/shell.mts";
 
 const envFile = ".sandcastle/.env";
 const leakedTokens = existsSync(envFile) ? githubTokensIn(readFileSync(envFile, "utf8")) : [];
@@ -72,6 +73,7 @@ if (leakedTokens.length > 0) {
 // lib/host-safety.mts, which also keeps .git/config and .git/hooks read-only in
 // every sandbox.
 protectHostGit();
+forgetGatedHead();
 
 try {
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
