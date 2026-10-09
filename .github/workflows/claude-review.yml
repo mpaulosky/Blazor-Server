@@ -16,9 +16,9 @@ name: Claude Review
 # PR Auto-Merge accepts that review of the head as it does Copilot's. A
 # finding outside the diff can't be a thread, so it goes in the body under a
 # second marker, which PR Auto-Merge holds on until the next push gets a fresh
-# review or the review cap is reached, and the post job warns. It doesn't
+# review (past the review cap too), and the post job warns. It doesn't
 # fail: a failed check leaves the PR UNSTABLE, which PR Auto-Merge never
-# merges, even at the cap. For the same reason a Review step that fails, times
+# merges. For the same reason a Review step that fails, times
 # out or hits the subscription's usage limit doesn't fail the job: it warns
 # and posts nothing, so the PR waits for a review of its head (Copilot's, or
 # Claude's on a rerun) instead of stranding. Only PRs into main, the only ones
@@ -29,11 +29,34 @@ name: Claude Review
 # runs on pull_request, from the PR's merge commit, so a push that changes it
 # could post a marked review of its own. The merge gate guards against
 # merging before a review, not against someone who can push workflow changes.
-# A push without that permission (an app's, or a coding agent's) can't: the
-# answer check is inline here, and the post job runs the base's
-# post_claude_review.py, not the PR's. A fork PR can't use it:
+# A push without that permission (an app's, or a coding agent's) can't
+# change the code that checks or posts the answer: the check is inline here,
+# and the post job runs the base's post_claude_review.py, not the PR's. It can
+# still steer what Claude answers, by editing the conventions the prompt has
+# Claude follow (AGENTS.md, CLAUDE.md, docs/) or by instructions in the diff,
+# and the base's script posts that answer under the marker. A prompt-injected
+# "no findings" is an accepted limit too: the marker shows a review of the
+# head was posted, not that the PR was reviewed in good faith. A fork PR can't
+# use it:
 # its run gets no secrets and a read-only token, so it can't post, and PR
 # Auto-Merge never merges a fork PR (isCrossRepository); the maintainer does.
+#
+# A push that only merges main into a reviewed commit isn't reviewed again:
+# PR Auto-Merge counts the review of that commit for a clean merge from main
+# on top of it, and brings ready PRs up to date that way itself, so a review
+# of each merge would spend Claude's usage on code main already has. The
+# merge-from-main job decides, by PR Auto-Merge's rule, and reviews whenever
+# it can't tell, or when the base's pr-automerge.yml doesn't honour the skip
+# (dotfiles, which carries a copy of this file and has none, and the re-Apply
+# PR that brings this to a repo, whose main still has the old one). It runs from the PR like the
+# rest of this workflow, so a push that changes it can skip its own review;
+# PR Auto-Merge, which runs from main, still waits for a review that covers
+# the head. The same job skips a run whose head is no longer the PR's: the
+# newer push's run reviews, and the check job's varying length could
+# otherwise let the stale review join the concurrency group last and cancel
+# the newer one. Not when the newer head only merges main into this one: an
+# app or Copilot may have pushed it, and this job skips their runs, so this
+# head is reviewed instead, which covers the merge.
 #
 # Without the CLAUDE_CODE_OAUTH_TOKEN secret (from `claude setup-token`) the
 # run logs a notice and succeeds, so the workflow can be Applied before every
@@ -46,8 +69,8 @@ name: Claude Review
 permissions: {}
 
 jobs:
-  review:
-    name: Review with Claude
+  merge-from-main:
+    name: Check for a merge from main
     # Dependabot PRs keep their own auto-merge path and get no secrets anyway.
     # Another label being added is no reason to review again. The action
     # refuses a bot as the actor (an app's push), and a failed run here is a
@@ -55,6 +78,7 @@ jobs:
     # merges, so a bot's event skips instead; the next person's push or a
     # re-added label reviews the head. Copilot's coding agent acts as
     # `Copilot`, without the [bot] suffix, and the action refuses it too.
+    # The review job runs only after this one, so this condition covers both.
     if: >-
       contains(github.event.pull_request.labels.*.name, 'review:claude') &&
       !github.event.pull_request.draft &&
@@ -63,10 +87,215 @@ jobs:
       github.actor != 'Copilot' &&
       (github.event.action != 'labeled' || github.event.label.name == 'review:claude')
     runs-on: ubuntu-latest
+    # A backstop: each step's own, shorter timeout ends in a review instead
+    # of a failed job, which would be a failed check and skip the review.
+    timeout-minutes: 15
+    permissions:
+      # actions: read lists the runs for a newer head; on a private repo
+      # those reads fail without it.
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip == 'true' }}
+      # Whether this run reviews a head the PR has moved on from; its review
+      # and post jobs then take concurrency groups of their own.
+      stale: ${{ steps.check.outputs.stale == 'true' }}
+    steps:
+      # Only a push can be a merge from main; a label or a reopen asks for a
+      # review, unless the PR has moved on to a newer head (see the check).
+      # Both steps carry on past an error or a timeout, which then reviews: a
+      # failed job would be a failed check.
+      - name: Checkout the PR head
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # The whole history and every branch, for merge bases and main.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # PR Auto-Merge's rule (reviewCovering and isCleanMerge in
+      # pr-automerge.yml), which this must match: skip when the head was
+      # reviewed, or is a merge whose second parent is on main, whose every
+      # file is what a clean merge gives (where only one side changed a file
+      # since the merge base, that side's version), and whose first parent is
+      # covered the same way, up to MERGE_CHAIN_LIMIT merges down. Where the
+      # two could differ (several merge bases), this one reviews.
+      # A stale head (the PR has moved on) is left to the newer push's run,
+      # unless the newer head only merges main into this one: its push may be
+      # an app's or Copilot's, whose runs this job skips, so this head is
+      # reviewed instead, and that review covers the newer head. Not when a
+      # run for the newer head is already past this job's condition (a
+      # person's push): that run reviews. The stale review takes concurrency
+      # groups of its own, so it can never cancel the newer head's review,
+      # whose CANCELLED check would hold the PR.
+      - name: Skip a stale head, or a clean merge of main into a reviewed commit
+        id: check
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          current="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)"
+          export CURRENT_HEAD="${current:-$HEAD_SHA}"
+          if [ "$CURRENT_HEAD" = "$HEAD_SHA" ] && [ "$ACTION" != "synchronize" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # For a stale head: how this workflow's check job went in each run for
+          # the PR's head ("skipped" when its condition skipped it). Nothing
+          # when it can't be read, which reviews. stale=true goes out first,
+          # so a review after any later failure here still takes the stale
+          # head's own concurrency group; the Python below has the last word.
+          : > "${RUNNER_TEMP}/current-runs.txt"
+          if [ "$CURRENT_HEAD" != "$HEAD_SHA" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            if ! gh api "repos/${REPOSITORY}/actions/runs?head_sha=${CURRENT_HEAD}&event=pull_request" \
+              --jq '.workflow_runs[] | select(.name == "Claude Review") | .id' > "${RUNNER_TEMP}/run-ids.txt"; then
+              echo "::warning::Couldn't list the Claude Review runs for ${CURRENT_HEAD}, so ${HEAD_SHA} may be reviewed twice."
+              : > "${RUNNER_TEMP}/run-ids.txt"
+            fi
+            while read -r run; do
+              gh api "repos/${REPOSITORY}/actions/runs/${run}/jobs" \
+                --jq '.jobs[] | select(.name == "Check for a merge from main") | (.conclusion // .status)' \
+                >> "${RUNNER_TEMP}/current-runs.txt" \
+                || echo "::warning::Couldn't read the jobs of Claude Review run ${run}, so ${HEAD_SHA} may be reviewed twice."
+            done < "${RUNNER_TEMP}/run-ids.txt"
+          fi
+          # Commits Copilot or Claude Review (a marked github-actions[bot] review) reviewed.
+          gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews" --jq '.[]
+            | select(.user.login == "copilot-pull-request-reviewer[bot]"
+              or (.user.login == "github-actions[bot]" and ((.body // "") | startswith("<!-- claude-review -->"))))
+            | .commit_id' > "${RUNNER_TEMP}/reviewed.txt"
+          python3 -I - <<'PY'
+          import os, subprocess
+
+          MERGE_CHAIN_LIMIT = 5  # PR Auto-Merge's
+
+
+          def git(*args):
+              return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+
+
+          def files(commit):
+              # Path -> "mode sha" of every file (and submodule) in commit.
+              entries = {}
+              for item in git("ls-tree", "-r", "-z", "--full-tree", commit).split("\0"):
+                  if item:
+                      meta, path = item.split("\t", 1)
+                      mode, _, sha = meta.split()
+                      entries[path] = f"{mode} {sha}"
+              return entries
+
+
+          def clean_merge(merge, ours, theirs):
+              bases = git("merge-base", "--all", ours, theirs).split()
+              if len(bases) != 1:
+                  return False
+              trees = [files(commit) for commit in (bases[0], ours, theirs, merge)]
+              for path in set().union(*trees):
+                  b, o, t, m = (tree.get(path) for tree in trees)
+                  if o == t or t == b:
+                      expected = o
+                  elif o == b:
+                      expected = t
+                  else:
+                      return False
+                  if m != expected:
+                      return False
+              return True
+
+
+          def covering(commit, done):
+              """The first commit done() accepts, from commit down its chain of
+              clean merges from main (first parent the PR's side, second on main),
+              or None."""
+              for _ in range(MERGE_CHAIN_LIMIT + 1):
+                  if done(commit):
+                      return commit
+                  parents = git("rev-list", "--parents", "-n", "1", commit).split()[1:]
+                  if len(parents) != 2:
+                      return None
+                  ours, theirs = parents
+                  if subprocess.run(["git", "merge-base", "--is-ancestor", theirs, main]).returncode != 0:
+                      return None
+                  if not clean_merge(commit, ours, theirs):
+                      return None
+                  commit = ours
+              return None
+
+
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "reviewed.txt"), encoding="utf-8") as file:
+              reviewed = set(file.read().split())
+          main = "refs/remotes/origin/" + os.environ["BASE_REF"]
+          head = os.environ["HEAD_SHA"]
+          current = os.environ.get("CURRENT_HEAD") or head
+          # Only PR Auto-Merge counts a review for a merge from main, and only
+          # since it has reviewCovering: without that on the base (dotfiles, or
+          # the re-Apply PR that brings it), the merge needs a review of its own.
+          base_workflow = subprocess.run(["git", "show", main + ":.github/workflows/pr-automerge.yml"],
+                                         capture_output=True, text=True)
+          honoured = base_workflow.returncode == 0 and "async function reviewCovering(" in base_workflow.stdout
+          if current != head:
+              # The PR has moved on. Unless the new head only merges main into
+              # this one, its push's run reviews it. If git can't tell (the new
+              # head isn't fetched), leave it to that run as well.
+              try:
+                  covers = honoured and covering(current, lambda commit: commit == head) == head
+                  # The newer head may already be covered, by a review of this head
+                  # or of a commit under its clean merges, counted from the newer
+                  # head as PR Auto-Merge counts it (within MERGE_CHAIN_LIMIT).
+                  reviewed_under = covers and covering(current, lambda commit: commit in reviewed)
+              except subprocess.CalledProcessError:
+                  covers = False
+                  reviewed_under = None
+              with open(os.path.join(os.environ["RUNNER_TEMP"], "current-runs.txt"), encoding="utf-8") as file:
+                  # A run for the newer head whose check job wasn't skipped by its condition.
+                  handled = any(state != "skipped" for state in file.read().split())
+              if not covers:
+                  print(f"::notice::The PR's head is now {current}, not {head}, so that push's run reviews it instead.")
+                  skip = True
+              elif handled:
+                  print(f"::notice::The PR's head is now {current}, which only merges main into {head}, and a run "
+                        f"for {current} handles its review.")
+                  skip = True
+              elif reviewed_under:
+                  print(f"::notice::The PR's head is now {current}, which only merges main into {head}; "
+                        f"the review of {reviewed_under} covers it.")
+                  skip = True
+              else:
+                  print(f"::notice::The PR's head is now {current}, which only merges main into {head}, so Claude "
+                        f"reviews {head}: that covers {current}, whose own run may be skipped (an app's or Copilot's push).")
+                  skip = False
+          else:
+              commit = covering(head, lambda commit: commit in reviewed) if honoured else None
+              skip = commit is not None
+              if skip:
+                  print(f"::notice::{head} only merges main into {commit}, which was reviewed, so Claude doesn't review it again.")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as file:
+              file.write(f"skip={'true' if skip else 'false'}\n")
+              file.write(f"stale={'true' if current != head and not skip else 'false'}\n")
+          PY
+
+  review:
+    name: Review with Claude
+    needs: merge-from-main
+    if: needs.merge-from-main.outputs.skip != 'true'
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Job-level, so a run skipped above can't cancel a review in progress.
+    # Job-level, so a run skipped above (by the merge-from-main job's
+    # condition, or a merge from main) can't cancel a review in progress. A
+    # stale head's review has a group of its own: it mustn't cancel the newer
+    # head's review, whose CANCELLED check would hold the PR.
     concurrency:
-      group: claude-review-${{ github.event.pull_request.number }}
+      group: claude-review-${{ github.event.pull_request.number }}${{ needs.merge-from-main.outputs.stale == 'true' && format('-{0}', github.event.pull_request.head.sha) || '' }}
       cancel-in-progress: true
     permissions:
       contents: read
@@ -82,6 +311,7 @@ jobs:
       # masking). This flag can't hold one, so it still says the post job
       # should run, and post_claude_review.py fails on the empty findings.
       reviewed: ${{ steps.claude.outputs.structured_output != '' }}
+      stale: ${{ needs.merge-from-main.outputs.stale }}
     steps:
       - name: Check for CLAUDE_CODE_OAUTH_TOKEN
         id: secret
@@ -114,6 +344,25 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/claude-review"
           git diff --no-color "${BASE_SHA}...${HEAD_SHA}" > "${RUNNER_TEMP}/claude-review/pr.diff"
 
+      # Turns: the owner's limit is 3 (one turn of reads, then the answer), and
+      # the prompt is what holds a review to it. --max-turns can't enforce that
+      # on its own, because two tools read it differently (checked with Claude
+      # Code 2.1.295):
+      # - Claude Code stops after that many API round-trips. At 7 a review that
+      #   ignored the prompt could make about five turns of reads, all billed.
+      # - claude-code-action then compares the same number with num_turns,
+      #   which counts messages, and rejects a result above it. A review that
+      #   follows the prompt reports 6 or 7, so with --max-turns 3 every review
+      #   was rejected after it had run ("reported a successful result after 6
+      #   turns, exceeding the configured maximum of 3").
+      # So 7 is a backstop, not the limit: it lets a review that follows the
+      # prompt post, and cuts off a runaway one. The margin is thin. One extra
+      # message (a retried structured answer, say) makes a good review report 8,
+      # and the action rejects it after it's paid for. A rejected or cut-off
+      # review posts nothing; the step's continue-on-error turns that into a
+      # warning, and the PR waits for a review as it does at the usage limit.
+      # On the bench a review that followed the prompt cost $0.29 to $0.78.
+      #
       # Opus 5.5 at high effort, with read-only tools: it reads the diff and
       # the checked-out code, and answers in the JSON schema below. The prompt
       # and model were chosen on the skill's benchmark (bench/ in the
@@ -164,12 +413,14 @@ jobs:
           prompt: |
             You are reviewing pull request #${{ github.event.pull_request.number }} as a code reviewer.
             The PR's head is checked out in the working directory. Its diff against the base
-            branch is in ${{ runner.temp }}/claude-review/pr.diff; read it first. Then read every
-            source file the diff touches in full, and the unchanged code it calls or is called by:
-            a bug often lies in how the change interacts with code it doesn't touch. Skim
-            generated files, lockfiles, snapshots and recorded data instead of reading them in
-            full. Follow the repository's own conventions (AGENTS.md, CLAUDE.md, docs/ and
-            .github/instructions/ where present).
+            branch is in ${{ runner.temp }}/claude-review/pr.diff.
+
+            You get exactly one turn of reads, then you must answer: a second turn of reads
+            leaves no turn for the answer, and the review is lost. In that one turn, make all
+            your Read calls in parallel: the diff, every source file it touches, the unchanged
+            code the change calls or is called by that you expect to matter, and AGENTS.md or
+            CLAUDE.md where present. Skip generated files, lockfiles, snapshots and recorded
+            data. Then answer from what you have read; don't read again.
 
             Your review may be the only one this PR gets before it merges on its own, so be
             thorough. For each change, ask what happens on the paths the author didn't test:
@@ -202,6 +453,7 @@ jobs:
           claude_args: >-
             --model claude-opus-5-5
             --effort high
+            --max-turns 7
             --add-dir ${{ runner.temp }}/claude-review
             --add-dir ${{ github.workspace }}/../../_actions
             --setting-sources user
@@ -345,10 +597,14 @@ jobs:
 
               A malformed answer becomes a fixed placeholder holding none of it, so
               nothing the check didn't compare reaches the post job's log, and the
-              post script still rejects it rather than posting "No findings".
+              post script still rejects it rather than posting "No findings". The
+              reason is printed here, since the post job's error can't name it; it's
+              fixed text with at most an index, so it holds nothing from the answer.
               """
               reason = malformed(answer)
               if reason:
+                  print(f"::error::Claude's answer doesn't fit the schema ({reason}), so it is withheld "
+                        "and the post job fails.")
                   return {"malformed": f"Claude's answer was withheld: {reason}"}
               return {"summary": answer["summary"],
                       "findings": [{key: finding[key] for key in ("path", "line", "body")}
@@ -423,8 +679,9 @@ jobs:
     if: needs.review.outputs.enabled == 'true' && needs.review.outputs.reviewed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # A stale head's post has a group of its own, as its review does.
     concurrency:
-      group: claude-review-post-${{ github.event.pull_request.number }}
+      group: claude-review-post-${{ github.event.pull_request.number }}${{ needs.review.outputs.stale == 'true' && format('-{0}', github.event.pull_request.head.sha) || '' }}
       cancel-in-progress: true
     permissions:
       contents: read

@@ -63,8 +63,14 @@ post, word for word. Keep it current: after every follow-up commit, update it so
   counts as passing.
 - **Copilot reviews every push**, drafts included. Resolve each thread: fix it, or reply with why not.
 - **PR Auto-Merge squash-merges** a same-repo PR once its checks pass, Copilot has reviewed its latest commit and every
-  thread is resolved. After three Copilot review rounds it stops waiting for Copilot, so a PR can't chase reviews forever;
-  threads anyone else opens still hold it.
+  thread is resolved. After three review rounds it stops waiting for a review of the latest commit, so a PR can't chase
+  reviews forever, but every unresolved thread still holds it, Copilot's and Claude's included. A review that arrives
+  after such a merge comes too late, so answer findings on the merged PR in a follow-up.
+- **A ready PR is kept up to date.** When `main` moves on, PR Auto-Merge merges `main` into a PR that is otherwise ready
+  (Dependabot rebases its own on request). The merge from `main` needs no new review when it is exactly what merging
+  `main` gives and no file was changed on both sides; otherwise (a conflict resolved, a file both sides changed, or a
+  change of its own) it waits for a new review: add `review:claude` if Copilot doesn't review it. If the label is already
+  on, Claude reviews the push itself, unless a bot or app pushed it; then remove and re-add the label.
 - **A draft is never merged.** Open a PR as a draft to hold it back, and mark it ready when it is.
 - **Merging is squash only.** Nobody merges by hand except a fork's PR, which the maintainer merges, and a Baseline
   Standardize PR.
