@@ -134,7 +134,7 @@ try {
     //
     // Promise.allSettled means one failing pipeline doesn't cancel the others.
     // -----------------------------------------------------------------------
-    fetchMain();
+    const base = fetchMain();
     const work = prepareBranches(issues);
 
     console.log(
@@ -145,7 +145,7 @@ try {
     }
 
     const settled = await Promise.allSettled(
-      work.map(({ issue, branch }) => buildIssue(issue, branch)),
+      work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
     );
 
     // Log any agents that threw (network error, sandbox crash, timeout, etc.).

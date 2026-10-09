@@ -88,6 +88,23 @@ export function openPullRequests(): OpenPullRequest[] {
 // The open pull request from this repository's `branch`, or a new one for it
 // with the title and body, as its URL. A fork's PR from a branch of the same
 // name doesn't count.
+// Run gh with its stderr captured, and throw with that stderr in the message,
+// so a caller can say why it failed.
+function ghWithStderr(run: typeof execFileSync, args: string[], input?: string): string {
+  try {
+    return run("gh", args, {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+      ...(input === undefined ? {} : { input }),
+    });
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const detail = typeof stderr === "string" ? stderr.trim() : "";
+    throw new Error(`gh ${args.slice(0, 2).join(" ")} failed${detail ? `:\n${detail}` : ""}`, { cause: error });
+  }
+}
+
 export function openPullRequest(
   branch: string,
   title: string,
@@ -96,18 +113,16 @@ export function openPullRequest(
   repo: string = repoName(),
 ): string {
   const listed = JSON.parse(
-    run(
-      "gh",
-      ["pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number,headRefName,isCrossRepository,url"],
-      { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
-    ),
+    ghWithStderr(run, [
+      "pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number,headRefName,isCrossRepository,url",
+    ]),
   ) as ListedPullRequest[];
   const existing = sameRepository(listed).find((pr) => pr.headRefName === branch)?.url;
   if (existing) return existing;
-  return run(
-    "gh",
+  return ghWithStderr(
+    run,
     ["pr", "create", "--repo", repo, "--base", "main", "--head", branch, "--title", title, "--body-file", "-"],
-    { cwd: process.cwd(), encoding: "utf8", stdio: ["pipe", "pipe", "inherit"], input: body },
+    body,
   ).trim();
 }
 

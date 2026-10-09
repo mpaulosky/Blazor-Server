@@ -9,7 +9,9 @@ export const sh = (cwd: string, cmd: string, ...args: string[]) =>
 // `checkout`, whose .git directory is `gitDir`: hooks off, both in the
 // environment and with -c, and GIT_DIR, GIT_COMMON_DIR and GIT_WORK_TREE pinned,
 // so no file an agent wrote decides which config git reads (see
-// lib/host-safety.mts).
+// lib/host-safety.mts). Replace refs and grafts are off too: agents can write
+// both, and they'd make git log show the host other commits than the ones
+// git push sends.
 export function hostGitInvocation(
   checkout: string,
   gitDir: string,
@@ -17,25 +19,42 @@ export function hostGitInvocation(
   env: NodeJS.ProcessEnv = process.env,
 ): { env: NodeJS.ProcessEnv; args: string[] } {
   return {
-    env: { ...hostGitEnv(env, gitDir), GIT_DIR: gitDir, GIT_WORK_TREE: checkout },
+    env: {
+      ...hostGitEnv(env, gitDir),
+      GIT_DIR: gitDir,
+      GIT_WORK_TREE: checkout,
+      GIT_NO_REPLACE_OBJECTS: "1",
+      GIT_GRAFT_FILE: "/dev/null/no-grafts",
+    },
     args: ["-c", "core.hooksPath=/dev/null", ...args],
   };
 }
 
+// Run git with the invocation's arguments and environment in `cwd`, and
+// return trimmed stdout. On failure, throws with git's stderr in the message,
+// so the caller can say why.
+export function runHostGit(cwd: string, invocation: { env: NodeJS.ProcessEnv; args: string[] }): string {
+  try {
+    return execFileSync("git", invocation.args, {
+      cwd,
+      env: invocation.env,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      // The secret scan reads every patch the push would publish.
+      maxBuffer: 512 * 1024 * 1024,
+    }).trim();
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const detail = typeof stderr === "string" ? stderr.trim() : "";
+    throw new Error(`git ${invocation.args.slice(2).join(" ")} failed${detail ? `:\n${detail}` : ""}`, { cause: error });
+  }
+}
+
 // Run git on the host, always in the main checkout and never in a worktree,
-// and return trimmed stdout. Throws on failure.
+// and return trimmed stdout. Throws on failure, with git's stderr.
 export function git(...args: string[]): string {
   const checkout = process.cwd();
-  const gitDir = repoGitDir();
-  const invocation = hostGitInvocation(checkout, gitDir, args);
-  return execFileSync("git", invocation.args, {
-    cwd: checkout,
-    env: invocation.env,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "inherit"],
-    // The secret scan reads every patch the push would publish.
-    maxBuffer: 512 * 1024 * 1024,
-  }).trim();
+  return runHostGit(checkout, hostGitInvocation(checkout, repoGitDir(), args));
 }
 
 // Remove a sandcastle.gatedHead marker an earlier version of Sandcastle left in

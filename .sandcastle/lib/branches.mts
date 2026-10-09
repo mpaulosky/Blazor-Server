@@ -80,17 +80,22 @@ const originGit: RemoteGit = {
   },
 };
 
-// Count the commits on the issue branch that BASE_BRANCH doesn't have, the
-// same range the reviewer diffs. Counted by ref in the main checkout, never in
-// the branch's worktree (see lib/host-safety.mts). origin/main is refreshed
-// once per round, before the pipelines start, because concurrent fetches from
-// each pipeline would contend on the same ref lock.
-export function commitsAhead(branch: string): number {
-  return Number(git("rev-list", "--count", `${BASE_BRANCH}..refs/heads/${branch}`));
+// Count the commits on the issue branch that `base` (fetchMain's commit)
+// doesn't have. Counted by ref in the main checkout, never in the branch's
+// worktree (see lib/host-safety.mts).
+export function commitsAhead(branch: string, base: string): number {
+  return Number(git("rev-list", "--count", `${base}..refs/heads/${branch}`));
 }
 
-export function fetchMain(): void {
-  git("fetch", "--quiet", "origin", "main");
+// Refresh BASE_BRANCH (origin/main) and return the commit it now names, read by
+// its full ref name, so a planted refs/heads/origin/main or tag can't stand in. Called
+// once per round, before the pipelines start, because concurrent fetches from
+// each pipeline would contend on the same ref lock. The host works from the
+// returned commit, not the ref: the ref is in the shared .git, which agents can
+// write.
+export function fetchMain(): string {
+  git("fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main");
+  return git("rev-parse", "--verify", "refs/remotes/origin/main^{commit}");
 }
 
 // Name each issue's branch, and fetch the ones that already exist on origin

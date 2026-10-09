@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { forgetGatedHead, hostGitInvocation } from "./shell.mts";
+import { forgetGatedHead, hostGitInvocation, runHostGit } from "./shell.mts";
 
 describe("hostGitInvocation", () => {
   it("turns hooks off with -c and in the environment, and pins the git directories to the main checkout", () => {
@@ -15,6 +15,8 @@ describe("hostGitInvocation", () => {
     assert.equal(env.GIT_DIR, "/repo/.git");
     assert.equal(env.GIT_COMMON_DIR, "/repo/.git");
     assert.equal(env.GIT_WORK_TREE, "/repo");
+    assert.equal(env.GIT_NO_REPLACE_OBJECTS, "1");
+    assert.ok(env.GIT_GRAFT_FILE?.startsWith("/dev/null/"));
     assert.equal(env[`GIT_CONFIG_KEY_${Number(env.GIT_CONFIG_COUNT) - 1}`], "core.hooksPath");
     assert.equal(env[`GIT_CONFIG_VALUE_${Number(env.GIT_CONFIG_COUNT) - 1}`], "/dev/null");
   });
@@ -45,6 +47,20 @@ describe("hostGitInvocation", () => {
       assert.equal(run(root, ["--git-dir", remote, "rev-parse", "refs/heads/fix/1-x"]), commit);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runHostGit", () => {
+  it("puts git's stderr in the error, so a caller can say why it failed", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "sandcastle-stderr-")));
+    try {
+      assert.throws(
+        () => runHostGit(dir, hostGitInvocation(dir, join(dir, ".git"), ["rev-parse", "HEAD"])),
+        /git rev-parse HEAD failed:\n.*(not a git repository|fatal)/s,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

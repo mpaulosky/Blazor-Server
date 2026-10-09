@@ -11,7 +11,7 @@ import { BASE_BRANCH, copyToWorktree, hooks } from "./config.mts";
 import { commentOnIssue, openPullRequest, type SandcastleIssue } from "./github.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
-import { containsSandboxSecret } from "./sandbox-env.mts";
+import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
 import { agentSandbox } from "./skills.mts";
@@ -45,18 +45,30 @@ function developerFailureComment(failure: string, branch: string): string {
 // What buildIssue needs from outside the pipeline; tests pass stubs.
 export type BuildHost = {
   createSandbox(branch: string): Promise<sandcastle.Sandbox>;
-  // The commits on the branch that BASE_BRANCH doesn't have, counted by ref.
-  commitsAhead(branch: string): number;
+  // The commits on the branch that `base` doesn't have, counted by ref.
+  commitsAhead(branch: string, base: string): number;
   commentOnIssue(issueNumber: number, body: string): void;
-  // Whether the commits from BASE_BRANCH to `commit`, their added lines or
-  // messages, hold one of the sandbox's secrets or a token-shaped string.
-  leaksSecret(commit: string): boolean;
+  // Whether what the commits from `base` to `commit` publish (see
+  // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
+  leaksSecret(base: string, commit: string): boolean;
   publish: typeof publish;
   // What's wrong with how the worktree finds its repository (see
   // lib/host-safety.mts); empty when nothing is.
   worktreeProblems(worktreePath: string): string[];
+  // A failed publish's error, made safe to post on the public issue.
+  publicError(error: unknown): string;
   log(line: string): void;
 };
+
+// An error's text as it can go on a public issue: no colour codes, no
+// credentials in a URL, and nothing at all if it holds a secret.
+export function publicErrorText(text: string, holdsSecret: (text: string) => boolean = (t) => containsSecret(t, [])): string {
+  const cleaned = text
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
+    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi, "$1***@")
+    .trim();
+  return holdsSecret(cleaned) ? "(The error isn't shown: it looked like it held a secret. See the run log.)" : cleaned;
+}
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
 
@@ -73,14 +85,18 @@ const liveHost: BuildHost = {
   },
   commitsAhead,
   commentOnIssue,
-  leaksSecret: (commit) => containsSandboxSecret(publishedText(BASE_BRANCH, commit)),
+  leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
+  publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
   worktreeProblems,
   log: console.log,
 };
 
 // The branch comes from prepareBranches, which has already fetched it when it
-// exists on origin. The tester commits failing tests for the acceptance
+// exists on origin. `base` is the commit fetchMain() resolved origin/main to
+// before any sandbox of the round started: the ref itself is in the shared .git,
+// which agents can write, so moving it mustn't be able to shrink the range the
+// secret scan reads. The tester commits failing tests for the acceptance
 // criteria, then the backend developer makes them pass. If the branch is then
 // ahead of main, the gate runs (checkpoint 1), the reviewer runs, and the gate
 // runs again (checkpoint 2) before the branch is pushed and gets a pull request
@@ -90,6 +106,7 @@ const liveHost: BuildHost = {
 export async function buildIssue(
   issue: SandcastleIssue,
   branch: string,
+  base: string,
   host: BuildHost = liveHost,
 ): Promise<{ commits: { sha: string }[]; prUrl: string | undefined }> {
   const sandbox = await host.createSandbox(branch);
@@ -158,7 +175,7 @@ export async function buildIssue(
     // Gate, review and publish whenever the branch holds work that main
     // doesn't, not only when this run added commits: a re-run of a finished
     // issue makes none, and its earlier work still needs a PR.
-    if (host.commitsAhead(branch) === 0) {
+    if (host.commitsAhead(branch, base) === 0) {
       const status = await sandbox.exec("git status --porcelain 2>&1");
       if (status.exitCode === 0 && status.stdout.trim() === "") {
         return { commits, prUrl: undefined };
@@ -166,7 +183,7 @@ export async function buildIssue(
     }
 
     if ((await gatePasses(1)) === undefined) return { commits, prUrl: undefined };
-    if (host.commitsAhead(branch) === 0) {
+    if (host.commitsAhead(branch, base) === 0) {
       return { commits, prUrl: undefined };
     }
 
@@ -190,7 +207,7 @@ export async function buildIssue(
 
     // The push is public, and the sandbox holds the Claude token or API key.
     // The comment doesn't say where the secret is, since the issue is public too.
-    if (host.leaksSecret(gated)) {
+    if (host.leaksSecret(base, gated)) {
       console.error(`  ✗ #${issue.number}: a commit holds a secret, so ${branch} isn't published.`);
       host.commentOnIssue(
         issue.number,
@@ -204,15 +221,18 @@ export async function buildIssue(
 
     // A push that doesn't fast-forward origin's branch (an agent rewrote a
     // commit an earlier round pushed) fails, and so can gh. Either needs a
-    // person, so the issue says so rather than only the run log.
+    // person, so the issue gets git's or gh's error rather than only the run log.
     try {
       return { commits, prUrl: host.publish(issue, branch, gated, reviewed) };
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);
+      const detail = host.publicError(error);
+      const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
       host.commentOnIssue(
         issue.number,
-        `Sandcastle couldn't publish \`${branch}\`: ${error}\n\nIf origin's branch has commits the local one doesn't ` +
-          "(an agent rewrote one an earlier round pushed), a person needs to reconcile the two before Sandcastle can push it.",
+        `Sandcastle couldn't publish \`${branch}\`. A person needs to look at it: if origin's branch has commits the ` +
+          "local one doesn't (an agent rewrote one an earlier round pushed), the two need reconciling before Sandcastle " +
+          `can push it.\n\n${fence}text\n${detail}\n${fence}`,
       );
       return { commits, prUrl: undefined };
     }
