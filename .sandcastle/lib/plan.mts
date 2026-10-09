@@ -34,10 +34,26 @@ export async function planRound(ready: SandcastleIssue[]): Promise<PlannedIssue[
     output: sandcastle.Output.object({ tag: "plan", schema: planSchema }),
   });
 
+  return readyPicks(plan.output.issues, ready);
+}
+
+// The planned issues that passed the blocker gate, in the planner's order, each
+// once. A repeated id is dropped: two pipelines on one branch would race each
+// other's sandboxes and pushes.
+export function readyPicks(
+  planned: readonly PlannedIssue[],
+  ready: readonly Pick<SandcastleIssue, "number">[],
+  log: (line: string) => void = console.log,
+): PlannedIssue[] {
   const readyIds = new Set(ready.map((issue) => String(issue.number)));
-  return plan.output.issues.filter((issue) => {
-    if (readyIds.has(issue.id)) return true;
-    console.log(`  ⏸ Dropping #${issue.id} from the plan: it didn't pass the blocker gate.`);
-    return false;
+  const picked = new Set<string>();
+  return planned.filter((issue) => {
+    if (!readyIds.has(issue.id)) {
+      log(`  ⏸ Dropping #${issue.id} from the plan: it didn't pass the blocker gate.`);
+      return false;
+    }
+    if (picked.has(issue.id)) return false;
+    picked.add(issue.id);
+    return true;
   });
 }

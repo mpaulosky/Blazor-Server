@@ -16,7 +16,16 @@ function host(
     statuses = [""],
     failing = [],
     unfinished = [],
-  }: { ahead?: number | number[]; statuses?: string[]; failing?: string[]; unfinished?: string[] } = {},
+    leaksSecret = false,
+    worktreeProblems = [],
+  }: {
+    ahead?: number | number[];
+    statuses?: string[];
+    failing?: string[];
+    unfinished?: string[];
+    leaksSecret?: boolean;
+    worktreeProblems?: string[];
+  } = {},
 ) {
   const steps: string[] = [];
   const runs: SandboxRunOptions[] = [];
@@ -25,12 +34,19 @@ function host(
   const aheadCounts = Array.isArray(ahead) ? [...ahead] : [ahead];
   const worktreeStatuses = [...statuses];
   let aheadIndex = 0;
+  // Each role run commits, so HEAD is a new commit after every run.
+  let headNumber = 0;
+  const head = () => headNumber.toString(16).padStart(40, "0");
+  const aheadBranches: string[] = [];
+  const scanned: string[] = [];
+  const pushed: { branch: string; commit: string }[] = [];
   const sandbox = {
     worktreePath: "/worktree",
     run: async (options: SandboxRunOptions) => {
       // runRoleInSandbox always names the run after its role.
       const role = options.name!;
       runs.push(options);
+      headNumber++;
       steps.push(role === "gate-fixer" ? `gate-fixer ${options.promptArgs?.CHECKPOINT}` : role);
       if (failing.includes(role)) throw new Error(`${role} timed out`);
       return {
@@ -44,9 +60,8 @@ function host(
         const stdout = worktreeStatuses.shift() ?? "";
         return { stdout, stderr: "", exitCode: 0 };
       }
-      if (command.startsWith("git config --local sandcastle.gatedHead")) {
-        steps.push("record gated head");
-        return { stdout: "", stderr: "", exitCode: 0 };
+      if (command === "git rev-parse HEAD") {
+        return { stdout: `${head()}\n`, stderr: "", exitCode: 0 };
       }
       steps.push(`gate: ${command}`);
       const exitCode = gateExitCodes.shift();
@@ -60,19 +75,26 @@ function host(
   } as unknown as Sandbox;
   const buildHost: BuildHost = {
     createSandbox: async () => sandbox,
-    commitsAhead: () => {
+    commitsAhead: (aheadBranch) => {
+      aheadBranches.push(aheadBranch);
       const current = aheadCounts[Math.min(aheadIndex, aheadCounts.length - 1)] ?? 0;
       aheadIndex++;
       return current;
     },
     commentOnIssue: (issueNumber, body) => void comments.push({ issueNumber, body }),
     log: (line) => void logs.push(line),
-    publish: (_issue, _branch, _worktreePath, reviewed) => {
+    leaksSecret: (commit) => {
+      scanned.push(commit);
+      return leaksSecret;
+    },
+    publish: (_issue, publishedBranch, commit, reviewed) => {
+      pushed.push({ branch: publishedBranch, commit });
       steps.push(`publish${reviewed ? "" : " unreviewed"}`);
       return "https://github.com/o/r/pull/1";
     },
+    worktreeProblems: () => worktreeProblems,
   };
-  return { steps, runs, logs, comments, buildHost };
+  return { steps, runs, logs, comments, buildHost, aheadBranches, scanned, pushed, head };
 }
 
 describe("buildIssue", () => {
@@ -87,7 +109,6 @@ describe("buildIssue", () => {
       "gate: scripts/gate.sh 2>&1",
       "reviewer",
       "gate: scripts/gate.sh 2>&1",
-      "record gated head",
       "publish",
       "close",
     ]);
@@ -189,7 +210,6 @@ describe("buildIssue", () => {
       "reviewer",
       "gate-fixer 2",
       "gate-fixer 2",
-      "record gated head",
       "publish",
       "close",
     ]);
@@ -243,5 +263,66 @@ describe("buildIssue", () => {
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /checkpoint 1/);
     assert.match(comments[0]!.body, /uncommitted changes/);
+  });
+});
+
+describe("buildIssue publishing", () => {
+  it("counts the branch's commits by ref, not in the worktree", async () => {
+    const { aheadBranches, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, buildHost);
+
+    assert.ok(aheadBranches.length > 0);
+    assert.ok(aheadBranches.every((counted) => counted === branch));
+  });
+
+  it("scans and pushes the commit checkpoint 2's gate passed on", async () => {
+    const { pushed, scanned, head, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, buildHost);
+
+    // tester, backend and reviewer each committed once.
+    assert.equal(head(), (3).toString(16).padStart(40, "0"));
+    assert.deepEqual(pushed, [{ branch, commit: head() }]);
+    assert.deepEqual(scanned, [head()]);
+  });
+
+  it("pushes the commit after the gate-fixer's when checkpoint 2 needed it", async () => {
+    const { pushed, head, buildHost } = host([0, 1, 0]);
+
+    await buildIssue(issue, branch, buildHost);
+
+    assert.equal(head(), (4).toString(16).padStart(40, "0"));
+    assert.deepEqual(pushed, [{ branch, commit: head() }]);
+  });
+
+  it("publishes nothing when a commit holds a secret, and doesn't quote it", async () => {
+    const { steps, comments, buildHost } = host([0, 0], { leaksSecret: true });
+
+    const result = await buildIssue(issue, branch, buildHost);
+
+    assert.ok(!steps.includes("publish"));
+    assert.equal(result.prUrl, undefined);
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.body, /holds one of the sandbox's secrets/);
+    assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
+  });
+
+  it("closes the sandbox when its worktree still points at this repository", async () => {
+    const { steps, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, buildHost);
+
+    assert.equal(steps.at(-1), "close");
+  });
+
+  it("leaves a worktree that no longer points at this repository, and says so on the issue", async () => {
+    const { steps, comments, buildHost } = host([0, 0], { worktreeProblems: ["/worktree/.git doesn't point into /repo/.git/worktrees"] });
+
+    await buildIssue(issue, branch, buildHost);
+
+    assert.ok(!steps.includes("close"));
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.body, /no longer points at this repository/);
   });
 });

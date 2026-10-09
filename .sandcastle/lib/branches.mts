@@ -3,7 +3,7 @@
 
 import type { SandcastleIssue } from "./github.mts";
 import { BASE_BRANCH } from "./config.mts";
-import { sh } from "./shell.mts";
+import { git } from "./shell.mts";
 
 const maxSlugLength = 50;
 
@@ -32,12 +32,16 @@ export function slugFor(title: string): string {
   return boundary > 0 ? cut.slice(0, boundary) : slug.slice(0, maxSlugLength);
 }
 
-// Whether a branch belongs to the issue: feature/{n}-*, fix/{n}-* or hotfix/{n}-*.
+// Whether a branch is the issue's: feature/{n}-{slug}, fix/{n}-{slug} or
+// hotfix/{n}-{slug}, with a slug scripts/check-branch-name.sh accepts. Only such
+// a name is reused or counted as the issue's PR: a branch name reaches a shell,
+// since review-prompt.md passes {{BRANCH}} to the `git diff` it runs in the
+// sandbox, and anyone with push access could name a branch `fix/4-$(...)`.
 export function isIssueBranch(branch: string, issueNumber: number): boolean {
-  return issuePrefixes.some((prefix) => branch.startsWith(`${prefix}/${issueNumber}-`));
+  return new RegExp(`^(?:${issuePrefixes.join("|")})/${issueNumber}-[a-z0-9]+(?:-[a-z0-9]+)*$`).test(branch);
 }
 
-// The issue's branch: its existing feature/, fix/ or hotfix/{n}-* branch on the
+// The issue's branch: its existing feature/, fix/ or hotfix/{n}-{slug} branch on the
 // remote when there is one, even if the title or labels have changed since, so
 // earlier work is built on rather than redone. Otherwise fix/{n}-{slug} for a
 // bug and feature/{n}-{slug} for everything else. No label marks a fix as
@@ -70,23 +74,23 @@ export type RemoteGit = {
 
 const originGit: RemoteGit = {
   issueBranches: () =>
-    parseHeads(
-      sh(process.cwd(), "git", "ls-remote", "--heads", "origin", ...issuePrefixes.map((prefix) => `refs/heads/${prefix}/*`)),
-    ),
+    parseHeads(git("ls-remote", "--heads", "origin", ...issuePrefixes.map((prefix) => `refs/heads/${prefix}/*`))),
   fetch: (branch) => {
-    sh(process.cwd(), "git", "fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
+    git("fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
   },
 };
 
-// Count the commits on the worktree's branch that BASE_BRANCH doesn't have,
-// the same range the reviewer diffs. origin/main is refreshed once per round, before the pipelines start, because
-// concurrent fetches from each pipeline would contend on the same ref lock.
-export function commitsAhead(worktreePath: string): number {
-  return Number(sh(worktreePath, "git", "rev-list", "--count", `${BASE_BRANCH}..HEAD`));
+// Count the commits on the issue branch that BASE_BRANCH doesn't have, the
+// same range the reviewer diffs. Counted by ref in the main checkout, never in
+// the branch's worktree (see lib/host-safety.mts). origin/main is refreshed
+// once per round, before the pipelines start, because concurrent fetches from
+// each pipeline would contend on the same ref lock.
+export function commitsAhead(branch: string): number {
+  return Number(git("rev-list", "--count", `${BASE_BRANCH}..refs/heads/${branch}`));
 }
 
 export function fetchMain(): void {
-  sh(process.cwd(), "git", "fetch", "--quiet", "origin", "main");
+  git("fetch", "--quiet", "origin", "main");
 }
 
 // Name each issue's branch, and fetch the ones that already exist on origin

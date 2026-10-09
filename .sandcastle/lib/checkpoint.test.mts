@@ -89,13 +89,22 @@ describe("runCheckpoint", () => {
 });
 
 describe("runGate", () => {
-  // A sandbox whose gate exits with `gateExit` and whose git status prints `status`.
-  const sandbox = (gateExit: number, status = "", statusExit = 0) => {
+  const headA = "a".repeat(40);
+  const headB = "b".repeat(40);
+
+  // A sandbox whose gate exits with `gateExit`, whose git status prints
+  // `status`, and whose HEAD reads as each of `heads` in turn.
+  const sandbox = (gateExit: number, status = "", statusExit = 0, heads: string[] = [headA]) => {
     const commands: string[] = [];
+    const queue = [...heads];
     return {
       commands,
       exec: async (command: string) => {
         commands.push(command);
+        if (command === "git rev-parse HEAD") {
+          const head = queue.length > 1 ? queue.shift()! : queue[0]!;
+          return { stdout: `${head}\n`, stderr: "", exitCode: /^[0-9a-f]+$/.test(head) ? 0 : 128 };
+        }
         return command.startsWith("git status")
           ? { stdout: status, stderr: "", exitCode: statusExit }
           : { stdout: "Gate passed\n", stderr: "", exitCode: gateExit };
@@ -108,8 +117,27 @@ describe("runGate", () => {
 
     const result = await runGate(s);
 
-    assert.deepEqual(s.commands, ["scripts/gate.sh 2>&1", "git status --porcelain 2>&1"]);
+    assert.deepEqual(s.commands, ["git rev-parse HEAD", "scripts/gate.sh 2>&1", "git status --porcelain 2>&1", "git rev-parse HEAD"]);
     assert.equal(result.passed, true);
+  });
+
+  it("reports the commit a passing gate checked, which is the one the host pushes", async () => {
+    assert.equal((await runGate(sandbox(0))).head, headA);
+  });
+
+  it("fails a passing gate when HEAD moved while it ran, so an unchecked commit can't be pushed", async () => {
+    const result = await runGate(sandbox(0, "", 0, [headA, headB]));
+
+    assert.equal(result.passed, false);
+    assert.equal(result.head, undefined);
+    assert.match(result.output, /HEAD moved while it ran/);
+  });
+
+  it("fails a passing gate when HEAD can't be read", async () => {
+    const result = await runGate(sandbox(0, "", 0, ["fatal: not a git repository"]));
+
+    assert.equal(result.passed, false);
+    assert.match(result.output, /HEAD couldn't be read/);
   });
 
   it("fails a passing gate when the worktree has uncommitted changes, and names them", async () => {
@@ -133,7 +161,7 @@ describe("runGate", () => {
 
     await runGate(s);
 
-    assert.deepEqual(s.commands, ["scripts/gate.sh 2>&1"]);
+    assert.deepEqual(s.commands, ["git rev-parse HEAD", "scripts/gate.sh 2>&1"]);
   });
 
   it("fails on any other exit code, whatever the output says", async () => {

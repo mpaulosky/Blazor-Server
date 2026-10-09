@@ -1,13 +1,17 @@
 // gh helpers. Only the host talks to GitHub: the sandbox gets no token, so
-// everything a role needs from GitHub reaches it through its prompt.
+// everything a role needs from GitHub reaches it through its prompt. Every gh
+// command runs in the main checkout, never in a worktree, and names the
+// repository itself (--repo, or repos/<owner>/<name> for gh api) rather than
+// working it out from the git remote of wherever it runs.
 
 import { execFileSync } from "node:child_process";
 import { sh } from "./shell.mts";
 
 let repo: string | undefined;
 
-// "owner/name" of the repository in the current directory. Read on first use
-// rather than at import, so importing a module never shells out to gh.
+// "owner/name" of the repository in the current directory, the main checkout.
+// Read on first use rather than at import, so importing a module never shells
+// out to gh.
 export function repoName(): string {
   repo ??= sh(process.cwd(), "gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner");
   return repo;
@@ -46,7 +50,7 @@ export function ownerApproved(issue: GhIssue, owner: string): SandcastleIssue {
 export function listSandcastleIssues(): SandcastleIssue[] {
   const issues = JSON.parse(
     sh(
-      process.cwd(), "gh", "issue", "list", "--state", "open", "--label", "Sandcastle", "--limit", "1000",
+      process.cwd(), "gh", "issue", "list", "--repo", repoName(), "--state", "open", "--label", "Sandcastle", "--limit", "1000",
       "--json", "number,title,body,labels,comments",
       "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}]",
     ),
@@ -57,18 +61,61 @@ export function listSandcastleIssues(): SandcastleIssue[] {
 
 export type OpenPullRequest = { number: number; headRefName: string };
 
-// The open pull requests and their head branches. gh pages through results up
-// to --limit, so the cap sits far above any real queue: a PR missed here would
-// let its issue be built twice.
+// An open pull request as gh pr list reports it.
+export type ListedPullRequest = OpenPullRequest & { isCrossRepository: boolean; url?: string };
+
+// Only the pull requests whose branch is in this repository. Anyone can open a
+// pull request from a fork, with any branch name: matching those by name would
+// let an outsider hold an issue back, pass a fork's PR off as the one the host
+// opened, or get the fork's changed paths in front of the critique.
+export function sameRepository<T extends Pick<ListedPullRequest, "isCrossRepository">>(pullRequests: readonly T[]): T[] {
+  return pullRequests.filter((pr) => pr.isCrossRepository === false);
+}
+
+// The open pull requests from this repository's branches, and their head
+// branches. gh pages through results up to --limit, so the cap sits far above
+// any real queue: a PR missed here would let its issue be built twice.
 export function openPullRequests(): OpenPullRequest[] {
-  return JSON.parse(
-    sh(process.cwd(), "gh", "pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName"),
-  ) as OpenPullRequest[];
+  const listed = JSON.parse(
+    sh(
+      process.cwd(), "gh", "pr", "list", "--repo", repoName(), "--state", "open", "--limit", "1000",
+      "--json", "number,headRefName,isCrossRepository",
+    ),
+  ) as ListedPullRequest[];
+  return sameRepository(listed).map(({ number, headRefName }) => ({ number, headRefName }));
+}
+
+// The open pull request from this repository's `branch`, or a new one for it
+// with the title and body, as its URL. A fork's PR from a branch of the same
+// name doesn't count.
+export function openPullRequest(
+  branch: string,
+  title: string,
+  body: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): string {
+  const listed = JSON.parse(
+    run(
+      "gh",
+      ["pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number,headRefName,isCrossRepository,url"],
+      { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+    ),
+  ) as ListedPullRequest[];
+  const existing = sameRepository(listed).find((pr) => pr.headRefName === branch)?.url;
+  if (existing) return existing;
+  return run(
+    "gh",
+    ["pr", "create", "--repo", repo, "--base", "main", "--head", branch, "--title", title, "--body-file", "-"],
+    { cwd: process.cwd(), encoding: "utf8", stdio: ["pipe", "pipe", "inherit"], input: body },
+  ).trim();
 }
 
 // The paths an open PR changes.
 export function pullRequestFiles(pr: number): string[] {
-  return JSON.parse(sh(process.cwd(), "gh", "pr", "view", String(pr), "--json", "files", "--jq", "[.files[].path]")) as string[];
+  return JSON.parse(
+    sh(process.cwd(), "gh", "pr", "view", String(pr), "--repo", repoName(), "--json", "files", "--jq", "[.files[].path]"),
+  ) as string[];
 }
 
 // Any issue's body, or "" when it has none.
@@ -86,8 +133,13 @@ export function addBlockedBy(issue: number, blocker: number): void {
   );
 }
 
-export function commentOnIssue(issue: number, body: string, run: typeof execFileSync = execFileSync): void {
-  run("gh", ["issue", "comment", String(issue), "--body-file", "-"], {
+export function commentOnIssue(
+  issue: number,
+  body: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  run("gh", ["issue", "comment", String(issue), "--repo", repo, "--body-file", "-"], {
     cwd: process.cwd(),
     encoding: "utf8",
     stdio: ["pipe", "pipe", "inherit"],

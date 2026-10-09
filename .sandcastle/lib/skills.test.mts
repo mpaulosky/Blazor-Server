@@ -49,6 +49,7 @@ describe("makeAgentSandbox", () => {
       provider,
       host: {
         skillsDir,
+        gitMounts: () => [{ hostPath: "/repo/.git/config", sandboxPath: "/repo/.git/config", readonly: true as const }],
         docker: (options: { mounts: SkillMount[] }) => {
           dockerCalls.push(options);
           return provider;
@@ -70,8 +71,19 @@ describe("makeAgentSandbox", () => {
     assert.equal(first, stub.provider);
     assert.equal(second, stub.provider);
     assert.deepEqual(stub.dockerCalls.map((call) => call.mounts.map((mount) => mount.sandboxPath)), [
-      ["/home/agent/.claude/skills/dotnet-tdd"],
-      ["/home/agent/.claude/skills/dotnet-tdd"],
+      ["/home/agent/.claude/skills/dotnet-tdd", "/repo/.git/config"],
+      ["/home/agent/.claude/skills/dotnet-tdd", "/repo/.git/config"],
+    ]);
+  });
+
+  it("mounts the .git directory's config read-only in every sandbox, even with no skills found", () => {
+    const skillsDir = mkdtempSync(join(tmpdir(), "skills-"));
+    const stub = host(skillsDir);
+
+    makeAgentSandbox(stub.host, ["dotnet-tdd"])();
+
+    assert.deepEqual(stub.dockerCalls[0]?.mounts, [
+      { hostPath: "/repo/.git/config", sandboxPath: "/repo/.git/config", readonly: true },
     ]);
   });
 
