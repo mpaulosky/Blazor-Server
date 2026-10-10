@@ -11,8 +11,19 @@
 // owner's (#146).
 // ---------------------------------------------------------------------------
 
-import type { QueueScope } from "./config.mts";
-import type { ContentEdit, IssueEvent, SandcastleIssue } from "./github.mts";
+import { queueLabelOf, type QueueScope } from "./config.mts";
+import {
+  addIssueLabel,
+  bodyEdits,
+  hasLabel,
+  issueEvents,
+  listSandcastleIssues,
+  pushAccess,
+  removeIssueLabel,
+  type ContentEdit,
+  type IssueEvent,
+  type SandcastleIssue,
+} from "./github.mts";
 
 let activeScope: QueueScope | undefined;
 
@@ -56,7 +67,41 @@ export function approval(
   edits: readonly ContentEdit[],
   isOwner: IsOwner,
 ): Approval {
-  throw new Error("Not implemented");
+  const queued = latest(events, (event) => event.event === "labeled" && sameLabel(event.label, queueLabel));
+  if (queued === undefined) return { approved: false, reason: `nothing shows who added ${queueLabel}` };
+  const queuer = isOwner(queued.actor);
+  if (queuer === undefined) {
+    return { approved: false, reason: `couldn't check whether ${who(queued.actor)}, who added ${queueLabel}, is the repository owner` };
+  }
+  if (!queuer) return { approved: false, reason: `${who(queued.actor)} added ${queueLabel}, not the repository owner` };
+
+  const since = Date.parse(queued.createdAt);
+  // Only a change provably before the add is ignored. The same second counts
+  // as after, since GitHub's times are to the second, and so does a time that
+  // won't parse (fail closed).
+  const after = (time: string) => !(Date.parse(time) < since);
+  const changes = [
+    ...events
+      .filter((event) => event.event === "renamed" && after(event.createdAt))
+      .map((event) => ({ editor: event.actor, what: "the title" })),
+    ...edits.filter((edit) => after(edit.editedAt)).map((edit) => ({ editor: edit.editor, what: "the body" })),
+  ];
+  const checked = changes.map((change) => ({ ...change, owner: isOwner(change.editor) }));
+  const stranger = checked.find((change) => change.owner === false);
+  if (stranger !== undefined) {
+    return {
+      approved: false,
+      reason: `${who(stranger.editor)} edited ${stranger.what} after the owner added ${queueLabel}; remove and re-add ${queueLabel} to approve it`,
+    };
+  }
+  const unknown = checked.find((change) => change.owner === undefined);
+  if (unknown !== undefined) {
+    return {
+      approved: false,
+      reason: `couldn't check whether ${who(unknown.editor)}, who edited ${unknown.what} after ${queueLabel} was added, is the repository owner`,
+    };
+  }
+  return { approved: true };
 }
 
 export type LabelFix = { action: "remove" | "restore"; label: string; reason: string };
@@ -77,7 +122,46 @@ export function labelOriginFixes(
   isOwner: IsOwner,
   rules: { trustAdds: readonly string[]; trustRemovals: readonly string[] },
 ): { fixes: LabelFix[]; unknown: string[] } {
-  throw new Error("Not implemented");
+  const fixes: LabelFix[] = [];
+  const unknown: string[] = [];
+  const carries = (label: string) => labels.some((name) => sameLabel(name, label));
+  for (const label of rules.trustAdds.filter(carries)) {
+    const added = latest(events, (event) => event.event === "labeled" && sameLabel(event.label, label));
+    if (added === undefined) {
+      fixes.push({ action: "remove", label, reason: `removed ${label}: nothing shows who added it` });
+      continue;
+    }
+    const owner = isOwner(added.actor);
+    if (owner === undefined) unknown.push(label);
+    else if (!owner) fixes.push({ action: "remove", label, reason: `removed ${label}, which ${who(added.actor)} added, not the repository owner` });
+  }
+  for (const label of rules.trustRemovals.filter((label) => !carries(label))) {
+    const last = latest(events, (event) => event.event !== "renamed" && sameLabel(event.label, label));
+    if (last?.event !== "unlabeled") continue;
+    const owner = isOwner(last.actor);
+    if (owner === undefined) unknown.push(label);
+    else if (!owner) fixes.push({ action: "restore", label, reason: `put back ${label}, which ${who(last.actor)} removed, not the repository owner` });
+  }
+  return { fixes, unknown };
+}
+
+// The most recent event `matches` picks out, by its time; of two at the same
+// time, the later in the API's order, which lists events oldest first.
+function latest(events: readonly IssueEvent[], matches: (event: IssueEvent) => boolean): IssueEvent | undefined {
+  let found: IssueEvent | undefined;
+  for (const event of events) {
+    if (matches(event) && (found === undefined || Date.parse(event.createdAt) >= Date.parse(found.createdAt))) found = event;
+  }
+  return found;
+}
+
+// GitHub matches label names case-insensitively.
+function sameLabel(name: string | null, label: string): boolean {
+  return name !== null && name.toLowerCase() === label.toLowerCase();
+}
+
+function who(login: string | null): string {
+  return login === null ? "a deleted account" : `@${login}`;
 }
 
 // The labels loadQueue trusts only from the repository owner: sandcastle:ready
@@ -106,8 +190,20 @@ export type QueueGitHub = {
 // round), so one skip prints once, not three times.
 const skipsLogged = new Set<string>();
 
+// The live QueueGitHub. A factory, so each load gets one fresh set of failed
+// permission lookups, shared by the comment filter and isOwner: a login
+// whose lookup failed isn't asked about again in the same load, and is
+// retried in the next.
 export function liveQueueGitHub(): QueueGitHub {
-  throw new Error("Not implemented");
+  const failed = new Set<string>();
+  return {
+    issuesInScope: (scope) => listSandcastleIssues(undefined, undefined, undefined, undefined, scope, failed),
+    events: (number) => issueEvents(number),
+    bodyEdits: (number) => bodyEdits(number),
+    isOwner: (login) => pushAccess(login, undefined, failed),
+    removeLabel: (number, label) => removeIssueLabel(number, label),
+    addLabel: (number, label) => addIssueLabel(number, label),
+  };
 }
 
 // Lists `scope`, then keeps only the issues the repository owner queued and
@@ -123,5 +219,47 @@ export function loadQueue(
   log: (line: string) => void = console.log,
   logged: Set<string> = skipsLogged,
 ): SandcastleIssue[] {
-  throw new Error("Not implemented");
+  const queueLabel = queueLabelOf(scope);
+  const skip = (issue: SandcastleIssue, reason: string): void => {
+    const line = `  ⊘ #${issue.number} is skipped: ${reason}.`;
+    if (logged.has(line)) return;
+    logged.add(line);
+    log(line);
+  };
+  const kept: SandcastleIssue[] = [];
+  for (const issue of github.issuesInScope(scope)) {
+    // Only an issue scope can list an issue without its queue label.
+    if (!hasLabel(issue, queueLabel)) {
+      skip(issue, `it doesn't carry ${queueLabel}`);
+      continue;
+    }
+    try {
+      const events = github.events(issue.number);
+      const verdict = approval(queueLabel, events, github.bodyEdits(issue.number), github.isOwner);
+      if (!verdict.approved) {
+        skip(issue, verdict.reason);
+        continue;
+      }
+      const { fixes, unknown } = labelOriginFixes(issue.labels, events, github.isOwner, ISSUE_LABEL_RULES);
+      if (unknown.length > 0) {
+        skip(issue, `couldn't check whether the repository owner added or removed ${unknown.join(" and ")}, so it's checked again next round`);
+        continue;
+      }
+      let labels = issue.labels;
+      for (const fix of fixes) {
+        if (fix.action === "remove") {
+          github.removeLabel(issue.number, fix.label);
+          labels = labels.filter((name) => !sameLabel(name, fix.label));
+        } else {
+          github.addLabel(issue.number, fix.label);
+          labels = [...labels, fix.label];
+        }
+        log(`  ↺ #${issue.number}: ${fix.reason}.`);
+      }
+      kept.push({ ...issue, labels });
+    } catch (error) {
+      skip(issue, `couldn't check who queued it or fix its labels, so it's checked again next round: ${error}`);
+    }
+  }
+  return kept;
 }

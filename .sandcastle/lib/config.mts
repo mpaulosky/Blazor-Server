@@ -132,20 +132,43 @@ Set it on the command line, not in .sandcastle/.env. In GitHub Actions the queue
 // SANDCASTLE_LABEL naming a label the host manages (SANDCASTLE_LABELS or
 // bug), compared case-insensitively.
 export function queueScopeFrom(env: Record<string, string | undefined>): QueueScope {
-  throw new Error("Not implemented");
+  const issue = env.SANDCASTLE_ISSUE?.trim() || undefined;
+  const label = env.SANDCASTLE_LABEL?.trim() || undefined;
+  if (env.GITHUB_ACTIONS === "true") {
+    if (issue !== undefined || label !== undefined) {
+      throw scopeError("SANDCASTLE_ISSUE and SANDCASTLE_LABEL are for a local run; in GitHub Actions the queue is always the Sandcastle label.");
+    }
+    return { kind: "label", label: QUEUE_LABEL };
+  }
+  if (issue !== undefined) {
+    if (label !== undefined) throw scopeError("Set SANDCASTLE_ISSUE or SANDCASTLE_LABEL, not both.");
+    if (!/^[1-9]\d*$/.test(issue)) throw scopeError(`SANDCASTLE_ISSUE must be an issue number, not "${issue}".`);
+    return { kind: "issue", number: Number(issue) };
+  }
+  if (label === undefined) throw scopeError("A local run needs SANDCASTLE_ISSUE or SANDCASTLE_LABEL.");
+  if (label.length > 50) throw scopeError("SANDCASTLE_LABEL is longer than GitHub's 50-character limit for a label.");
+  const managed = [...SANDCASTLE_LABELS.map((managedLabel) => managedLabel.name), "bug"];
+  if (managed.some((name) => name.toLowerCase() === label.toLowerCase())) {
+    throw scopeError(`SANDCASTLE_LABEL can't be "${label}": Sandcastle adds and removes that label itself.`);
+  }
+  return { kind: "label", label };
+}
+
+function scopeError(problem: string): QueueScopeError {
+  return new QueueScopeError(`${problem}\n\n${QUEUE_SCOPE_USAGE}`);
 }
 
 // The label that approves an issue in `scope`, and that intake puts on split
 // children and removes from the original (lib/intake.mts#applySplit): the
 // scope's own label, or QUEUE_LABEL in issue scope.
 export function queueLabelOf(scope: QueueScope): string {
-  throw new Error("Not implemented");
+  return scope.kind === "label" ? scope.label : QUEUE_LABEL;
 }
 
 // A one-line description of `scope` for the run's log, such as "issues
 // labelled Sandcastle:dev" or "issue #146 and its PR".
 export function describeQueueScope(scope: QueueScope): string {
-  throw new Error("Not implemented");
+  return scope.kind === "label" ? `issues labelled ${scope.label}` : `issue #${scope.number} and its PR`;
 }
 
 // Marks an issue while a sandbox is building it (see lib/build.mts#buildIssue
