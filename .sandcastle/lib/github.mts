@@ -104,22 +104,29 @@ function hasWriteAccess(
 
 // Each comment author's answer from ownerApproved, kept for the whole run so
 // no author is looked up twice, however many issues or rounds they comment on.
+// The trade-off: write access revoked partway through a run isn't seen until
+// the next run, so stop the run to cut someone off at once.
 const commenterCanPush = new Map<string, boolean>();
 
 // The open Sandcastle issues, with every comment dropped but those from
-// authors with write access.
-export function listSandcastleIssues(): SandcastleIssue[] {
+// authors with write access. The gate calls this once per round: `canPush`
+// carries authors' answers across the run, and each call starts a fresh set
+// of failed lookups, so a failure is retried next round.
+export function listSandcastleIssues(
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  canPush: Map<string, boolean> = commenterCanPush,
+  warn: (message: string) => void = console.error,
+): SandcastleIssue[] {
   const issues = JSON.parse(
-    sh(
-      process.cwd(), "gh", "issue", "list", "--repo", repoName(), "--state", "open", "--label", "Sandcastle", "--limit", "1000",
+    ghWithStderr(run, [
+      "issue", "list", "--repo", repo, "--state", "open", "--label", "Sandcastle", "--limit", "1000",
       "--json", "number,title,body,labels,comments",
       "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}]",
-    ),
+    ]),
   ) as GhIssue[];
-  const repo = repoName();
-  // Each call is a round, so a lookup that failed is tried again next round.
   const failed = new Set<string>();
-  return issues.map((issue) => ownerApproved(issue, repo, execFileSync, commenterCanPush, console.error, failed));
+  return issues.map((issue) => ownerApproved(issue, repo, run, canPush, warn, failed));
 }
 
 export type OpenPullRequest = { number: number; headRefName: string };

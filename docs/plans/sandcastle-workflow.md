@@ -45,7 +45,8 @@ repository, and an agent holding a write token acts on what it reads. So when th
 The PAT is the owner's, so the labels the host adds to split children pass. Any other issue is skipped and logged, without a comment. The owner re-approves an edited issue by removing and
 re-adding `Sandcastle`. Only the comments of people with write access (`admin`, `maintain` or `write` on the repository, from the collaborator-permission API) reach a role: the
 host drops everyone else's when it builds a prompt, and the sandbox has no token to fetch them itself (see **Principles**). Write access, not the owner's login, decides this, because in a
-repository an organization owns the owner never comments. The host looks each author up once per run.
+repository an organization owns the owner never comments. The host looks each author up once per run, so write access revoked during a run isn't seen until
+the next run: stop the run to cut someone off at once.
 A login GitHub says "is not a user" (a 404, as for a bot's bare login) counts as no access. Any other lookup that fails, including a 404 for the repository itself,
 drops that author's comments and is logged once, and the host asks again in the next round rather than remember the failure.
 On PRs, follow-up acts only on bot threads and the owner's threads (see **Thread rules**).

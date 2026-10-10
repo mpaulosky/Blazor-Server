@@ -11,6 +11,7 @@ import {
   markerComments,
   markerCommentsSince,
   openPullRequest,
+  listSandcastleIssues,
   ownerApproved,
   sameRepository,
   type GhIssue,
@@ -244,7 +245,7 @@ describe("ownerApproved", () => {
     assert.deepEqual(ownerApproved(issue, "o/r", run).comments, ["Use the existing helper."]);
   });
 
-  it("looks up each author at most once per run", () => {
+  it("looks an author up once for several comments on one issue", () => {
     const issue = issueWith(["repeat-commenter", "First comment."], ["repeat-commenter", "Second comment."]);
     const { calls, run } = stubPermissions({ "repeat-commenter": permission("write") });
 
@@ -343,6 +344,68 @@ function recordingGh(output: string[] = []) {
   }) as unknown as typeof execFileSync;
   return { calls, run };
 }
+
+// listSandcastleIssues is one round's read of the queue: the caller (the gate)
+// calls it once per round, sharing `canPush` across the run.
+describe("listSandcastleIssues", () => {
+  // A gh stub serving `issue list` with `issues` (already in the --jq shape)
+  // and each collaborator-permission lookup with the next of `answers`, a
+  // permission string or an Error to throw. Counts the lookups.
+  const queue = (issues: GhIssue[], answers: (string | Error)[]) => {
+    let lookups = 0;
+    const run = ((_cmd: string, args: readonly string[]) => {
+      if (args[0] === "issue" && args[1] === "list") return JSON.stringify(issues);
+      lookups++;
+      const answer = answers.shift();
+      if (answer === undefined) throw new Error(`unexpected gh call: ${args.join(" ")}`);
+      if (answer instanceof Error) throw answer;
+      return JSON.stringify({ permission: answer, role_name: answer });
+    }) as unknown as typeof execFileSync;
+    return { run, lookups: () => lookups };
+  };
+  const issueBy = (number: number, author: string): GhIssue => ({
+    number,
+    title: "Add a thing",
+    body: "## Summary",
+    labels: ["Sandcastle"],
+    comments: [{ author, body: `Guidance on #${number}.` }],
+  });
+  const badGateway = () => Object.assign(new Error("Command failed"), { stderr: "gh: Bad Gateway (HTTP 502)\n" });
+  const quiet = () => {};
+
+  it("looks an author up once across the rounds of a run", () => {
+    const { run, lookups } = queue([issueBy(3, "maintainer")], ["write"]);
+    const canPush = new Map<string, boolean>();
+
+    const first = listSandcastleIssues(run, "o/r", canPush, quiet);
+    const second = listSandcastleIssues(run, "o/r", canPush, quiet);
+
+    assert.deepEqual(first[0]!.comments, ["Guidance on #3."]);
+    assert.deepEqual(second[0]!.comments, ["Guidance on #3."]);
+    assert.equal(lookups(), 1);
+  });
+
+  it("looks an author whose lookup failed up once in a round, across its issues", () => {
+    const { run, lookups } = queue([issueBy(3, "maintainer"), issueBy(4, "maintainer")], [badGateway()]);
+
+    const issues = listSandcastleIssues(run, "o/r", new Map(), quiet);
+
+    assert.deepEqual(issues.map((issue) => issue.comments), [[], []]);
+    assert.equal(lookups(), 1);
+  });
+
+  it("looks an author whose lookup failed up again in the next round", () => {
+    const { run, lookups } = queue([issueBy(3, "maintainer")], [badGateway(), "write"]);
+    const canPush = new Map<string, boolean>();
+
+    const first = listSandcastleIssues(run, "o/r", canPush, quiet);
+    const second = listSandcastleIssues(run, "o/r", canPush, quiet);
+
+    assert.deepEqual(first[0]!.comments, []);
+    assert.deepEqual(second[0]!.comments, ["Guidance on #3."]);
+    assert.equal(lookups(), 2);
+  });
+});
 
 describe("ensureLabels", () => {
   it("creates every sandcastle:* label when the repository has none of them", () => {
