@@ -53,8 +53,9 @@ export type SweepPullRequest = PullRequestIdentity & {
   // The logins GitHub still has pending a review request from.
   reviewRequests: string[];
   reviews: { author: string | null; commitOid: string | null }[];
-  // byBot: whether the thread's first comment's author is a Bot.
-  threads: { resolved: boolean; byBot: boolean }[];
+  // byBot: whether the thread's first comment's author is a Bot. author: that
+  // comment's login, for isOwner (null for a deleted account or no comment).
+  threads: { resolved: boolean; byBot: boolean; author: string | null }[];
   checks: CheckState[];
   // review_requested timeline events naming Copilot, oldest first.
   copilotRequestedAt: string[];
@@ -270,8 +271,10 @@ export type SweepResult = { needsPass: number[]; passes: PassTarget[] };
 // repository owner removed gets it back instead, and is left alone (#146).
 // Each PR runs in its own try/catch, so one failure doesn't stop the rest.
 // An updated PR reaches `outcomes` as "updated", and every PR that reached
-// `decide` with unresolved threads a person opened replaces `waiting`'s list,
-// so the run report shows the latest sweep's view. Once that's done, hands
+// `decide` with unresolved threads opened by someone other than the
+// repository owner or a bot (the same test lib/follow-up-pass.mts#threadsForRole
+// uses) replaces `waiting`'s list, so the run report shows the latest sweep's
+// view. Once that's done, hands
 // back any in-scope issue, not labelled sandcastle:needs-human and with no
 // open PR, whose latest Sandcastle PR closed without merging
 // (closedWithoutMerging), each in its own try/catch too.
@@ -310,7 +313,11 @@ export function sweepPullRequests(
         log(`  ✋ PR #${pr.number}: ${restore.reason}, so it isn't swept.`);
         continue;
       }
-      const humanThreads = pr.threads.filter((thread) => !thread.resolved && !thread.byBot).length;
+      // Not a bot's and not confirmed as the repository owner's: an owner
+      // thread is the follow-up role's to answer (threadsForRole), not left
+      // waiting on a person the way this count and the run report's "waiting
+      // on a person" section describe it.
+      const humanThreads = pr.threads.filter((thread) => !thread.resolved && !thread.byBot && github.isOwner(thread.author) !== true).length;
       if (humanThreads > 0) waitingPrs.push({ pr: pr.number, threads: humanThreads });
       const decision = decide(pr, now);
       followUp(pr, decision, github, log, outcomes);

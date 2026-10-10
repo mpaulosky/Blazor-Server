@@ -361,7 +361,7 @@ type SweepNode = {
   labels: Connection<{ name: string }>;
   reviewRequests: Connection<{ requestedReviewer: Login }>;
   reviews: Connection<{ author: Login; commit: { oid?: string } | null }>;
-  reviewThreads: Connection<{ isResolved: boolean; comments: Connection<{ author?: { __typename?: string } | null }> }>;
+  reviewThreads: Connection<{ isResolved: boolean; comments: Connection<{ author?: { __typename?: string; login?: string } | null }> }>;
   commits: Connection<{ commit: { oid?: string; statusCheckRollup: { contexts: Connection<CheckContext> } | null } | null }>;
   timelineItems: Connection<{ createdAt?: string; requestedReviewer?: Login }>;
 };
@@ -424,7 +424,7 @@ function sweepPullRequest(node: SweepNode): SweepPullRequest {
     threads: nodesOf(node.reviewThreads).map((thread) => {
       const first = nodesOf(thread.comments)[0];
       const author = first?.author;
-      return { resolved: thread.isResolved, byBot: author?.__typename === "Bot" };
+      return { resolved: thread.isResolved, byBot: author?.__typename === "Bot", author: authorLogin(author) };
     }),
     checks: nodesOf(contexts).map(checkState),
     copilotRequestedAt: nodesOf(node.timelineItems)

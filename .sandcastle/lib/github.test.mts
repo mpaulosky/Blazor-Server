@@ -1048,8 +1048,8 @@ describe("openPullRequestsForSweep", () => {
     assert.deepEqual(pr!.reviewRequests, [COPILOT_REVIEWER]);
     assert.deepEqual(pr!.reviews, [{ author: COPILOT_REVIEWER, commitOid: "a".repeat(40) }]);
     assert.deepEqual(pr!.threads, [
-      { resolved: false, byBot: true },
-      { resolved: false, byBot: false },
+      { resolved: false, byBot: true, author: "github-advanced-security[bot]" },
+      { resolved: false, byBot: false, author: "reviewer" },
     ]);
     assert.deepEqual(pr!.checks, [{ name: "build", completed: true, green: true, completedAt: "2026-10-01T00:00:00Z" }]);
     assert.equal(pr!.truncated, false);
