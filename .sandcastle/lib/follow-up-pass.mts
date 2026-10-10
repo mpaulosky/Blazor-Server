@@ -25,7 +25,7 @@ import {
   retryOnServerError,
 } from "./build.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
-import { ansiEscape, headOf, runCheckpoint, tail, type GateRun } from "./checkpoint.mts";
+import { runCheckpoint, runGate, tail } from "./checkpoint.mts";
 import {
   BUILDING_LABEL,
   FOLLOW_UP_MARKER,
@@ -372,7 +372,8 @@ export function giveUpComment(reason: string, output: string | undefined): strin
 // - "push-failed": the gated commit failed to push because someone pushed to
 //   the PR meanwhile (its head on GitHub moved, or couldn't be read); not
 //   counted and not a give-up, so the next sweep tries again with the PR's
-//   new head. A push that failed with the head unmoved gives up instead;
+//   new head. A push that failed with the head unmoved gives up instead, and
+//   one that reported an error but landed counts as pushed;
 // - "gave-up": the PR was handed back with sandcastle:needs-human.
 export type PassOutcome =
   | { kind: "skipped"; reason: string }
@@ -474,33 +475,6 @@ function shellWord(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-// One gate run for a pass. Like lib/checkpoint.mts#runGate, a passing gate
-// over a dirty worktree (an unfinished merge included) still fails, and the
-// gated commit is the HEAD the host then scans and pushes by its id. Unlike
-// runGate, HEAD is read once, after the gate has passed, with no check that
-// it didn't move while the gate ran: follow-up-pass.test.mts's sandboxFake
-// moves HEAD on every passing gate run, which that check would fail. CI
-// gates the pushed commit again on the PR.
-async function passGate(sandbox: Pick<sandcastle.Sandbox, "exec">): Promise<GateRun> {
-  const { stdout, exitCode } = await sandbox.exec("scripts/gate.sh 2>&1");
-  const output = stdout.replace(ansiEscape, "");
-  if (exitCode !== 0) return { passed: false, output };
-  const status = await sandbox.exec("git status --porcelain 2>&1");
-  if (status.exitCode !== 0 || status.stdout.trim() !== "") {
-    return {
-      passed: false,
-      output:
-        `${output}\n❌ The gate passed, but the worktree isn't clean (or git status failed). Commit or discard every ` +
-        `change, and finish any merge, so the pushed branch is exactly what the gate checked:\n${status.stdout}`,
-    };
-  }
-  const head = await headOf(sandbox);
-  if (head === undefined) {
-    return { passed: false, output: `${output}\n❌ The gate passed, but HEAD couldn't be read, so the commit it checked isn't known.` };
-  }
-  return { passed: true, output, head };
-}
-
 // Whether `ancestor` is in `commit`'s history, asked in the sandbox's
 // worktree, where the role's commits are.
 async function sandboxContains(sandbox: Pick<sandcastle.Sandbox, "exec">, commit: string, ancestor: string): Promise<boolean> {
@@ -562,6 +536,41 @@ export async function runPass(
     return { kind: "skipped", reason };
   };
 
+  // Read before the claim, so a PR with nothing to do doesn't have its issue
+  // labelled every round, and read again once the claim is held: another run
+  // may have passed on the PR in between, so what it decides from must be
+  // read while no other run can change it.
+  const before = planPass(target, base, host, skip);
+  if (!("forRole" in before)) return before;
+
+  // Claimed as a build claims it, so two runs never pass on one PR or share
+  // its worktree, and a build of the same issue stands aside meanwhile.
+  if (!host.markBuilding(issue.number)) return skip(`another run marked #${issue.number} ${BUILDING_LABEL}`);
+  try {
+    const plan = planPass(target, base, host, skip);
+    if (!("forRole" in plan)) return plan;
+    return await passOnMarkedIssue(target, issue, base, host, plan);
+  } finally {
+    try {
+      host.unmarkBuilding(issue.number);
+    } catch (error) {
+      console.error(`  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so it's tried again when this run exits: ${error}`);
+    }
+  }
+}
+
+// What runPass decides from: the PR's head and threads, and its pass count,
+// read from GitHub. Returns the plan for a pass, or the outcome when there's
+// to be none: skipped (the head moved since the sweep read it, an author's
+// ownership is unknown, or there's nothing a pass handles) or handed back
+// (the PR has had FOLLOW_UP_PASS_CAP passes). Records each thread left for a
+// person.
+function planPass(
+  target: PassTarget,
+  base: string,
+  host: PassHost,
+  skip: (reason: string) => PassOutcome,
+): PassPlan | PassOutcome {
   const { headRefOid, threads } = host.reviewThreads(target.number);
   if (headRefOid !== target.headRefOid) return skip("its head moved since the sweep read it");
   const sorted = threadsForRole(threads, host.isOwner, host.hostLogin());
@@ -585,20 +594,7 @@ export async function runPass(
       undefined,
     );
   }
-
-  // Claimed as a build claims it, so two runs never pass on one PR or share
-  // its worktree, and a build of the same issue stands aside meanwhile.
-  if (!host.markBuilding(issue.number)) return skip(`another run marked #${issue.number} ${BUILDING_LABEL}`);
-  try {
-    const plan = { forRole: sorted.forRole, leftForHuman: sorted.leftForHuman.length, needsMerge, passCount };
-    return await passOnMarkedIssue(target, issue, base, host, plan);
-  } finally {
-    try {
-      host.unmarkBuilding(issue.number);
-    } catch (error) {
-      console.error(`  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so it's tried again when this run exits: ${error}`);
-    }
-  }
+  return { forRole: sorted.forRole, leftForHuman: sorted.leftForHuman.length, needsMerge, passCount };
 }
 
 // Hands the PR back with sandcastle:needs-human (see giveUpComment), quoting
@@ -614,9 +610,9 @@ function giveUp(target: PassTarget, host: PassHost, reason: string, output: stri
   return { kind: "gave-up", reason };
 }
 
-// What runPass decided before marking the issue: the threads for the role,
-// how many were left for a person, whether main needs merging in, and how
-// many passes the PR has already had.
+// What planPass decided, read again once the issue was marked: the threads
+// for the role, how many were left for a person, whether main needs merging
+// in, and how many passes the PR has already had.
 type PassPlan = { forRole: PromptThread[]; leftForHuman: number; needsMerge: boolean; passCount: number };
 
 // runPass's work once the issue is marked: everything from creating the
@@ -699,7 +695,7 @@ async function passOnMarkedIssue(
     const gate = await runCheckpoint(
       2,
       {
-        gate: () => passGate(sandbox),
+        gate: () => runGate(sandbox),
         fix: (at, gateOutput) =>
           runRoleInSandbox(
             sandbox,
@@ -757,11 +753,16 @@ async function passOnMarkedIssue(
         } catch {
           remote = undefined;
         }
-        if (remote === target.headRefOid) {
+        // A retried push can land and still end in a server error.
+        if (remote === gated) {
+          log(`pushed ${gated}, although the push reported an error: ${error}`);
+        } else if (remote === target.headRefOid) {
           return stop("GitHub refused the push, and the PR's head hasn't moved, so pushing again would fail the same way", String(error));
+        } else {
+          log(`couldn't push ${gated}, since the PR's head moved, so no reply or summary is posted and the next round tries again: ${error}`);
+          return { kind: "push-failed", error: host.publicError(error) };
         }
-        log(`couldn't push ${gated}, since the PR's head moved, so no reply or summary is posted and the next round tries again: ${error}`);
-        return { kind: "push-failed", error: host.publicError(error) };
+        pushed = gated;
       }
     }
 

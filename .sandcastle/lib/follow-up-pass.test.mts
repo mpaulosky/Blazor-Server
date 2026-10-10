@@ -498,6 +498,8 @@ function sandboxFake(
     abandonsMerge?: boolean;
     // The role's commit shares no history with the PR's head.
     rewritesHistory?: boolean;
+    // Something commits while scripts/gate.sh runs.
+    gateCommits?: boolean;
   } = {},
 ) {
   const execCalls: string[] = [];
@@ -556,7 +558,7 @@ function sandboxFake(
       if (command.startsWith("git status")) return { stdout: "", stderr: "", exitCode: 0 };
       const exitCode = gateExitCodes.shift();
       if (exitCode === undefined) throw new Error("the gate ran more often than the test expected");
-      if (exitCode === 0) commit(nextHead());
+      if (options.gateCommits) commit(nextHead());
       return { stdout: `gate output, exit ${exitCode}\n`, stderr: "", exitCode };
     },
     run: async (opts: SandboxRunOptions) => {
@@ -594,6 +596,9 @@ function passHostFake(
     worktreeProblems?: string[];
     isOwnerFn?: IsOwner;
     hostLogin?: string;
+    // What GitHub says once the issue is claimed, when it changed meanwhile.
+    threadsAfterClaim?: ReviewThread[];
+    passCountAfterClaim?: number;
     // The branch's head on GitHub after a failed push; by default someone
     // else pushed meanwhile.
     remoteHead?: string;
@@ -615,10 +620,13 @@ function passHostFake(
   const sandbox = options.sandbox ?? sandboxFake();
   const passHost: PassHost = {
     fetchBranch: (branch) => void calls.fetchBranch.push(branch),
-    reviewThreads: () => ({ headRefOid: options.headRefOid ?? HEAD, threads: options.threads ?? [] }),
+    reviewThreads: () => ({
+      headRefOid: options.headRefOid ?? HEAD,
+      threads: (calls.markBuilding.length > 0 ? options.threadsAfterClaim : undefined) ?? options.threads ?? [],
+    }),
     isOwner: options.isOwnerFn ?? isOwner,
     hostLogin: () => options.hostLogin ?? HOST_LOGIN,
-    passCount: () => options.passCount ?? 0,
+    passCount: () => (calls.markBuilding.length > 0 ? options.passCountAfterClaim : undefined) ?? options.passCount ?? 0,
     contains: () => options.containsBase ?? true,
     markBuilding: (issueNumber) => {
       calls.markBuilding.push(issueNumber);
@@ -874,6 +882,53 @@ describe("runPass", () => {
     assert.deepEqual(calls.replyToThread, []);
   });
 
+  it("answers the threads and posts the summary when a push that reported an error landed anyway", async () => {
+    const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }]) });
+    const { passHost, calls } = passHostFake({
+      threads: [botThread()],
+      containsBase: true,
+      sandbox,
+      pushError: new Error("HTTP 502"),
+      remoteHead: ROLE_COMMIT,
+    });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.deepEqual(outcome, { kind: "passed", pushed: ROLE_COMMIT });
+    assert.deepEqual(calls.resolveThread, ["RT_bot"]);
+    assert.equal(calls.commentOnPullRequest.length, 1);
+  });
+
+  it("decides from what GitHub says once the issue is claimed: a thread another run answered meanwhile isn't passed on", async () => {
+    const { passHost, calls } = passHostFake({ threads: [botThread()], threadsAfterClaim: [botThread({ resolved: true })], containsBase: true });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.createSandbox, []);
+    assert.deepEqual(calls.unmarkBuilding, [ISSUE_NUMBER]);
+  });
+
+  it("hands the PR back, with no sandbox, when another run took it to the cap before this one claimed it", async () => {
+    const { passHost, calls } = passHostFake({ threads: [botThread()], passCount: FOLLOW_UP_PASS_CAP - 1, passCountAfterClaim: FOLLOW_UP_PASS_CAP });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.deepEqual(calls.createSandbox, []);
+  });
+
+  it("pushes nothing when HEAD moved while the gate ran", async () => {
+    const sandbox = sandboxFake({ followUpJson: "[]", gateExitCodes: [0, 0, 0], gateCommits: true });
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
+
+    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.deepEqual(calls.push, []);
+    assert.match(calls.handBack[0]!.body, /moved while it ran/);
+  });
+
   // A "fixed" verdict is only believed for a commit the pass added.
   for (const [scenario, commit] of [
     ["names a commit the branch doesn't hold", "b".repeat(7)],
@@ -1033,8 +1088,8 @@ describe("runPass's other give-ups", () => {
 
     const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
-    assert.deepEqual(outcome, { kind: "passed", pushed: sandbox.headOf() });
-    assert.deepEqual(calls.push, [{ branch: BRANCH, commit: sandbox.headOf() }]);
+    assert.deepEqual(outcome, { kind: "passed", pushed: ROLE_COMMIT });
+    assert.deepEqual(calls.push, [{ branch: BRANCH, commit: ROLE_COMMIT }]);
     assert.match(calls.commentOnPullRequest[0]!.body, /resolved its conflicts/);
   });
 
