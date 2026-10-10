@@ -128,9 +128,9 @@ export function decide(pr: SweepPullRequest, now: number): SweepDecision {
   // ciDoneAt NaN and the PR is never re-requested on a guess.
   const ciDoneAt = Math.max(...pr.checks.map((check) => (check.completedAt === null ? NaN : timestamp(check.completedAt))));
   const reviewed = pr.reviews.some((review) => isCopilot(review.author) && review.commitOid === pr.headRefOid);
-  const pending = pr.reviewRequests.some(isCopilot);
+  if (pr.reviewRequests.some(isCopilot)) return { action: "wait", reason: "Copilot's review is pending" };
 
-  if (!reviewed && !pending) {
+  if (!reviewed) {
     // A request recorded after CI finished means this head was already asked
     // about, whether or not GitHub kept the request (Copilot's review budget
     // can drop it, ADR 0004): that's what makes it once per head.
@@ -138,7 +138,6 @@ export function decide(pr: SweepPullRequest, now: number): SweepDecision {
     if (now - ciDoneAt > COPILOT_REREQUEST_AFTER_MS && !askedSince) return { action: "request-review" };
     return { action: "wait", reason: "Copilot hasn't reviewed the head yet" };
   }
-  if (pending) return { action: "wait", reason: "Copilot's review is pending" };
 
   const reasons: string[] = [];
   if (pr.mergeStateStatus === "DIRTY") reasons.push("it has merge conflicts");
@@ -188,7 +187,7 @@ export type FollowUpGitHub = {
   labelTimeline(issueNumber: number): TimelineLabelEvent[];
   requestCopilotReview(pullRequestId: string): void;
   updateBranch(number: number, expectedHeadSha: string): void;
-  // live: handBack({ kind: "issue", number: issueNumber }, "sandcastle:needs-human", reason, body).
+  // live: handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body).
   handBack(issueNumber: number, reason: string, body: string): void;
 };
 
@@ -200,7 +199,7 @@ export const liveFollowUpGitHub: FollowUpGitHub = {
   labelTimeline: (issueNumber) => labelTimeline(issueNumber),
   requestCopilotReview: (pullRequestId) => requestCopilotReview(pullRequestId),
   updateBranch: (number, expectedHeadSha) => updatePullRequestBranch(number, expectedHeadSha),
-  handBack: (issueNumber, reason, body) => handBack({ kind: "issue", number: issueNumber }, "sandcastle:needs-human", reason, body),
+  handBack: (issueNumber, reason, body) => handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body),
 };
 
 // Reads the host's login, the in-scope issues and the open PRs once, then

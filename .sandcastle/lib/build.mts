@@ -8,7 +8,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
-import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
 import {
   BASE_BRANCH,
@@ -22,6 +21,7 @@ import {
   type OptionalRole,
 } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
+import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, repoName, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";

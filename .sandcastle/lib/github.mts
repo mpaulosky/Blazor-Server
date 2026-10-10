@@ -362,7 +362,6 @@ function truncated(connection: Connection<unknown>): boolean {
 function sweepPullRequest(node: SweepNode): SweepPullRequest {
   const head = nodesOf(node.commits)[0]?.commit;
   const contexts = head?.statusCheckRollup?.contexts;
-  const logins = (items: { login?: string }[]) => items.flatMap((item) => (typeof item.login === "string" ? [item.login] : []));
   return {
     id: node.id,
     number: node.number,
@@ -375,7 +374,10 @@ function sweepPullRequest(node: SweepNode): SweepPullRequest {
     isDraft: node.isDraft,
     labels: nodesOf(node.labels).map((label) => label.name),
     mergeStateStatus: node.mergeStateStatus,
-    reviewRequests: logins(nodesOf(node.reviewRequests).flatMap((request) => (request.requestedReviewer ? [request.requestedReviewer] : []))),
+    reviewRequests: nodesOf(node.reviewRequests).flatMap((request) => {
+      const login = request.requestedReviewer?.login;
+      return typeof login === "string" ? [login] : [];
+    }),
     reviews: nodesOf(node.reviews).map((review) => ({ author: authorLogin(review.author), commitOid: review.commit?.oid ?? null })),
     threads: nodesOf(node.reviewThreads).map((thread) => {
       // The query nests the author under the comment; a stubbed answer may
