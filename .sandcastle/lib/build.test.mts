@@ -136,7 +136,7 @@ function host(
   const designNoteCalls: number[] = [];
   const publishCalls: { reviewed: boolean; docsFailed: boolean }[] = [];
   const startFromMainCalls: { issueNumber: number; branch: string; base: string }[] = [];
-  const handBackWorkflowChangeCalls: { issueNumber: number; branch: string; detail: string }[] = [];
+  const handBackWorkflowChangeCalls: { issueNumber: number; branch: string; detail: string; change: { head: string; files: string[] } }[] = [];
   const buildHost: BuildHost = {
     createSandbox: async () => {
       order.push("create");
@@ -191,8 +191,9 @@ function host(
     worktreeProblems: () => worktreeProblems,
     publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), () => false),
     limits: new RunLimits(),
-    handBackWorkflowChange: (issueNumber, failureBranch, detail) => {
-      handBackWorkflowChangeCalls.push({ issueNumber, branch: failureBranch, detail });
+    workflowFiles: (from, to) => [`.github/workflows/${from.slice(0, 4)}-${to.slice(0, 4)}.yml`],
+    handBackWorkflowChange: (issueNumber, failureBranch, detail, change) => {
+      handBackWorkflowChangeCalls.push({ issueNumber, branch: failureBranch, detail, change });
     },
   };
   return {
@@ -579,10 +580,11 @@ describe("buildIssue and the usage limit", () => {
 
   // The stop above is recorded before the tester starts, so it never reaches
   // the publish step. Here another build in the round hits the limit only
-  // after this one's reviewer has finished, so only the check before publish
-  // can hold the gated work back.
-  it("rejects with UncountedStopError and doesn't publish when another build hits the usage limit after this one's reviewer finished", async () => {
-    const { pushed, comments, recordBuildFailureCalls, steps, buildHost } = host([0, 0]);
+  // after this one's reviewer has finished: the work is built, gated and
+  // reviewed, and publishing it costs no Claude usage, while an ephemeral
+  // runner would throw away anything left unpushed.
+  it("still publishes work whose roles all finished when another build hits the usage limit after this one's reviewer", async () => {
+    const { pushed, recordBuildFailureCalls, steps, buildHost } = host([0, 0]);
     const createSandbox = buildHost.createSandbox;
     buildHost.createSandbox = async (sandboxBranch) => {
       const sandbox = await createSandbox(sandboxBranch);
@@ -596,14 +598,11 @@ describe("buildIssue and the usage limit", () => {
       } as Sandbox;
     };
 
-    await assert.rejects(
-      () => buildIssue(issue, branch, base, buildHost),
-      (error: unknown) => error instanceof UncountedStopError && /not published/.test(error.message),
-    );
+    const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.ok(steps.includes("reviewer"), steps.join(", "));
-    assert.deepEqual(pushed, []);
-    assert.deepEqual(comments, []);
+    assert.notEqual(result.prUrl, undefined);
+    assert.equal(pushed.length, 1);
     assert.deepEqual(recordBuildFailureCalls, []);
   });
 });
@@ -627,6 +626,11 @@ describe("buildIssue publishing a workflow file", () => {
     assert.equal(handBackWorkflowChangeCalls[0]!.issueNumber, issue.number);
     assert.equal(handBackWorkflowChangeCalls[0]!.branch, branch);
     assert.match(handBackWorkflowChangeCalls[0]!.detail, /refusing to allow/);
+    // The workflow files and head are read from the base to the commit the
+    // gate passed, the one the refused push carried.
+    const { head, files } = handBackWorkflowChangeCalls[0]!.change;
+    assert.deepEqual(files, [`.github/workflows/${base.slice(0, 4)}-${head.slice(0, 4)}.yml`]);
+    assert.notEqual(head, base);
     assert.deepEqual(comments, []);
     assert.deepEqual(recordBuildFailureCalls, []);
     assert.equal(result.prUrl, undefined);

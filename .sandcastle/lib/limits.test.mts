@@ -158,6 +158,51 @@ describe("isUsageLimitError", () => {
     assert.equal(isUsageLimitError(error), true);
   });
 
+  it("recognises a rate limit in a stream-json result event's text", () => {
+    const error = new Error(
+      'claude-code exited with code 1:\n{"type":"result","is_error":true,"result":"API Error: 429 {\\"type\\":\\"error\\",\\"error\\":{\\"type\\":\\"rate_limit_error\\"}}"}',
+    );
+
+    assert.equal(isUsageLimitError(error), true);
+  });
+
+  // Sandcastle works on itself: a role that reads lib/limits.mts or its tests
+  // sees these phrasings in its own tool output, and the AgentError message
+  // can end with that output. Only Claude Code's own report is a usage limit.
+  it("is false for a tool result in stream-json that quotes a usage-limit phrasing", () => {
+    const toolResult = JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "tool_result", content: "  /Claude (AI )?usage limit reached/i,\nAPI Error: 429" }] },
+    });
+    const error = new Error(`claude-code exited with code 1:\n${toolResult}`);
+
+    assert.equal(isUsageLimitError(error), false);
+  });
+
+  it("is false for the agent's own text in stream-json mentioning a rate limit", () => {
+    const assistant = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "text", text: 'API Error: 429 is matched by "type":"rate_limit_error" too' }] },
+    });
+    const error = new Error(`claude-code exited with code 1:\n${assistant}`);
+
+    assert.equal(isUsageLimitError(error), false);
+  });
+
+  it("is false for a plain output line that only quotes a phrasing partway through, as grep output does", () => {
+    const error = new Error(
+      "claude-code exited with code 1:\n.sandcastle/lib/limits.test.mts:105:    \"Claude AI usage limit reached\",\nerror: tests failed",
+    );
+
+    assert.equal(isUsageLimitError(error), false);
+  });
+
+  it("is false for a result event that isn't about a limit", () => {
+    const error = new Error('claude-code exited with code 1:\n{"type":"result","is_error":true,"result":"Tests fail: expected API Error: 429 handling"}');
+
+    assert.equal(isUsageLimitError(error), false);
+  });
+
   it("is false for a server overload, not a usage or rate limit", () => {
     const error = new Error('API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
 

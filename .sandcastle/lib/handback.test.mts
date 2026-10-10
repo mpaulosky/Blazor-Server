@@ -141,20 +141,40 @@ describe("recordFailedAttempt", () => {
 // without Workflows permission must hand the issue back, not be treated as a
 // failed build attempt.
 describe("workflowHandBackComment", () => {
-  it("names .github/workflows, says a person must make the change, names the branch, and fences the detail", () => {
-    const comment = workflowHandBackComment(
-      "feature/69-run-the-gate",
-      "! [remote rejected] abc -> feature/69-run-the-gate (refusing to allow a GitHub App to create or update workflow `.github/workflows/ci.yml` without `workflows` permission)",
-    );
+  const change = { head: "abc1234def5678abc1234def5678abc1234def56", files: [".github/workflows/ci.yml", ".github/workflows/release.yml"] };
+  const detail =
+    "! [remote rejected] abc -> feature/69-run-the-gate (refusing to allow a GitHub App to create or update workflow `.github/workflows/ci.yml` without `workflows` permission)";
 
-    assert.match(comment, /\.github\/workflows/);
-    assert.match(comment, /a person/i);
+  it("names the branch, each workflow file and the head commit, says a person must make the change, and fences the detail", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, change);
+
     assert.match(comment, /`feature\/69-run-the-gate`/);
+    assert.match(comment, /`\.github\/workflows\/ci\.yml`/);
+    assert.match(comment, /`\.github\/workflows\/release\.yml`/);
+    assert.match(comment, /abc1234def5678abc1234def5678abc1234def56/);
+    assert.match(comment, /a person/i);
     assert.match(comment, /```\n[\s\S]*refusing to allow[\s\S]*\n```/);
   });
 
+  // GitHub refused the push, so origin's branch doesn't hold the commits: the
+  // comment mustn't send a person to edit a branch that lacks them.
+  it("says GitHub doesn't have the commits, rather than that the branch keeps them or asking to edit it", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, change);
+
+    assert.match(comment, /GitHub doesn't have/);
+    assert.doesNotMatch(comment, /keeps its commits/);
+    assert.doesNotMatch(comment, /drop it from/);
+    assert.match(comment, /once it has merged, remove `sandcastle:needs-human`/);
+  });
+
+  it("still reads when the workflow files couldn't be listed", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, { head: change.head, files: [] });
+
+    assert.match(comment, /a file under `\.github\/workflows\/`/);
+  });
+
   it("carries no BUILD_FAILED_MARKER, since this isn't a failed attempt", () => {
-    const comment = workflowHandBackComment("feature/69-run-the-gate", "refusing to allow");
+    const comment = workflowHandBackComment("feature/69-run-the-gate", "refusing to allow", change);
 
     assert.equal(comment.includes(BUILD_FAILED_MARKER), false);
   });
@@ -169,6 +189,7 @@ describe("handBackWorkflowChange", () => {
       69,
       "feature/69-run-the-gate",
       "refusing to allow a GitHub App to create or update workflow without `workflows` permission",
+      { head: "a".repeat(40), files: [".github/workflows/ci.yml"] },
       run,
       "o/r",
       report,

@@ -24,7 +24,7 @@ import { UncountedStopError } from "./errors.mts";
 import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, repoName, type SandcastleIssue } from "./github.mts";
-import { handBackWorkflowChange, recordFailedAttempt } from "./handback.mts";
+import { handBackWorkflowChange, recordFailedAttempt, type WorkflowChange } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { runLimits, type RunLimits } from "./limits.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
@@ -256,10 +256,14 @@ export type BuildHost = {
   // The run's limits (#147): buildIssue runs every role through
   // runRoleInSandbox(..., host.limits), and checks it before publishing.
   limits: RunLimits;
+  // The .github/workflows/ files the commits from `base` to `commit` change,
+  // for the hand-back comment of a push GitHub refused for them.
+  workflowFiles(base: string, commit: string): string[];
   // Hands the issue back with sandcastle:needs-human after a push GitHub
   // refused for a .github/workflows/** change (lib/handback.mts#handBackWorkflowChange).
-  // `detail` is the publicError text of the push's error.
-  handBackWorkflowChange(issueNumber: number, branch: string, detail: string): void;
+  // `detail` is the publicError text of the push's error; `change` names the
+  // refused head and its workflow files.
+  handBackWorkflowChange(issueNumber: number, branch: string, detail: string, change: WorkflowChange): void;
 };
 
 // An error's text as it can go on a public issue: no colour codes, no
@@ -323,7 +327,8 @@ const liveHost: BuildHost = {
   worktreeProblems,
   log: console.log,
   limits: runLimits,
-  handBackWorkflowChange: (issueNumber, branch, detail) => handBackWorkflowChange(issueNumber, branch, detail),
+  workflowFiles: (from, to) => git("diff", "--name-only", from, to, "--", ".github/workflows/").split("\n").filter(Boolean),
+  handBackWorkflowChange: (issueNumber, branch, detail, change) => handBackWorkflowChange(issueNumber, branch, detail, change),
 };
 
 // The branch comes from prepareBranches, which has already fetched it when it
@@ -606,14 +611,10 @@ async function buildMarkedIssue(
       return notPublished;
     }
 
-    // Once any role in the run has hit Claude's usage limit, nothing more is
-    // published (#147), even work that finished its roles: it waits on the
-    // branch, uncounted, for the next run. The time budget doesn't block a
-    // publish already reached, since that costs seconds and no usage.
-    const usageLimit = host.limits.usageLimitReason();
-    if (usageLimit !== undefined) {
-      throw new UncountedStopError(`not published: ${usageLimit}`);
-    }
+    // A publish already reached goes ahead even once the run has hit the time
+    // budget or Claude's usage limit (#147): every role has finished, pushing
+    // and opening the PR cost no usage, and an ephemeral runner throws away
+    // whatever isn't pushed. The limits stop roles from starting, not this.
 
     // host.publish retries a GitHub server error, but not a push that doesn't
     // fast-forward origin's branch (an agent rewrote a commit an earlier round
@@ -629,7 +630,15 @@ async function buildMarkedIssue(
       // retry or rebuild will get it through: a person has to make it.
       if (isWorkflowPushRejection(error)) {
         try {
-          host.handBackWorkflowChange(issue.number, branch, detail);
+          // A failed listing still hands back: the comment then names the
+          // directory rather than each file.
+          let files: string[] = [];
+          try {
+            files = host.workflowFiles(base, gated);
+          } catch (listError) {
+            console.error(`  ⚠ #${issue.number}: listing the workflow files ${branch} changes failed: ${listError}`);
+          }
+          host.handBackWorkflowChange(issue.number, branch, detail, { head: gated, files });
         } catch (handBackError) {
           console.error(
             `  ⚠ #${issue.number}: handing it back for its workflow change failed, so the next round tries again: ${handBackError}`,

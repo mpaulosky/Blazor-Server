@@ -57,7 +57,8 @@ export class RunLimits {
 // The run's own limits. main.mts calls runLimits.start(...) at startup.
 export const runLimits: RunLimits = new RunLimits();
 
-// Whether a failed role run's error is Claude's usage or rate limit. Reads
+// Whether a failed role run's error is Claude's usage or rate limit, as
+// Claude Code itself reports it (see reportedText). Reads
 // the error's message, String(error) and its `cause` chain (up to 5 levels
 // deep: Sandcastle rejects through Effect, which may wrap the AgentError).
 // Sandcastle's AgentError message is "claude-code exited with code N:\n
@@ -66,17 +67,36 @@ export function isUsageLimitError(error: unknown): boolean {
   return usageLimitLine(error) !== undefined;
 }
 
-// Claude Code's usage- and rate-limit phrasings. Its wording changes between
-// versions, so they're kept in this one list. 529 / overloaded_error is a
-// server overload, not a usage limit, and stays a counted failure.
+// Claude Code's usage- and rate-limit phrasings, each anchored to the start
+// of the text Claude Code reports it in (see reportedText). Its wording
+// changes between versions, so they're kept in this one list. 529 /
+// overloaded_error is a server overload, not a usage limit, and stays a
+// counted failure.
 const USAGE_LIMIT_PATTERNS: readonly RegExp[] = [
-  /Claude (AI )?usage limit reached/i,
-  /You['’]ve hit your (usage |session |weekly )?limit/i,
-  /(5-hour|session|daily|weekly|Opus weekly|Sonnet weekly) limit reached/i,
-  /API Error: 429/i,
-  /Request rejected \(429\)/i,
-  /"type"\s*:\s*"rate_limit_error"/i,
+  /^Claude (AI )?usage limit reached/i,
+  /^You['’]ve hit your (usage |session |weekly )?limit/i,
+  /^(5-hour|session|daily|weekly|Opus weekly|Sonnet weekly) limit reached/i,
+  /^API Error: 429/i,
+  /^Request rejected \(429\)/i,
+  /^"type"\s*:\s*"rate_limit_error"/i,
 ];
+
+// The text in one line of an AgentError message that Claude Code itself
+// reports: a plain line (its stderr or result text), trimmed, or the result
+// text of a stream-json `result` event. Undefined for any other stream-json
+// event: an assistant message or a tool result can quote a usage-limit
+// phrasing (Sandcastle works on this very file and its tests), and treating
+// that as a limit would stop every run on the issue, uncounted, for good.
+function reportedText(line: string): string | undefined {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("{")) return trimmed;
+  try {
+    const event = JSON.parse(trimmed) as { type?: unknown; result?: unknown };
+    return event.type === "result" && typeof event.result === "string" ? event.result.trim() : undefined;
+  } catch {
+    return trimmed;
+  }
+}
 
 // How deep isUsageLimitError follows an error's `cause` chain.
 const MAX_CAUSE_DEPTH = 5;
@@ -90,8 +110,9 @@ export function usageLimitLine(error: unknown): string | undefined {
     const texts = current instanceof Error ? [current.message, String(current)] : [String(current)];
     for (const text of texts) {
       for (const line of text.split("\n")) {
-        if (USAGE_LIMIT_PATTERNS.some((pattern) => pattern.test(line))) {
-          return line.trim();
+        const reported = reportedText(line);
+        if (reported !== undefined && USAGE_LIMIT_PATTERNS.some((pattern) => pattern.test(reported))) {
+          return reported;
         }
       }
     }

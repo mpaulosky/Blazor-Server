@@ -125,30 +125,47 @@ export function recordFailedAttempt(
 }
 
 // The comment for a push GitHub refused because it touches
-// .github/workflows/**. Says Sandcastle's token has no Workflows permission,
-// so a person must make that change; that `branch` keeps its commits; and
-// how to re-queue the issue: make the workflow change in its own PR, drop it
-// from the branch, then remove sandcastle:needs-human. Ends with `detail` in
-// a fence longer than any backtick run in it, as the publish-failure comment
-// does. No BUILD_FAILED_MARKER: this isn't a failed attempt.
-export function workflowHandBackComment(branch: string, detail: string): string {
+// .github/workflows/**. GitHub refused the push, so origin's `branch`
+// doesn't hold this attempt's commits, and an ephemeral runner's checkout is
+// gone once the job ends: the comment says so, rather than send a person to
+// edit a branch that lacks them, and names what they need to redo by hand,
+// the workflow files (`change.files`, from the base to the refused head) and
+// the head commit. Says Sandcastle's token has no Workflows permission, so a
+// person must make the change, and how to re-queue the issue: land the
+// workflow change in its own PR, then remove sandcastle:needs-human. Ends
+// with `detail` in a fence longer than any backtick run in it, as the
+// publish-failure comment does. No BUILD_FAILED_MARKER: this isn't a failed
+// attempt.
+export function workflowHandBackComment(branch: string, detail: string, change: WorkflowChange): string {
   const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
+  const what =
+    change.files.length > 0
+      ? `it changes ${change.files.map((file) => `\`${file}\``).join(", ")}`
+      : "it changes a file under `.github/workflows/`";
   return (
-    `Sandcastle couldn't push \`${branch}\`: it changes a file under \`.github/workflows/\`, and GitHub refuses that ` +
-    "change without the Workflows permission, which Sandcastle's token doesn't have. A person must make the workflow " +
-    `change, so the issue is handed back with \`sandcastle:needs-human\`. \`${branch}\` keeps its commits.\n\n` +
-    "To put the issue back in the queue: make the workflow change in its own pull request, drop it from " +
-    `\`${branch}\`, then remove \`sandcastle:needs-human\`.\n\n${fence}\n${fit(detail, GITHUB_COMMENT_LIMIT - 2_000)}\n${fence}`
+    `Sandcastle couldn't push \`${branch}\`: ${what}, and GitHub refuses that change without the Workflows ` +
+    "permission, which Sandcastle's token doesn't have. A person must make the workflow change, so the issue is " +
+    "handed back with `sandcastle:needs-human`.\n\n" +
+    `GitHub doesn't have this attempt's commits (head \`${change.head}\`): the push was refused, so \`${branch}\` ` +
+    "on GitHub doesn't hold them, and they're gone once this run's checkout is.\n\n" +
+    "To put the issue back in the queue: make the workflow change in its own pull request, and once it has merged, " +
+    `remove \`sandcastle:needs-human\`. The next build no longer needs to touch the workflow.\n\n${fence}\n${fit(detail, GITHUB_COMMENT_LIMIT - 2_000)}\n${fence}`
   );
 }
 
+// What a refused workflow push carried, for its hand-back comment: the head
+// commit, and the .github/workflows/ files it changes from the base (empty
+// when they couldn't be listed).
+export type WorkflowChange = { head: string; files: string[] };
+
 // handBack({ kind: "issue", number }, "sandcastle:needs-human", `a push to
 // ${branch} touched .github/workflows/**`, workflowHandBackComment(branch,
-// detail), run, repo, report).
+// detail, change), run, repo, report).
 export function handBackWorkflowChange(
   issueNumber: number,
   branch: string,
   detail: string,
+  change: WorkflowChange,
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
@@ -157,7 +174,7 @@ export function handBackWorkflowChange(
     { kind: "issue", number: issueNumber },
     "sandcastle:needs-human",
     `a push to ${branch} touched .github/workflows/**`,
-    workflowHandBackComment(branch, detail),
+    workflowHandBackComment(branch, detail, change),
     run,
     repo,
     report,
