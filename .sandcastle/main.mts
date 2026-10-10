@@ -23,8 +23,12 @@
 //                               scripts/gate.sh in the sandbox (checkpoint 1),
 //                               a reviewer runs, and the gate runs again
 //                               (checkpoint 2). A red gate gets two gate-fixer
-//                               attempts per checkpoint; past that the issue
-//                               gets a comment and nothing is pushed.
+//                               attempts per checkpoint; past that nothing is
+//                               pushed. A red checkpoint or a failed tester or
+//                               backend run is a failed build attempt: the
+//                               first gets a comment, the second hands the
+//                               issue back with sandcastle:needs-human
+//                               (lib/handback.mts).
 //                               Otherwise the host scans the commits for the
 //                               sandbox's secrets, pushes the commit the gate
 //                               passed on from the main checkout with git hooks
@@ -50,9 +54,10 @@ import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
 import { gateIssues } from "./lib/gate.mts";
+import { cacheHostLogin, ensureLabels } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { planRound } from "./lib/plan.mts";
-import { usageReport } from "./lib/report.mts";
+import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
@@ -73,6 +78,12 @@ if (leakedTokens.length > 0) {
 // every sandbox.
 protectHostGit();
 forgetGatedHead();
+
+// The hand-backs and intake add sandcastle:* labels, which gh can't add until
+// the repository has them. The host's login, which the failed-attempt count
+// filters by, is read now so a token that can't read it fails before any work.
+ensureLabels();
+cacheHostLogin();
 
 try {
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
@@ -172,6 +183,18 @@ try {
   console.log("\nToken usage by role:");
   const lines = usageReport.lines();
   console.log(lines.length > 0 ? lines.join("\n") : "  (no role ran)");
+
+  // Only logged here. Ending the run red on a hand-back is the trigger
+  // workflow's final step (#82), reading the list #81 writes to
+  // .sandcastle/logs/handbacks.json; exiting non-zero here would make a local
+  // run that hands something back look like a crash.
+  const handBacks = handBackReport.items();
+  if (handBacks.length > 0) {
+    console.log("\nHanded back to a human:");
+    for (const { target, label, reason } of handBacks) {
+      console.log(`  ${target}: ${label} (${reason})`);
+    }
+  }
 }
 
 console.log("\nAll done.");

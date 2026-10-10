@@ -62,6 +62,20 @@ describe("runCheckpoint", () => {
     assert.deepEqual(s.calls, ["gate", "fix 1: one", "gate", "fix 1: two", "gate"]);
   });
 
+  it("rethrows a fixer error that the steps mark as uncounted, without running the gate again", async () => {
+    const stop = new Error("usage limit reached");
+    const s = {
+      ...steps([red("one")], async () => {
+        throw stop;
+      }),
+      uncounted: (error: unknown) => error === stop,
+    };
+
+    await assert.rejects(() => runCheckpoint(1, s, () => {}), (error: unknown) => error === stop);
+
+    assert.deepEqual(s.calls, ["gate", "fix 1: one"]);
+  });
+
   it("logs every gate result and fixer failure", async () => {
     const lines: string[] = [];
     const s = steps([red(), red(), green], async () => {

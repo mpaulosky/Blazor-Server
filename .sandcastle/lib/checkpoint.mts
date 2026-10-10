@@ -16,6 +16,11 @@ export type GateRun = { passed: boolean; output: string; head?: string };
 export type CheckpointSteps = {
   gate(): Promise<GateRun>;
   fix(checkpoint: Checkpoint, gateOutput: string): Promise<unknown>;
+  // Whether a fix's error ends the checkpoint at once, rethrown, rather than
+  // using up an attempt: a usage-limit or time-budget stop (see
+  // UncountedStopError in lib/errors.mts) would only stop every later fixer
+  // run too, after another full gate run each.
+  uncounted?(error: unknown): boolean;
 };
 
 // The gate prints in colour, which only gets in the way of a prompt or an
@@ -82,6 +87,7 @@ export async function runCheckpoint(
     try {
       await steps.fix(checkpoint, result.output);
     } catch (error) {
+      if (steps.uncounted?.(error)) throw error;
       log(`${prefix} ${label} failed: ${error}`);
     }
     result = await steps.gate();

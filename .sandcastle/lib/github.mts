@@ -5,6 +5,8 @@
 // working it out from the git remote of wherever it runs.
 
 import { execFileSync } from "node:child_process";
+import { SANDCASTLE_LABELS, type SandcastleLabel } from "./config.mts";
+import { handBackReport, type HandBackReport } from "./report.mts";
 import { sh } from "./shell.mts";
 
 let repo: string | undefined;
@@ -160,4 +162,155 @@ export function commentOnIssue(
     stdio: ["pipe", "pipe", "inherit"],
     input: body,
   });
+}
+
+// Creates any of `labels` this repository doesn't already have, with its
+// colour and description. Run once at the host's startup, before the first
+// round, so a fresh repository (or one whose labels were deleted) always has
+// them (see docs/plans/sandcastle-workflow.md, "Labels").
+export function ensureLabels(
+  labels: readonly SandcastleLabel[] = SANDCASTLE_LABELS,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  const existing = new Set(
+    (JSON.parse(ghWithStderr(run, ["label", "list", "--repo", repo, "--limit", "1000", "--json", "name", "--jq", "[.[].name]"])) as string[])
+      // GitHub matches label names case-insensitively, so creating one that
+      // differs only in case would fail.
+      .map((name) => name.toLowerCase()),
+  );
+  for (const label of labels) {
+    if (existing.has(label.name.toLowerCase())) continue;
+    try {
+      ghWithStderr(run, ["label", "create", label.name, "--repo", repo, "--color", label.color, "--description", label.description]);
+    } catch (error) {
+      // Another run starting at the same time created it first. --force would
+      // also cover this, but would overwrite a colour or description a person
+      // changed.
+      if (!String(error).includes("already exists")) throw error;
+    }
+  }
+}
+
+// One "labeled" or "unlabeled" event from an issue's or PR's REST timeline.
+export type TimelineLabelEvent = { event: "labeled" | "unlabeled"; label: string; createdAt: string };
+
+// One comment, with when it was posted, so markerCommentsSince can tell
+// which side of a label's removal it falls on, and who posted it.
+export type TimestampedComment = { body: string; createdAt: string; author: string };
+
+// The comments in `comments` that `poster` posted and that carry `marker`,
+// posted after `label` was last removed from this issue or PR (its most
+// recent "unlabeled" event naming `label` in `timeline`), or since
+// `createdAt` when `label` was never removed. Counting from the timeline rather than a running counter means the
+// count survives a restart, and a human re-queueing by removing the label
+// resets it (see docs/plans/sandcastle-workflow.md, "Giving up and telling
+// the human").
+export function markerCommentsSince(
+  comments: readonly TimestampedComment[],
+  timeline: readonly TimelineLabelEvent[],
+  label: string,
+  marker: string,
+  createdAt: string,
+  poster: string,
+): TimestampedComment[] {
+  const since = Math.max(
+    timestamp(createdAt),
+    ...timeline.filter((event) => event.event === "unlabeled" && event.label === label).map((event) => timestamp(event.createdAt)),
+  );
+  return comments.filter(
+    (comment) => comment.author === poster && comment.body.includes(marker) && timestamp(comment.createdAt) >= since,
+  );
+}
+
+// An ISO 8601 time as milliseconds. Throws on one that doesn't parse rather
+// than let NaN quietly drop or keep a comment from the count.
+function timestamp(time: string): number {
+  const ms = Date.parse(time);
+  if (Number.isNaN(ms)) throw new Error(`GitHub returned a time that doesn't parse: ${JSON.stringify(time)}`);
+  return ms;
+}
+
+// The login gh is signed in as: the account every host comment is posted
+// from. Not the repository owner, which is an organization for a repository
+// an organization owns, and never posts a comment itself.
+export function hostLogin(run: typeof execFileSync = execFileSync): string {
+  return ghWithStderr(run, ["api", "user", "--jq", ".login"]).trim();
+}
+
+let signedInLogin: string | undefined;
+
+// Reads the host's login (see hostLogin) and keeps it for markerComments.
+// Called once at startup, so a token that can't read /user fails the run
+// before any role runs, rather than when the first failed attempt is recorded.
+export function cacheHostLogin(run: typeof execFileSync = execFileSync): string {
+  signedInLogin = hostLogin(run);
+  return signedInLogin;
+}
+
+// The comments on the issue or PR `number` that carry `marker` and were posted
+// since `label` was last removed (see markerCommentsSince). Only the host's own
+// comments count (see hostLogin): anyone can comment on a public issue, so a
+// stranger could otherwise paste the marker in to hand the issue back early.
+// PRs share the issues API, so this covers both.
+export function markerComments(
+  number: number,
+  label: string,
+  marker: string,
+  repo: string = repoName(),
+  run: typeof execFileSync = execFileSync,
+  poster: string = (signedInLogin ??= hostLogin(run)),
+): TimestampedComment[] {
+  const lines = (output: string) =>
+    output
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .map((line) => JSON.parse(line) as unknown);
+  // Each item is printed as one line of JSON (@json), so the pages
+  // --paginate fetches concatenate into lines that parse one at a time.
+  const comments = lines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${number}/comments`,
+      "--jq", ".[] | {body, createdAt: .created_at, author: .user.login} | @json",
+    ]),
+  ) as TimestampedComment[];
+  const timeline = lines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${number}/timeline`,
+      "--jq", '.[] | select(.event == "labeled" or .event == "unlabeled") | {event, label: .label.name, createdAt: .created_at} | @json',
+    ]),
+  ) as TimelineLabelEvent[];
+  const createdAt = ghWithStderr(run, ["api", `repos/${repo}/issues/${number}`, "--jq", ".created_at"]).trim();
+  return markerCommentsSince(comments, timeline, label, marker, createdAt, poster);
+}
+
+// A label only the host or a human applies to hand work back: the issue's or
+// PR's text, or Sandcastle's own effort, is the problem.
+export type HandBackLabel = "sandcastle:needs-info" | "sandcastle:needs-human";
+
+export type HandBackTarget = { kind: "issue" | "pr"; number: number };
+
+// Hands `target` back to a human: adds `label`, with one comment carrying
+// `body`, and records the hand-back in `report` (see lib/report.mts) under
+// `reason`, for the run's final summary. An issue-level
+// `sandcastle:needs-human` also removes `sandcastle:ready`, so a re-queue
+// re-runs intake on the current text before the build starts again; a
+// PR-level one leaves `sandcastle:ready` alone (see "Giving up and telling
+// the human").
+export function handBack(
+  target: HandBackTarget,
+  label: HandBackLabel,
+  reason: string,
+  body: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  report: HandBackReport = handBackReport,
+): void {
+  const number = String(target.number);
+  const removeReady = target.kind === "issue" && label === "sandcastle:needs-human" ? ["--remove-label", "sandcastle:ready"] : [];
+  // The comment goes first: if GitHub rejects it, the labels are untouched and
+  // the work stays in the queue, rather than leaving it with no explanation.
+  ghWithStderr(run, [target.kind, "comment", number, "--repo", repo, "--body-file", "-"], body);
+  ghWithStderr(run, [target.kind, "edit", number, "--repo", repo, "--add-label", label, ...removeReady]);
+  report.record({ target: `${target.kind} #${target.number}`, label, reason });
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
-import { buildIssue, isGitHubServerError, publicErrorText, publish, type BuildHost } from "./build.mts";
+import { buildIssue, isGitHubServerError, publicErrorText, publish, UncountedStopError, type BuildHost } from "./build.mts";
 import { PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [] };
@@ -11,13 +11,15 @@ const base = "f".repeat(40);
 
 // A host whose sandbox records each role run and gate run in `steps`, and
 // answers the gate with the queued exit codes in order. A role in `failing`
-// throws, and one in `unfinished` ends without signalling completion.
+// throws, and one in `unfinished` ends without signalling completion. A role
+// named in `failWith` throws that error instead of the generic timeout.
 function host(
   gateExitCodes: number[],
   {
     ahead = 1,
     statuses = [""],
     failing = [],
+    failWith = {},
     unfinished = [],
     leaksSecret = false,
     worktreeProblems = [],
@@ -26,6 +28,7 @@ function host(
     ahead?: number | number[];
     statuses?: string[];
     failing?: string[];
+    failWith?: Record<string, Error>;
     unfinished?: string[];
     leaksSecret?: boolean;
     worktreeProblems?: string[];
@@ -36,6 +39,7 @@ function host(
   const runs: SandboxRunOptions[] = [];
   const logs: string[] = [];
   const comments: { issueNumber: number; body: string }[] = [];
+  const recordBuildFailureCalls: { issueNumber: number; branch: string; detail: string }[] = [];
   const aheadCounts = Array.isArray(ahead) ? [...ahead] : [ahead];
   const worktreeStatuses = [...statuses];
   let aheadIndex = 0;
@@ -55,7 +59,7 @@ function host(
       runs.push(options);
       headNumber++;
       steps.push(role === "gate-fixer" ? `gate-fixer ${options.promptArgs?.CHECKPOINT}` : role);
-      if (failing.includes(role)) throw new Error(`${role} timed out`);
+      if (failing.includes(role)) throw failWith[role] ?? new Error(`${role} timed out`);
       return {
         iterations: [],
         commits: [{ sha: role }],
@@ -90,6 +94,13 @@ function host(
       return current;
     },
     commentOnIssue: (issueNumber, body) => void comments.push({ issueNumber, body }),
+    recordBuildFailure: (issueNumber, failureBranch, detail) => {
+      recordBuildFailureCalls.push({ issueNumber, branch: failureBranch, detail });
+      // The real BuildHost posts the attempt's comment itself; this stub
+      // mirrors that into `comments` too, so assertions on the comment text
+      // don't have to care which host method produced it.
+      comments.push({ issueNumber, body: detail });
+    },
     log: (line) => void logs.push(line),
     leaksSecret: (scanBase, commit) => {
       scannedBases.push(scanBase);
@@ -105,7 +116,7 @@ function host(
     worktreeProblems: () => worktreeProblems,
     publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), () => false),
   };
-  return { steps, runs, logs, comments, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head };
+  return { steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head };
 }
 
 describe("buildIssue", () => {
@@ -201,6 +212,76 @@ describe("buildIssue", () => {
       assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
     });
   }
+
+  for (const role of ["tester", "backend"]) {
+    it(`treats a ${role} failure as a failed build attempt`, async () => {
+      const { recordBuildFailureCalls, buildHost } = host([], { failing: [role] });
+
+      await buildIssue(issue, branch, base, buildHost);
+
+      assert.equal(recordBuildFailureCalls.length, 1);
+      assert.equal(recordBuildFailureCalls[0]!.issueNumber, 69);
+      assert.equal(recordBuildFailureCalls[0]!.branch, branch);
+    });
+
+    it(`rethrows a usage-limit or time-budget stop from the ${role} instead of treating it as a failed attempt`, async () => {
+      const stop = new UncountedStopError("usage limit reached");
+      const { comments, recordBuildFailureCalls, buildHost } = host([], { failing: [role], failWith: { [role]: stop } });
+
+      await assert.rejects(
+        () => buildIssue(issue, branch, base, buildHost),
+        (error: unknown) => error instanceof UncountedStopError && error.message === "usage limit reached",
+      );
+
+      assert.deepEqual(comments, []);
+      assert.deepEqual(recordBuildFailureCalls, []);
+    });
+  }
+
+  it("rethrows a usage-limit or time-budget stop from the gate-fixer instead of treating it as a failed attempt", async () => {
+    const stop = new UncountedStopError("time budget spent");
+    const { steps, recordBuildFailureCalls, buildHost } = host([1], { failing: ["gate-fixer"], failWith: { "gate-fixer": stop } });
+
+    await assert.rejects(() => buildIssue(issue, branch, base, buildHost), (error: unknown) => error === stop);
+
+    assert.equal(steps.filter((step) => step.startsWith("gate:")).length, 1);
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
+  it("rethrows a usage-limit or time-budget stop from the reviewer instead of publishing unreviewed", async () => {
+    const stop = new UncountedStopError("usage limit reached");
+    const { pushed, recordBuildFailureCalls, buildHost } = host([0], { failing: ["reviewer"], failWith: { reviewer: stop } });
+
+    await assert.rejects(() => buildIssue(issue, branch, base, buildHost), (error: unknown) => error === stop);
+
+    assert.deepEqual(pushed, []);
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
+  it("treats a checkpoint that stays red after the gate-fixer's attempts as a failed build attempt", async () => {
+    const { recordBuildFailureCalls, buildHost } = host([1, 1, 1]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(recordBuildFailureCalls.length, 1);
+    assert.equal(recordBuildFailureCalls[0]!.issueNumber, 69);
+  });
+
+  it("doesn't treat a gate-fixer attempt as a failed build attempt when the checkpoint later passes", async () => {
+    const { recordBuildFailureCalls, buildHost } = host([1, 0, 1, 1, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
+  it("doesn't treat a reviewer failure as a failed build attempt", async () => {
+    const { recordBuildFailureCalls, buildHost } = host([0, 0], { failing: ["reviewer"] });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
 
   it("keeps the commits of a developer run that came before the failure", async () => {
     const { buildHost } = host([], { failing: ["backend"] });
