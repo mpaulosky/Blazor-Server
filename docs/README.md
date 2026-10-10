@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.111](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.111) | 2026-10-10 | feat(sandcastle): Sweep open Sandcastle PRs each round and keep them current | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-237-feat-sandcastle-sweep-open-sandcastle-prs-each-round-and-keep-them-current.md) |
 | [v0.0.110](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.110) | 2026-10-10 | feat(sandcastle): Intake splits oversized issues into blocked child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-234-feat-sandcastle-intake-splits-oversized-issues-into-blocked-child-issues.md) |
 | [v0.0.109](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.109) | 2026-10-10 | fix(sandcastle): Judge every intake batch each round, and keep intake's text from hiding or cross-referencing | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-229-fix-sandcastle-judge-every-intake-batch-each-round-and-keep-intake-s-text-from-hiding-or-cross-referencing.md) |
 | [v0.0.108](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.108) | 2026-10-10 | fix(sandcastle): Close the design note's edge cases from #228's review | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-232-fix-sandcastle-close-the-design-note-s-edge-cases-from-228-s-review.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.104](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.104) | 2026-10-10 | feat(sandcastle): Mark an issue while Sandcastle builds it | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-219-feat-sandcastle-mark-an-issue-while-sandcastle-builds-it.md) |
 | [v0.0.103](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.103) | 2026-10-10 | fix(sandcastle): Keep comments from anyone with write access, not only the repository owner's | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-218-fix-sandcastle-keep-comments-from-anyone-with-write-access-not-only-the-repository-owner-s.md) |
 | [v0.0.102](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.102) | 2026-10-10 | docs(sandcastle): Add #214 to the plan table and record the blockers added since | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-216-docs-sandcastle-add-214-to-the-plan-table-and-record-the-blockers-added-since.md) |
-| [v0.0.101](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.101) | 2026-10-10 | feat(sandcastle): Hand an issue back to a human after two failed builds | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-213-feat-sandcastle-hand-an-issue-back-to-a-human-after-two-failed-builds.md) |
 
 <!-- RELEASES_END -->
 
