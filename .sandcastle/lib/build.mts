@@ -94,9 +94,7 @@ export async function publish(
 // output after "failed:" is read: the command line before it quotes branch
 // names, and could quote an issue title that mentions a server error.
 export function isGitHubServerError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const outputStart = message.indexOf("failed:\n");
-  const output = outputStart === -1 ? message : message.slice(outputStart + "failed:\n".length);
+  const output = commandOutput(error);
   return /\bHTTP(?:\/[\d.]+)? 5\d\d\b|returned error: 5\d\d\b|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Time-?out|Something went wrong while executing your query/i.test(
     output,
   );
@@ -280,7 +278,17 @@ export function publicErrorText(text: string, holdsSecret: (text: string) => boo
 // Token", "an OAuth App" and "a GitHub App", and both the singular
 // "permission" and plural "permissions" GitHub uses.
 export function isWorkflowPushRejection(error: unknown): boolean {
-  throw new Error("Not implemented");
+  return /refusing to allow an? [^\n]{0,40}?to create or update workflow/i.test(commandOutput(error));
+}
+
+// A failed git or gh command's output: the text after "failed:\n", or the
+// whole message when there's no such line. The command line before it quotes
+// branch names and could quote an issue title, so matching it could misread
+// a failure.
+function commandOutput(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const outputStart = message.indexOf("failed:\n");
+  return outputStart === -1 ? message : message.slice(outputStart + "failed:\n".length);
 }
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
@@ -418,10 +426,15 @@ async function buildMarkedIssue(
     const roleArgs = developerPromptArgs(role);
     let failure: string;
     try {
-      const run = await runRoleInSandbox(sandbox, role, {
-        promptFile: `./.sandcastle/roles/${role}.md`,
-        promptArgs: roleArgs,
-      });
+      const run = await runRoleInSandbox(
+        sandbox,
+        role,
+        {
+          promptFile: `./.sandcastle/roles/${role}.md`,
+          promptArgs: roleArgs,
+        },
+        host.limits,
+      );
       commits.push(...run.commits);
       if (run.completionSignal !== undefined) {
         log(`${role} finished`);
@@ -429,10 +442,6 @@ async function buildMarkedIssue(
       }
       failure = `the ${role} ran out of iterations unfinished`;
     } catch (error) {
-      // Nothing throws UncountedStopError yet: recognising a usage-limit or
-      // time-budget stop in the role runner is #147's. Until it lands, such a
-      // stop counts as a failed attempt; runs are started by hand until then,
-      // and removing sandcastle:needs-human undoes a wrong hand-back.
       if (error instanceof UncountedStopError) throw error;
       failure = `the ${role} failed: ${error}`;
     }
@@ -452,10 +461,15 @@ async function buildMarkedIssue(
       {
         gate: () => runGate(sandbox),
         fix: async (at, gateOutput) => {
-          const fixer = await runRoleInSandbox(sandbox, "gate-fixer", {
-            promptFile: "./.sandcastle/roles/gate-fixer.md",
-            promptArgs: gateFixerPromptArgs(issue, branch, at, gateOutput),
-          });
+          const fixer = await runRoleInSandbox(
+            sandbox,
+            "gate-fixer",
+            {
+              promptFile: "./.sandcastle/roles/gate-fixer.md",
+              promptArgs: gateFixerPromptArgs(issue, branch, at, gateOutput),
+            },
+            host.limits,
+          );
           commits.push(...fixer.commits);
         },
         uncounted: (error) => error instanceof UncountedStopError,
@@ -500,10 +514,15 @@ async function buildMarkedIssue(
   // later round, as the reviewer's is.
   async function scribeFinishes(): Promise<boolean> {
     try {
-      const scribe = await runRoleInSandbox(sandbox, "scribe", {
-        promptFile: "./.sandcastle/roles/scribe.md",
-        promptArgs,
-      });
+      const scribe = await runRoleInSandbox(
+        sandbox,
+        "scribe",
+        {
+          promptFile: "./.sandcastle/roles/scribe.md",
+          promptArgs,
+        },
+        host.limits,
+      );
       commits.push(...scribe.commits);
       if (scribe.completionSignal !== undefined) {
         log("scribe finished");
@@ -549,10 +568,15 @@ async function buildMarkedIssue(
 
     let reviewed = true;
     try {
-      const review = await runRoleInSandbox(sandbox, "reviewer", {
-        promptFile: "./.sandcastle/review-prompt.md",
-        promptArgs,
-      });
+      const review = await runRoleInSandbox(
+        sandbox,
+        "reviewer",
+        {
+          promptFile: "./.sandcastle/review-prompt.md",
+          promptArgs,
+        },
+        host.limits,
+      );
       commits.push(...review.commits);
       log("reviewer finished");
     } catch (error) {
@@ -582,6 +606,15 @@ async function buildMarkedIssue(
       return notPublished;
     }
 
+    // Once any role in the run has hit Claude's usage limit, nothing more is
+    // published (#147), even work that finished its roles: it waits on the
+    // branch, uncounted, for the next run. The time budget doesn't block a
+    // publish already reached, since that costs seconds and no usage.
+    const usageLimit = host.limits.usageLimitReason();
+    if (usageLimit !== undefined) {
+      throw new UncountedStopError(`not published: ${usageLimit}`);
+    }
+
     // host.publish retries a GitHub server error, but not a push that doesn't
     // fast-forward origin's branch (an agent rewrote a commit an earlier round
     // pushed) or any other git or gh failure. Whatever still fails needs a
@@ -592,6 +625,18 @@ async function buildMarkedIssue(
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);
       const detail = host.publicError(error);
+      // Sandcastle's token can't push a .github/workflows/** change, so no
+      // retry or rebuild will get it through: a person has to make it.
+      if (isWorkflowPushRejection(error)) {
+        try {
+          host.handBackWorkflowChange(issue.number, branch, detail);
+        } catch (handBackError) {
+          console.error(
+            `  ⚠ #${issue.number}: handing it back for its workflow change failed, so the next round tries again: ${handBackError}`,
+          );
+        }
+        return { commits, prUrl: undefined, publishFailed: true };
+      }
       const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
       host.commentOnIssue(
         issue.number,

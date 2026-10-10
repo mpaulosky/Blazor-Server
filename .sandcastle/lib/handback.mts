@@ -132,7 +132,14 @@ export function recordFailedAttempt(
 // a fence longer than any backtick run in it, as the publish-failure comment
 // does. No BUILD_FAILED_MARKER: this isn't a failed attempt.
 export function workflowHandBackComment(branch: string, detail: string): string {
-  throw new Error("Not implemented");
+  const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
+  return (
+    `Sandcastle couldn't push \`${branch}\`: it changes a file under \`.github/workflows/\`, and GitHub refuses that ` +
+    "change without the Workflows permission, which Sandcastle's token doesn't have. A person must make the workflow " +
+    `change, so the issue is handed back with \`sandcastle:needs-human\`. \`${branch}\` keeps its commits.\n\n` +
+    "To put the issue back in the queue: make the workflow change in its own pull request, drop it from " +
+    `\`${branch}\`, then remove \`sandcastle:needs-human\`.\n\n${fence}\n${fit(detail, GITHUB_COMMENT_LIMIT - 2_000)}\n${fence}`
+  );
 }
 
 // handBack({ kind: "issue", number }, "sandcastle:needs-human", `a push to
@@ -146,5 +153,13 @@ export function handBackWorkflowChange(
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
 ): void {
-  throw new Error("Not implemented");
+  handBack(
+    { kind: "issue", number: issueNumber },
+    "sandcastle:needs-human",
+    `a push to ${branch} touched .github/workflows/**`,
+    workflowHandBackComment(branch, detail),
+    run,
+    repo,
+    report,
+  );
 }
