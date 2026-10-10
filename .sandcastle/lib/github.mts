@@ -280,7 +280,9 @@ export function handBack(
 ): void {
   const number = String(target.number);
   const removeReady = target.kind === "issue" && label === "sandcastle:needs-human" ? ["--remove-label", "sandcastle:ready"] : [];
-  ghWithStderr(run, [target.kind, "edit", number, "--repo", repo, "--add-label", label, ...removeReady]);
+  // The comment goes first: if GitHub rejects it, the labels are untouched and
+  // the work stays in the queue, rather than leaving it with no explanation.
   ghWithStderr(run, [target.kind, "comment", number, "--repo", repo, "--body-file", "-"], body);
+  ghWithStderr(run, [target.kind, "edit", number, "--repo", repo, "--add-label", label, ...removeReady]);
   report.record({ target: `${target.kind} #${target.number}`, label, reason });
 }

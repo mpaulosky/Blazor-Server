@@ -37,6 +37,38 @@ describe("needsHumanComment", () => {
   });
 });
 
+describe("needsHumanComment within GitHub's comment limit", () => {
+  it("stays under 65,536 characters, keeping each failure's heading and the end of its output", () => {
+    const failure = (n: number) => `**Failed build attempt ${n}**\n\n${"x".repeat(60_000)}\nlast line of attempt ${n}`;
+
+    const comment = needsHumanComment("feature/69-run-the-gate", [failure(1), failure(2)]);
+
+    assert.ok(comment.length <= 65_536, `${comment.length} characters`);
+    for (const n of [1, 2]) {
+      assert.ok(comment.includes(`### Attempt ${n}`));
+      assert.ok(comment.includes(`last line of attempt ${n}`));
+    }
+    assert.match(comment, /trimmed/);
+  });
+
+  it("reopens a code fence whose opening line was trimmed away", () => {
+    const lines = Array.from({ length: 4000 }, (_, i) => `gate output line ${i} ${"y".repeat(20)}`).join("\n");
+    const failure = `**Failed build attempt 1**\n\n\`\`\`text\n${lines}\n\`\`\``;
+
+    const comment = needsHumanComment("feature/69-run-the-gate", [failure, failure]);
+
+    for (const section of comment.split("### Attempt ").slice(1)) {
+      assert.equal((section.match(/^> \`\`\`/gm) ?? []).length % 2, 0, "unbalanced fences");
+    }
+  });
+
+  it("quotes short failures in full", () => {
+    const comment = needsHumanComment("feature/69-run-the-gate", ["first failure detail", "second failure detail"]);
+
+    assert.doesNotMatch(comment, /trimmed/);
+  });
+});
+
 describe("recordFailedAttempt", () => {
   it("posts the marker comment for the first failed attempt and leaves the issue in the queue", () => {
     const { calls, run } = recordingGh();

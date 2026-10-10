@@ -224,10 +224,28 @@ describe("handBack", () => {
 
     handBack({ kind: "issue", number: 69 }, "sandcastle:needs-human", "two failed build attempts", "Giving up.", run, "o/r", report);
 
-    assert.deepEqual(calls[0]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-human", "--remove-label", "sandcastle:ready"]);
-    assert.deepEqual(calls[1]!.args, ["issue", "comment", "69", "--repo", "o/r", "--body-file", "-"]);
-    assert.equal(calls[1]!.input, "Giving up.");
+    assert.deepEqual(calls[0]!.args, ["issue", "comment", "69", "--repo", "o/r", "--body-file", "-"]);
+    assert.equal(calls[0]!.input, "Giving up.");
+    assert.deepEqual(calls[1]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-human", "--remove-label", "sandcastle:ready"]);
     assert.deepEqual(report.items(), [{ target: "issue #69", label: "sandcastle:needs-human", reason: "two failed build attempts" }]);
+  });
+
+  // The comment explains the hand-back, so it goes first: if GitHub rejects
+  // it, the issue keeps its labels and stays in the queue rather than leaving
+  // it with no explanation.
+  it("leaves the labels alone and records nothing when the comment fails", () => {
+    const calls: (readonly string[])[] = [];
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push(args);
+      if (args[1] === "comment") throw Object.assign(new Error("gh failed"), { stderr: "HTTP 422: body is too long" });
+      return "";
+    }) as unknown as typeof execFileSync;
+    const report = new HandBackReport();
+
+    assert.throws(() => handBack({ kind: "issue", number: 69 }, "sandcastle:needs-human", "two failed build attempts", "Giving up.", run, "o/r", report));
+
+    assert.equal(calls.some((args) => args[1] === "edit"), false);
+    assert.deepEqual(report.items(), []);
   });
 
   it("adds sandcastle:needs-info to an issue without touching sandcastle:ready", () => {
@@ -235,7 +253,7 @@ describe("handBack", () => {
 
     handBack({ kind: "issue", number: 69 }, "sandcastle:needs-info", "the issue fails the Definition of Ready", "Answer these questions.", run, "o/r");
 
-    assert.deepEqual(calls[0]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-info"]);
+    assert.deepEqual(calls[1]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-info"]);
   });
 
   it("hands a PR back without touching sandcastle:ready", () => {
@@ -244,9 +262,9 @@ describe("handBack", () => {
 
     handBack({ kind: "pr", number: 17 }, "sandcastle:needs-human", "follow-up gave up", "Giving up on this PR.", run, "o/r", report);
 
-    assert.deepEqual(calls[0]!.args, ["pr", "edit", "17", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
-    assert.deepEqual(calls[1]!.args, ["pr", "comment", "17", "--repo", "o/r", "--body-file", "-"]);
-    assert.equal(calls[1]!.input, "Giving up on this PR.");
+    assert.deepEqual(calls[0]!.args, ["pr", "comment", "17", "--repo", "o/r", "--body-file", "-"]);
+    assert.deepEqual(calls[1]!.args, ["pr", "edit", "17", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
+    assert.equal(calls[0]!.input, "Giving up on this PR.");
     assert.deepEqual(report.items(), [{ target: "pr #17", label: "sandcastle:needs-human", reason: "follow-up gave up" }]);
   });
 });

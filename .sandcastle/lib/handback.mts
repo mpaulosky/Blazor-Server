@@ -22,11 +22,17 @@ export function buildFailedComment(attempt: number, branch: string, detail: stri
   ].join("\n");
 }
 
+// GitHub rejects a comment body longer than this many characters.
+const GITHUB_COMMENT_LIMIT = 65_536;
+
 // The comment for the attempt that reaches BUILD_FAILURE_CAP: summarises
 // every failed attempt since `sandcastle:needs-human` was last removed, by
 // quoting each one's comment body, oldest first, ending with this attempt's.
+// Each quote gets an equal share of GitHub's comment limit, so several long
+// gate outputs can't make GitHub reject the comment; a longer one keeps its
+// heading line and the end of its output, where the failure usually is.
 export function needsHumanComment(branch: string, failures: readonly string[]): string {
-  return [
+  const intro = [
     // The summary is itself a failed attempt's comment, so it carries the
     // marker too; it's posted after the last one the count reads, so it never
     // counts twice.
@@ -35,8 +41,36 @@ export function needsHumanComment(branch: string, failures: readonly string[]): 
       "`sandcastle:needs-human` and `sandcastle:ready` is removed. " +
       `\`${branch}\` keeps its commits. Once the cause is fixed, remove \`sandcastle:needs-human\` to put the issue back in ` +
       "the queue.",
-    ...failures.flatMap((failure, i) => ["", `### Attempt ${i + 1}`, "", quote(failure.replaceAll(BUILD_FAILED_MARKER, "").trim())]),
   ].join("\n");
+  // Room for each "### Attempt n" heading and the blank lines around it.
+  const headingRoom = 32;
+  const share = Math.floor((GITHUB_COMMENT_LIMIT - intro.length) / Math.max(failures.length, 1)) - headingRoom;
+  return [
+    intro,
+    ...failures.flatMap((failure, i) => [
+      "",
+      `### Attempt ${i + 1}`,
+      "",
+      fit(quote(failure.replaceAll(BUILD_FAILED_MARKER, "").trim()), share),
+    ]),
+  ].join("\n");
+}
+
+// `quoted` cut to at most `max` characters: its first line, a note saying the
+// start was trimmed, and as much of its end as fits.
+function fit(quoted: string, max: number): string {
+  if (quoted.length <= max) return quoted;
+  const [head = "", ...rest] = quoted.split("\n");
+  const note = "> _The start of this attempt's output is trimmed to fit GitHub's comment limit._";
+  const tail = rest.join("\n").slice(-(max - head.length - note.length - 8));
+  // Resume at a line start when one is near, so the quote markers line up.
+  const lineStart = tail.indexOf("\n");
+  const kept = lineStart !== -1 && lineStart < 200 ? tail.slice(lineStart + 1) : `> ${tail}`;
+  // A code fence opened in the trimmed part would leave its closing line
+  // opening a new block instead, so open it again before what's kept.
+  const dropped = quoted.slice(0, quoted.length - kept.length);
+  const reopen = (dropped.match(/^> ```/gm) ?? []).length % 2 === 1 ? ["> ```text"] : [];
+  return [head, ">", note, ">", ...reopen, kept].join("\n");
 }
 
 // Markdown block quote of `text`, every line prefixed, so a fenced code block
