@@ -655,6 +655,16 @@ describe("buildIssue optional roles", () => {
     assert.ok(!comments.some((comment) => /wasn't pushed/.test(comment.body)));
   });
 
+  it("publishes the PR with a note that the documentation step failed when the scribe runs out of iterations unfinished", async () => {
+    const { recordBuildFailureCalls, publishCalls, buildHost } = host([0, 0], { unfinished: ["scribe"] });
+
+    const result = await buildIssue(withRoles(["scribe"]), branch, base, buildHost);
+
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.deepEqual(publishCalls, [{ reviewed: true, docsFailed: true }]);
+  });
+
   it("publishes with no documentation note when the scribe succeeds", async () => {
     const { publishCalls, buildHost } = host([0, 0]);
 
