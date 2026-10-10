@@ -1293,6 +1293,22 @@ describe("head checks and their runs", () => {
       assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], "b".repeat(40), run, "o/r"), /head moved/);
       assert.ok(!calls.some((args) => args[0] === "run"), "nothing was re-run");
     });
+
+    // #259: a name in `names` can carry a green run from one workflow
+    // trigger and a red one from another (`push` and `pull_request`, say).
+    // Only the red run should be re-run; re-running the green one too would
+    // ask `gh` to re-run a run with no failed jobs.
+    it("skips a green run behind a check name that also has a failed run", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "SUCCESS", 20), checkRun("Tests: A", "FAILURE", 21)]);
+
+      const states = rerunFailedChecksOnce(7, ["Tests: A"], HEAD_OID, run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "rerun", "21", "--failed", "--repo", "o/r"]],
+      );
+      assert.deepEqual(states, [{ name: "Tests: A", completed: false, green: false, completedAt: null }]);
+    });
   });
 
   describe("failedCheckLogs", () => {

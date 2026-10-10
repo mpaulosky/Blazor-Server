@@ -667,7 +667,12 @@ function namedRuns(
   if (headRefOid !== expectedHead) {
     throw new Error(`Pull request #${number}'s head moved to ${headRefOid}, so its checks aren't the ones gated at ${expectedHead}`);
   }
-  const checks = allChecks.filter((check) => names.includes(check.name));
+  // A head can carry a name in `names` from more than one Actions run, for
+  // example a workflow triggered by both `push` and `pull_request`: one run
+  // green, one red. Keeping only the failed ones here stops a caller from
+  // re-running, or reading the failed-job log of, a run that already passed
+  // (#259).
+  const checks = allChecks.filter((check) => names.includes(check.name) && check.completed && !check.green);
   const runIds = [...new Set(checks.flatMap((check) => (check.runId === undefined ? [] : [check.runId])))];
   return { checks, runIds };
 }
