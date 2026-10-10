@@ -153,6 +153,9 @@ jobs:
             const sweepCandidates = [];
             let mergedThisSweep = null;
             let updatedThisSweep = null;
+            // The PRs this run couldn't evaluate or update; the run fails once
+            // it's done if there are any.
+            const failedPrs = [];
 
             // Review rounds, Copilot's and Claude's together, after which the
             // merge stops waiting for a review of the head. Their threads
@@ -523,6 +526,20 @@ jobs:
               }
             }
 
+            // An error that holds for the whole run: a bad token or a rate
+            // limit fails every later call too, and GitHub asks callers to
+            // stop on a rate limit. A 403 counts only as a rate limit: most
+            // 403s are one PR's (a locked PR, a branch restriction).
+            function endsRun(error) {
+              const headers = error.response?.headers ?? {};
+              const rateLimited = headers["x-ratelimit-remaining"] === "0" ||
+                headers["retry-after"] !== undefined ||
+                /rate limit/i.test(error.message ?? "");
+              return error.status === 401 || error.status === 429 ||
+                (error.status === 403 && rateLimited) ||
+                Boolean(error.errors?.some((e) => e.type === "RATE_LIMITED"));
+            }
+
             // Updates a PR checked by bringUpToDate. Returns whether it asked
             // for an update: false when Dependabot was already asked for this
             // head, or on a 422 or another error.
@@ -559,7 +576,17 @@ jobs:
                   core.info(`Not updating PR #${pullNumber}: ${error.message}`);
                   return false;
                 }
+                // A sweep goes on to the next candidate, so it stops on an
+                // error that holds for the whole run, and fails once done on
+                // any other. A PR event has no other PR, and its check isn't
+                // failed by an update, so there it stays a warning.
+                if (sweeping && endsRun(error)) {
+                  throw error;
+                }
                 core.warning(`Couldn't bring PR #${pullNumber} up to date with main: ${error.message}`);
+                if (sweeping) {
+                  failedPrs.push(pullNumber);
+                }
                 return false;
               }
             }
@@ -998,22 +1025,8 @@ jobs:
             }
 
             // One PR's error (a 5xx on one read) doesn't stop the sweep short
-            // of its update; the run still fails once it's done. An error
-            // that holds for the whole run (a bad token, a rate limit) ends
-            // it at once, since every later call would fail the same way and
-            // GitHub asks callers to stop on a rate limit.
-            const failed = [];
-            // A 403 ends it only as a rate limit: most 403s are one PR's
-            // (a locked PR, a branch restriction).
-            function endsRun(error) {
-              const headers = error.response?.headers ?? {};
-              const rateLimited = headers["x-ratelimit-remaining"] === "0" ||
-                headers["retry-after"] !== undefined ||
-                /rate limit/i.test(error.message ?? "");
-              return error.status === 401 || error.status === 429 ||
-                (error.status === 403 && rateLimited) ||
-                Boolean(error.errors?.some((e) => e.type === "RATE_LIMITED"));
-            }
+            // of its update; the run still fails once it's done. One that
+            // holds for the whole run (endsRun) ends it at once.
             async function evaluate(pullNumber) {
               try {
                 await mergeIfReady(pullNumber);
@@ -1022,7 +1035,7 @@ jobs:
                   throw error;
                 }
                 core.warning(`Couldn't evaluate PR #${pullNumber}: ${error.message}`);
-                failed.push(pullNumber);
+                failedPrs.push(pullNumber);
               }
             }
 
@@ -1051,6 +1064,6 @@ jobs:
               }
             }
 
-            if (failed.length > 0) {
-              core.setFailed(`Couldn't evaluate PR(s) ${failed.map((n) => `#${n}`).join(", ")}; see the warnings above.`);
+            if (failedPrs.length > 0) {
+              core.setFailed(`Couldn't evaluate or update PR(s) ${failedPrs.map((n) => `#${n}`).join(", ")}; see the warnings above.`);
             }
