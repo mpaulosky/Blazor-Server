@@ -515,6 +515,20 @@ describe("loadQueue's round cache", () => {
     assert.deepEqual(reads, [1, 1, 1, 1]);
   });
 
+  // A collaborator who can label but not push removes Sandcastle and adds it
+  // back while intake runs: the label set is unchanged, but who added it
+  // last isn't, and GitHub moves the issue's updatedAt.
+  it("reads them again once the issue was updated, even when its labels, title and body match", () => {
+    const cache: QueueCache = new Map();
+    const reads = ["2026-10-10T08:00:00Z", "2026-10-10T08:05:00Z"].map((updatedAt) => {
+      const { github, reads } = counting([{ ...issue(30), updatedAt }]);
+      loadQueue(SCOPE, github, () => {}, new Set(), cache);
+      return reads.events;
+    });
+
+    assert.deepEqual(reads, [1, 1]);
+  });
+
   it("reads them again in a new round, with a fresh cache", () => {
     const { github, reads } = counting([issue(30)]);
 

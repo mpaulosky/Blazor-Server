@@ -216,11 +216,19 @@ export function startQueueRound(): void {
   roundCache = new Map();
 }
 
-// An issue's labels, title and body, so a change between phases (intake's
-// own label writes, a rename or body edit) reads its events again rather
-// than judging it from a stale list.
+// An issue's updatedAt, labels, title and body, so a change between phases
+// (intake's own label writes, a rename or body edit) reads its events again
+// rather than judging it from a stale list. updatedAt catches what the rest
+// can't: a label removed and added back by someone else leaves the label set
+// as it was, but GitHub moves updatedAt.
 function cacheKey(issue: SandcastleIssue): string {
-  return JSON.stringify([issue.number, [...issue.labels].map((label) => label.toLowerCase()).sort(), issue.title, issue.body]);
+  return JSON.stringify([
+    issue.number,
+    issue.updatedAt ?? null,
+    [...issue.labels].map((label) => label.toLowerCase()).sort(),
+    issue.title,
+    issue.body,
+  ]);
 }
 
 // The live QueueGitHub. A factory, so each load gets one fresh set of failed

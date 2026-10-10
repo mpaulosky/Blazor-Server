@@ -26,6 +26,10 @@ export type GhIssue = {
   body: string;
   labels: string[];
   comments: { author: string; body: string }[];
+  // When GitHub last changed the issue, a label add or removal included;
+  // lib/queue.mts#loadQueue's round cache keys on it. Absent from a stub
+  // that doesn't need it.
+  updatedAt?: string;
 };
 
 export type SandcastleIssue = Omit<GhIssue, "comments"> & {
@@ -67,6 +71,7 @@ export function ownerApproved(
     body: issue.body,
     labels: issue.labels,
     comments: issue.comments.filter((comment) => trusted(comment.author)).map((comment) => comment.body),
+    ...(issue.updatedAt === undefined ? {} : { updatedAt: issue.updatedAt }),
   };
 }
 
@@ -148,13 +153,13 @@ export function listSandcastleIssues(
   scope: QueueScope = { kind: "label", label: QUEUE_LABEL },
   failed: Set<string> = new Set(),
 ): SandcastleIssue[] {
-  const shape = "{number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}";
+  const shape = "{number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}], updatedAt}";
   let issues: GhIssue[];
   if (scope.kind === "label") {
     issues = JSON.parse(
       ghWithStderr(run, [
         "issue", "list", "--repo", repo, "--state", "open", "--label", scope.label, "--limit", "1000",
-        "--json", "number,title,body,labels,comments",
+        "--json", "number,title,body,labels,comments,updatedAt",
         "--jq", `[.[] | ${shape}]`,
       ]),
     ) as GhIssue[];
@@ -162,7 +167,7 @@ export function listSandcastleIssues(
     const viewed = JSON.parse(
       ghWithStderr(run, [
         "issue", "view", String(scope.number), "--repo", repo,
-        "--json", "number,title,body,labels,comments,state,url",
+        "--json", "number,title,body,labels,comments,state,url,updatedAt",
         "--jq", `${shape} + {state, url}`,
       ]),
     ) as GhIssue & { state: string; url?: string };

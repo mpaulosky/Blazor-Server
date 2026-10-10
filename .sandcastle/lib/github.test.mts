@@ -439,6 +439,36 @@ describe("listSandcastleIssues", () => {
     assert.deepEqual(calls[0]!.args.slice(0, 9), ["issue", "list", "--repo", "o/r", "--state", "open", "--label", "Sandcastle:dev", "--limit"]);
   });
 
+  // loadQueue's round cache keys on it: a label removed and added back
+  // leaves the label set as it was, but moves updatedAt.
+  it("reads each issue's updatedAt in a label scope", () => {
+    const calls: string[][] = [];
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push([...args]);
+      return JSON.stringify([{ ...issueBy(3, "maintainer"), comments: [], updatedAt: "2026-10-10T08:00:00Z" }]);
+    }) as unknown as typeof execFileSync;
+
+    const [issue] = listSandcastleIssues(run, "o/r", new Map(), quiet);
+
+    assert.ok(calls[0]!.includes("number,title,body,labels,comments,updatedAt"), calls[0]!.join(" "));
+    assert.ok(calls[0]!.at(-1)!.includes("updatedAt"), `the --jq shape drops updatedAt: ${calls[0]!.at(-1)}`);
+    assert.equal(issue!.updatedAt, "2026-10-10T08:00:00Z");
+  });
+
+  it("reads the issue's updatedAt in an issue scope", () => {
+    const calls: string[][] = [];
+    const viewed = { ...issueBy(146, "maintainer"), comments: [], state: "OPEN", url: "https://github.com/o/r/issues/146", updatedAt: "2026-10-10T08:00:00Z" };
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push([...args]);
+      return JSON.stringify(viewed);
+    }) as unknown as typeof execFileSync;
+
+    const [issue] = listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 });
+
+    assert.ok(calls[0]!.includes("number,title,body,labels,comments,state,url,updatedAt"), calls[0]!.join(" "));
+    assert.equal(issue!.updatedAt, "2026-10-10T08:00:00Z");
+  });
+
   it("views the scope's one issue in an issue scope, keeping only its owner-approved comments", () => {
     const viewed = { ...issueBy(146, "stranger"), state: "OPEN", url: "https://github.com/o/r/issues/146" };
     const run = ((_cmd: string, args: readonly string[]) => {
