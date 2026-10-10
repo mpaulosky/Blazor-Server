@@ -9,8 +9,9 @@
 // need no agent: re-requesting a stale Copilot review, updating a branch
 // that's only behind main, and handing an issue back when its latest PR
 // closed without merging. A PR that needs more than that (DIRTY, a red
-// check, an unresolved bot thread) is only logged here: the agent pass that
-// fixes it is a later issue (#77).
+// check, an unresolved bot thread) is logged here and returned as a
+// PassTarget: the agent pass that fixes it lives in lib/follow-up-pass.mts
+// (#78).
 // ---------------------------------------------------------------------------
 
 import { discardClosedWork, isIssueBranch, type BranchRefs } from "./branches.mts";
@@ -281,8 +282,6 @@ export function sweepPullRequests(
   const inScope = new Set(issues.map((issue) => issue.number));
   const openPrs = github.openPullRequests();
   const needsPass: number[] = [];
-  // Populated by lib/follow-up-pass.mts#followUpPassPhase's caller once a
-  // pass can run on a needs-pass PR (#78). Stays empty for now.
   const passes: PassTarget[] = [];
 
   for (const pr of openPrs) {
@@ -307,7 +306,10 @@ export function sweepPullRequests(
       }
       const decision = decide(pr, now);
       followUp(pr, decision, github, log);
-      if (decision.action === "needs-pass") needsPass.push(pr.number);
+      if (decision.action === "needs-pass") {
+        needsPass.push(pr.number);
+        passes.push(passTarget(pr, decision.reasons));
+      }
     } catch (error) {
       log(`  ⚠ Couldn't follow up PR #${pr.number}, so it's swept again next round: ${error}`);
     }
@@ -347,6 +349,14 @@ export type PassTarget = {
   issueNumber: number;
   reasons: string[];
 };
+
+// What lib/follow-up-pass.mts#runPass reads of a needs-pass PR. Only an
+// issue branch gets this far (sweepSkipReason), so the issue number is there.
+function passTarget(pr: SweepPullRequest, reasons: string[]): PassTarget {
+  const issueNumber = issueNumberOf(pr.headRefName);
+  if (issueNumber === undefined) throw new Error(`PR #${pr.number}'s branch ${pr.headRefName} names no issue`);
+  return { number: pr.number, id: pr.id, headRefName: pr.headRefName, headRefOid: pr.headRefOid, issueNumber, reasons };
+}
 
 // Carries out one PR's decision and logs it.
 function followUp(pr: SweepPullRequest, decision: SweepDecision, github: FollowUpGitHub, log: (line: string) => void): void {
