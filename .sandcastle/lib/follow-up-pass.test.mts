@@ -748,15 +748,46 @@ describe("runPass", () => {
 
   // Acceptance criterion: "Verdicts for unknown thread ids are ignored
   // (tested)."
-  it("ignores a verdict for an unknown thread id: no reply, no resolve, and it's listed as ignored in the summary", async () => {
-    const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_made_up", verdict: "fixed", reason: "Done." }]) });
+  for (const verdict of [
+    { threadId: "RT_made_up", verdict: "fixed", reason: "Done." },
+    { threadId: "RT_made_up", verdict: "declined", reason: "Out of scope." },
+  ]) {
+    it(`ignores a "${verdict.verdict}" verdict for an unknown thread id: no reply, no resolve, and it's listed as ignored in the summary`, async () => {
+      const sandbox = sandboxFake({ followUpJson: JSON.stringify([verdict]) });
+      const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox });
+
+      await runPass(passTarget(), issue, BASE, passHost);
+
+      assert.deepEqual(calls.replyToThread, []);
+      assert.deepEqual(calls.resolveThread, []);
+      assert.match(calls.commentOnPullRequest[0]!.body, /Ignored verdicts[^\n]*RT_made_up/);
+      assert.doesNotMatch(calls.commentOnPullRequest[0]!.body, /no commit this pass added/);
+    });
+  }
+
+  it("doesn't let a thread's second verdict win when its first, a \"fixed\" one, names no commit the pass added", async () => {
+    const verdicts = [
+      { threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "b".repeat(7) },
+      { threadId: "RT_bot", verdict: "declined", reason: "Out of scope." },
+    ];
+    const sandbox = sandboxFake({ followUpJson: JSON.stringify(verdicts) });
     const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox });
 
     await runPass(passTarget(), issue, BASE, passHost);
 
     assert.deepEqual(calls.replyToThread, []);
     assert.deepEqual(calls.resolveThread, []);
-    assert.match(calls.commentOnPullRequest[0]!.body, /RT_made_up/);
+  });
+
+  it("tells the role no merge is needed, without claiming the branch contains main, when the PR is only behind", async () => {
+    const sandbox = sandboxFake({ followUpJson: "[]" });
+    const { passHost } = passHostFake({ threads: [botThread()], containsBase: false, sandbox });
+
+    await runPass(passTarget(), issue, BASE, passHost);
+
+    const merge = String(sandbox.runs[0]?.promptArgs?.MERGE ?? "");
+    assert.match(merge, /No merge with main is needed/);
+    assert.doesNotMatch(merge, /contains main/);
   });
 
   // Acceptance criterion: "A `DIRTY` PR gets `main` merged in (no rebase or
@@ -1062,17 +1093,25 @@ describe("followUpPassPhase", () => {
   it("rethrows the first UncountedStopError only after every pass has settled", async () => {
     const stop = new UncountedStopError("usage limit reached");
     const stoppingSandbox = sandboxFake({ roleFailing: ["follow-up"], roleFailWith: { "follow-up": stop } });
-    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox: stoppingSandbox });
+    const slowSandbox = sandboxFake({ followUpJson: "[]" });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true });
+    // The second PR's sandbox comes a few ticks after the first PR's pass has
+    // already thrown, so the rethrow has to wait for it.
+    passHost.createSandbox = async (branch) => {
+      calls.createSandbox.push(branch);
+      if (branch === BRANCH) return stoppingSandbox.sandbox;
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+      return slowSandbox.sandbox;
+    };
 
     await assert.rejects(
       () => followUpPassPhase(targets, [issue, otherIssue], BASE, passHost),
       (error: unknown) => error instanceof UncountedStopError,
     );
 
-    // Both targets must have been attempted (fetched), even though one of
-    // them stopped on the usage limit: the fetch loop runs to completion
-    // before any pass starts, and the rethrow waits for every pass to settle.
-    assert.deepEqual(calls.fetchBranch, [BRANCH, "feature/51-tidy-widget"]);
+    assert.deepEqual(calls.unmarkBuilding.toSorted(), [ISSUE_NUMBER, 51]);
+    assert.deepEqual(calls.commentOnPullRequest.map((comment) => comment.pr), [8]);
   });
 });
 

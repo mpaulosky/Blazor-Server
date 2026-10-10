@@ -526,8 +526,11 @@ async function followUpVerdicts(
   }
 }
 
-// Splits `verdicts` into those the host acts on and the ids of "fixed" ones
-// it doesn't. A "fixed" verdict is kept only when its commit is one this pass
+// Splits `actions` (threadActions' matched verdicts, at most one per thread)
+// into those the host carries out and the thread ids of "fixed" ones it
+// doesn't. Run after the matching, so a verdict for an unknown thread stays
+// in threadActions' `ignored`, and a thread's first verdict failing this
+// check never lets a later one for the same thread win. A "fixed" verdict is kept only when its commit is one this pass
 // added: it resolves in the sandbox, `gated` contains it, and neither `head`
 // (the PR's head before the pass) nor `base` (main, whose commits a merge
 // brings in) does, and it isn't `hostMerge`, the merge commit the host made
@@ -537,14 +540,15 @@ async function followUpVerdicts(
 // so the next pass sees it again.
 async function fixesInPush(
   sandbox: Pick<sandcastle.Sandbox, "exec">,
-  verdicts: readonly ThreadVerdict[],
+  actions: readonly ThreadAction[],
   { gated, head, base, hostMerge }: { gated: string; head: string; base: string; hostMerge: string | undefined },
-): Promise<{ kept: ThreadVerdict[]; unverified: string[] }> {
-  const kept: ThreadVerdict[] = [];
+): Promise<{ kept: ThreadAction[]; unverified: string[] }> {
+  const kept: ThreadAction[] = [];
   const unverified: string[] = [];
-  for (const verdict of verdicts) {
+  for (const action of actions) {
+    const { verdict } = action;
     if (verdict.verdict !== "fixed") {
-      kept.push(verdict);
+      kept.push(action);
       continue;
     }
     const resolved =
@@ -558,7 +562,7 @@ async function fixesInPush(
       (await sandboxContains(sandbox, gated, resolved)) &&
       !(await sandboxContains(sandbox, head, resolved)) &&
       !(await sandboxContains(sandbox, base, resolved));
-    if (added) kept.push(verdict);
+    if (added) kept.push(action);
     else unverified.push(verdict.threadId);
   }
   return { kept, unverified };
@@ -694,7 +698,7 @@ async function passOnMarkedIssue(
     // PR's history stays as reviewers saw it.
     let merged: PassReport["merged"] = "none";
     let hostMerge: string | undefined;
-    let mergeNote = "The branch already contains main, so there's no merge to finish.";
+    let mergeNote = "No merge with main is needed in this pass, so there's no merge to finish.";
     if (needsMerge) {
       const merge = await sandbox.exec(`git merge --no-edit -m ${shellWord(`Merge main into ${branch}`)} ${shellWord(base)}`);
       if (merge.exitCode === 0) {
@@ -805,9 +809,10 @@ async function passOnMarkedIssue(
       }
     }
 
-    const { kept, unverified } = await fixesInPush(sandbox, verdicts, { gated, head: target.headRefOid, base, hostMerge });
+    const matched = threadActions(verdicts, forRole);
+    const { kept: actions, unverified } = await fixesInPush(sandbox, matched.actions, { gated, head: target.headRefOid, base, hostMerge });
     if (unverified.length > 0) log(`left ${unverified.length} "fixed" verdict(s) unanswered: their commit isn't one this pass added`);
-    const { actions, ignored } = threadActions(kept, forRole);
+    const { ignored } = matched;
     const failedWrites = answerThreads(actions, host, log);
     try {
       host.commentOnPullRequest(
