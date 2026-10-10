@@ -33,14 +33,13 @@ export type SandcastleIssue = Omit<GhIssue, "comments"> & {
 };
 
 // Keep only the comments of authors with admin, maintain or write permission
-// on `repo`, so text from anyone else never reaches a role's prompt. In a
-// repository an organization owns, the owner never comments, so filtering by
-// the owner's login (as this used to) would drop every comment; permission
-// is what actually decides whose guidance the agents trust. A permission
-// lookup that fails drops that author's comments, so an error never lets a
-// stranger's text through.
-// `canPush` caches each author's answer, so a caller that shares one map
-// across issues looks each author up once.
+// on `repo`, so text from anyone else never reaches a role's prompt.
+// Permission rather than the owner's login decides this, because in a
+// repository an organization owns the owner never comments (#214). A
+// permission lookup that fails drops that author's comments, so an error
+// never lets a stranger's text through. `canPush` caches each author's
+// answer, so a caller that shares one map across issues looks each author up
+// once.
 export function ownerApproved(
   issue: GhIssue,
   repo: string = repoName(),
