@@ -11,11 +11,13 @@ describe("developer role prompts", () => {
     assert.equal(existsSync(sandcastleFile("implement-prompt.md")), false);
   });
 
-  for (const role of ["tester", "backend"]) {
+  for (const role of ["architect", "tester", "backend", "ui", "scribe"]) {
     it(`gives the ${role} the shared rules`, () => {
       assert.match(read(`roles/${role}.md`), /\{\{SHARED_RULES\}\}/);
     });
+  }
 
+  for (const role of ["tester", "backend", "ui"]) {
     it(`lists every skill mounted into the sandbox for the ${role}`, () => {
       const prompt = read(`roles/${role}.md`);
 
@@ -53,13 +55,54 @@ describe("developer roles across stacks", () => {
   });
 
   it("names every xUnit and node:test way to skip or todo a test as weakening it", () => {
-    for (const role of ["backend", "gate-fixer"]) {
+    for (const role of ["backend", "ui", "gate-fixer"]) {
       const prompt = read(`roles/${role}.md`);
 
       for (const form of ["`Skip`", "`SkipUnless`", "`SkipWhen`", "`Explicit = true`", "`Assert.Skip*`", "`.skip`", "`.todo`", "`{ skip }`", "`{ todo }`", "`t.skip()`", "`t.todo()`"]) {
         assert.ok(prompt.includes(form), `${role} doesn't name ${form}`);
       }
     }
+  });
+});
+
+// Issue #72: the optional roles the planner picks, and the design note the
+// architect passes to the roles after it.
+describe("optional role prompts", () => {
+  it("asks the planner for a roles field naming architect, ui and scribe", () => {
+    const prompt = read("plan-prompt.md");
+
+    assert.match(prompt, /"roles": \[/);
+    for (const role of ["architect", "ui", "scribe"]) {
+      assert.match(prompt, new RegExp(`^- \`${role}\`:`, "m"), role);
+    }
+  });
+
+  it("has the architect write its design note to .sandcastle/work/{n}/design.md, with its earlier note as input", () => {
+    const prompt = read("roles/architect.md");
+
+    assert.match(prompt, /\.sandcastle\/work\/\{\{TASK_ID\}\}\/design\.md/);
+    assert.match(prompt, /\{\{DESIGN_NOTE\}\}/);
+    assert.match(prompt, /docs\/adr\//);
+  });
+
+  it("points the tester, the developers and the reviewer at the design note", () => {
+    for (const prompt of ["roles/tester.md", "roles/backend.md", "roles/ui.md", "review-prompt.md"]) {
+      assert.match(read(prompt), /\.sandcastle\/work\/\{\{TASK_ID\}\}\/design\.md/, prompt);
+    }
+  });
+
+  it("tells the backend whether the UI developer runs after it", () => {
+    assert.match(read("roles/backend.md"), /\{\{UI_DEVELOPER\}\}/);
+  });
+
+  it("keeps the scribe off release-generated files and ADRs", () => {
+    const prompt = read("roles/scribe.md");
+
+    for (const path of ["docs/blogs/", "docs/README.md", "docs/index.html", "docs/adr/"]) {
+      assert.ok(prompt.includes(`\`${path}\``), path);
+    }
+    assert.match(prompt, /commit nothing/i);
+    assert.match(prompt, /markdownlint-cli2/);
   });
 });
 

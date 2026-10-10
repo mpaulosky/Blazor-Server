@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
-import { buildIssue, isGitHubServerError, publicErrorText, publish, UncountedStopError, type BuildHost } from "./build.mts";
-import { BUILD_ROLES, GATE_FIXER_ATTEMPTS, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import {
+  buildIssue,
+  designComment,
+  designNoteIn,
+  isGitHubServerError,
+  publicErrorText,
+  publish,
+  UncountedStopError,
+  type BuildHost,
+} from "./build.mts";
+import { BUILD_FAILED_MARKER, BUILD_ROLES, DESIGN_MARKER, GATE_FIXER_ATTEMPTS, PUBLISH_RETRY_ATTEMPTS, type OptionalRole } from "./config.mts";
 
-const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [] };
+const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [], roles: [] as OptionalRole[] };
+
+// `issue`, picking the optional roles named in `roles` (see RoledIssue in
+// build.mts and resolveRoles in lib/plan.mts).
+const withRoles = (roles: OptionalRole[]) => ({ ...issue, roles });
 const branch = "feature/69-run-the-gate";
 // The commit fetchMain() resolved origin/main to.
 const base = "f".repeat(40);
@@ -24,6 +37,8 @@ function host(
     leaksSecret = false,
     worktreeProblems = [],
     publishError,
+    designNote,
+    designFile = "",
   }: {
     ahead?: number | number[];
     statuses?: string[];
@@ -33,6 +48,13 @@ function host(
     leaksSecret?: boolean;
     worktreeProblems?: string[];
     publishError?: string;
+    // What latestDesignNote returns for the architect's prompt: the body of
+    // its latest earlier design comment, or undefined on a first run.
+    designNote?: string;
+    // The content .sandcastle/work/{n}/design.md holds in the sandbox once
+    // the architect has run, read back and posted as the issue's design
+    // comment (see DESIGN_MARKER in lib/config.mts).
+    designFile?: string;
   } = {},
 ) {
   const steps: string[] = [];
@@ -80,6 +102,9 @@ function host(
       if (command === "git rev-parse HEAD") {
         return { stdout: `${head()}\n`, stderr: "", exitCode: 0 };
       }
+      if (command.includes(".sandcastle/work/")) {
+        return { stdout: designFile, stderr: "", exitCode: 0 };
+      }
       steps.push(`gate: ${command}`);
       const exitCode = gateExitCodes.shift();
       if (exitCode === undefined) throw new Error("the gate ran more often than the test expected");
@@ -92,6 +117,8 @@ function host(
     },
   } as unknown as Sandbox;
   const buildingCalls: number[] = [];
+  const designNoteCalls: number[] = [];
+  const publishCalls: { reviewed: boolean; docsFailed: boolean }[] = [];
   const buildHost: BuildHost = {
     createSandbox: async () => {
       order.push("create");
@@ -121,16 +148,21 @@ function host(
       buildingCalls.push(issueNumber);
       order.push("unmark");
     },
+    latestDesignNote: (issueNumber) => {
+      designNoteCalls.push(issueNumber);
+      return designNote;
+    },
     log: (line) => void logs.push(line),
     leaksSecret: (scanBase, commit) => {
       scannedBases.push(scanBase);
       scanned.push(commit);
       return leaksSecret;
     },
-    publish: async (_issue, publishedBranch, commit, reviewed) => {
+    publish: async (_issue, publishedBranch, commit, reviewed, docsFailed) => {
       if (publishError) throw new Error(publishError);
       pushed.push({ branch: publishedBranch, commit });
-      steps.push(`publish${reviewed ? "" : " unreviewed"}`);
+      publishCalls.push({ reviewed, docsFailed });
+      steps.push(`publish${reviewed ? "" : " unreviewed"}${docsFailed ? " docs-failed" : ""}`);
       return "https://github.com/o/r/pull/1";
     },
     worktreeProblems: () => worktreeProblems,
@@ -138,7 +170,7 @@ function host(
   };
   return {
     steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
-    order, buildingCalls,
+    order, buildingCalls, designNoteCalls, publishCalls,
   };
 }
 
@@ -483,6 +515,224 @@ describe("buildIssue publishing", () => {
   });
 });
 
+// Covers issue #72 ("Add architect, UI developer and scribe roles picked by
+// the planner"): the build order is
+// [architect] → tester → backend → [ui] → gate 1 → [scribe] → reviewer → gate 2 → publish,
+// with each bracketed role run only when the planner picked it (issue.roles).
+describe("buildIssue optional roles", () => {
+  it("runs tester, backend, scribe and reviewer, and no architect or UI developer, when the plan picks only the scribe", async () => {
+    const { steps, logs, buildHost } = host([0, 0]);
+
+    const result = await buildIssue(withRoles(["scribe"]), branch, base, buildHost);
+
+    assert.deepEqual(steps, [
+      "tester",
+      "backend",
+      "gate: scripts/gate.sh 2>&1",
+      "scribe",
+      "reviewer",
+      "gate: scripts/gate.sh 2>&1",
+      "publish",
+      "close",
+    ]);
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.ok(!logs.some((line) => line.includes("architect")));
+    assert.ok(!logs.some((line) => line.includes(" ui ") || line.endsWith(" ui finished")));
+  });
+
+  it("runs the architect before the tester, the UI developer after the backend and before checkpoint 1, and the scribe after checkpoint 1 and before the reviewer, when the plan picks every optional role", async () => {
+    const { steps, buildHost } = host([0, 0]);
+
+    await buildIssue(withRoles(["architect", "ui", "scribe"]), branch, base, buildHost);
+
+    assert.deepEqual(steps, [
+      "architect",
+      "tester",
+      "backend",
+      "ui",
+      "gate: scripts/gate.sh 2>&1",
+      "scribe",
+      "reviewer",
+      "gate: scripts/gate.sh 2>&1",
+      "publish",
+      "close",
+    ]);
+  });
+
+  it("runs neither the architect, the UI developer nor the scribe when the plan picks none of them", async () => {
+    const { steps, buildHost } = host([0, 0]);
+
+    await buildIssue(withRoles([]), branch, base, buildHost);
+
+    assert.deepEqual(steps, [
+      "tester",
+      "backend",
+      "gate: scripts/gate.sh 2>&1",
+      "reviewer",
+      "gate: scripts/gate.sh 2>&1",
+      "publish",
+      "close",
+    ]);
+  });
+
+  for (const role of ["architect", "ui"] as const) {
+    // gateExitCodes has enough green answers for the whole old pipeline, so a
+    // ${role} that's wrongly left out of the build still reaches publish
+    // instead of exhausting the gate stub and failing for an unrelated reason.
+    it(`stops the build, without publishing, when the ${role} fails`, async () => {
+      const { steps, buildHost } = host([0, 0], { failing: [role] });
+
+      const result = await buildIssue(withRoles([role]), branch, base, buildHost);
+
+      assert.ok(!steps.includes("publish"));
+      assert.equal(result.prUrl, undefined);
+    });
+
+    it(`treats a ${role} failure as a failed build attempt, with a comment saying the branch wasn't pushed`, async () => {
+      const { comments, recordBuildFailureCalls, buildHost } = host([0, 0], { failing: [role] });
+
+      await buildIssue(withRoles([role]), branch, base, buildHost);
+
+      assert.equal(recordBuildFailureCalls.length, 1);
+      assert.equal(recordBuildFailureCalls[0]!.issueNumber, 69);
+      assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
+    });
+
+    it(`rethrows a usage-limit or time-budget stop from the ${role} instead of treating it as a failed attempt`, async () => {
+      const stop = new UncountedStopError("usage limit reached");
+      const { recordBuildFailureCalls, buildHost } = host([0, 0], { failing: [role], failWith: { [role]: stop } });
+
+      await assert.rejects(
+        () => buildIssue(withRoles([role]), branch, base, buildHost),
+        (error: unknown) => error === stop,
+      );
+
+      assert.deepEqual(recordBuildFailureCalls, []);
+    });
+  }
+
+  it("tells the backend developer whether the UI developer runs after it", async () => {
+    for (const [roles, expected] of [[["ui"], /UI developer runs after you/], [[], /last developer run/]] as const) {
+      const { runs, buildHost } = host([0, 0]);
+
+      await buildIssue(withRoles([...roles]), branch, base, buildHost);
+
+      assert.match(String(runs.find((run) => run.name === "backend")?.promptArgs?.UI_DEVELOPER), expected);
+    }
+  });
+
+  it("reads the architect's latest design note and gives it to the architect's prompt", async () => {
+    const { runs, buildHost } = host([0, 0], { designNote: "## Design\n\nUse a Result<T>." });
+
+    await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    const architectRun = runs.find((run) => run.name === "architect");
+    assert.ok(architectRun, "the architect should have run");
+    assert.equal(architectRun.promptArgs?.DESIGN_NOTE, "## Design\n\nUse a Result<T>.");
+  });
+
+  it("tells the architect it has no earlier design note on a first run", async () => {
+    const { runs, buildHost } = host([0, 0], { designNote: undefined });
+
+    await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    const architectRun = runs.find((run) => run.name === "architect");
+    assert.equal(architectRun?.promptArgs?.DESIGN_NOTE, "(no earlier design note)");
+  });
+
+  it("posts the architect's design note as an issue comment carrying the sandcastle:design marker", async () => {
+    const { comments, buildHost } = host([0, 0], { designFile: "## Design\n\nUse a Result<T> for the new endpoint." });
+
+    await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    const designComment = comments.find((comment) => comment.body.includes("<!-- sandcastle:design -->"));
+    assert.ok(designComment, "expected a comment carrying the sandcastle:design marker");
+    assert.match(designComment.body, /Use a Result<T> for the new endpoint\./);
+  });
+
+  // The note is agent-written sandbox text going onto a public issue, so it's
+  // made safe the way a failed publish's error is.
+  it("withholds a design note that looks like it holds a secret", async () => {
+    const { comments, buildHost } = host([0, 0], { designFile: "## Design\n\nUse the token ghp_abc." });
+    buildHost.publicError = (text) => publicErrorText(String(text), (cleaned) => cleaned.includes("ghp_"));
+
+    await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    const designPosted = comments.find((comment) => comment.body.includes(DESIGN_MARKER));
+    assert.ok(designPosted, "expected a design comment");
+    assert.doesNotMatch(designPosted.body, /ghp_/);
+    assert.match(designPosted.body, /looked like it held a secret/);
+  });
+
+  it("posts no design comment, and still publishes, when the architect wrote no design note", async () => {
+    const { comments, steps, buildHost } = host([0, 0], { designFile: "" });
+
+    const result = await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    assert.ok(!comments.some((comment) => comment.body.includes(DESIGN_MARKER)));
+    assert.ok(steps.includes("publish"), steps.join(", "));
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+  });
+
+  it("still publishes when posting the design note fails", async () => {
+    const { steps, recordBuildFailureCalls, buildHost } = host([0, 0], { designFile: "## Design" });
+    buildHost.commentOnIssue = () => {
+      throw new Error("gh issue comment failed: HTTP 502");
+    };
+
+    const result = await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    assert.ok(steps.includes("publish"), steps.join(", "));
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
+  it("doesn't stop the build and publishes the PR with a note that the documentation step failed when the scribe fails", async () => {
+    const { steps, comments, recordBuildFailureCalls, publishCalls, buildHost } = host([0, 0], { failing: ["scribe"] });
+
+    const result = await buildIssue(withRoles(["scribe"]), branch, base, buildHost);
+
+    assert.deepEqual(steps.filter((step) => !step.startsWith("gate:")), [
+      "tester", "backend", "scribe", "reviewer", "publish docs-failed", "close",
+    ]);
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.deepEqual(publishCalls, [{ reviewed: true, docsFailed: true }]);
+    assert.ok(!comments.some((comment) => /wasn't pushed/.test(comment.body)));
+  });
+
+  it("publishes the PR with a note that the documentation step failed when the scribe runs out of iterations unfinished", async () => {
+    const { recordBuildFailureCalls, publishCalls, buildHost } = host([0, 0], { unfinished: ["scribe"] });
+
+    const result = await buildIssue(withRoles(["scribe"]), branch, base, buildHost);
+
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.deepEqual(publishCalls, [{ reviewed: true, docsFailed: true }]);
+  });
+
+  it("publishes with no documentation note when the scribe succeeds", async () => {
+    const { publishCalls, buildHost } = host([0, 0]);
+
+    await buildIssue(withRoles(["scribe"]), branch, base, buildHost);
+
+    assert.deepEqual(publishCalls, [{ reviewed: true, docsFailed: false }]);
+  });
+
+  it("rethrows a usage-limit or time-budget stop from the scribe instead of publishing", async () => {
+    const stop = new UncountedStopError("usage limit reached");
+    const { recordBuildFailureCalls, publishCalls, buildHost } = host([0, 0], { failing: ["scribe"], failWith: { scribe: stop } });
+
+    await assert.rejects(
+      () => buildIssue(withRoles(["scribe"]), branch, base, buildHost),
+      (error: unknown) => error === stop,
+    );
+
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.deepEqual(publishCalls, []);
+  });
+});
+
 describe("buildIssue marking the issue as building", () => {
   it("marks the issue as building before the first role runs", async () => {
     const { order, buildingCalls, buildHost } = host([0, 0]);
@@ -586,16 +836,18 @@ describe("buildIssue marking the issue as building", () => {
   // BUILDING_LABEL_MAX_AGE_MS is sized from BUILD_ROLES' timeouts (see
   // config.test.mts), so a role buildIssue runs outside that list could make
   // a live build outlast the label and let a second run clear it.
-  it("runs only BUILD_ROLES, each once, and the gate-fixer at most its attempts per checkpoint, on the longest build", async () => {
-    // Each checkpoint: red, fixer, red, fixer, green.
+  it("runs every BUILD_ROLES role once, and the gate-fixer at most its attempts per checkpoint, on the longest build", async () => {
+    // Each checkpoint: red, fixer, red, fixer, green. The planner picked
+    // every optional role, so this is the longest path BUILDING_LABEL_MAX_AGE_MS
+    // (see config.test.mts) must outlast.
     const { runs, buildHost } = host([1, 1, 0, 1, 1, 0]);
 
-    const result = await buildIssue(issue, branch, base, buildHost);
+    const result = await buildIssue(withRoles(["architect", "ui", "scribe"]), branch, base, buildHost);
 
     const roles = runs.map((run) => run.name!);
     const others = roles.filter((role) => role !== "gate-fixer");
     assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
-    assert.deepEqual(others.filter((role) => !(BUILD_ROLES as readonly string[]).includes(role)), []);
+    assert.deepEqual(new Set(others), new Set(BUILD_ROLES));
     assert.equal(new Set(others).size, others.length);
     assert.equal(roles.filter((role) => role === "gate-fixer").length, 2 * GATE_FIXER_ATTEMPTS);
   });
@@ -641,7 +893,7 @@ describe("publish", () => {
     const { push, calls } = flaky(2, serverError);
     const { delays, wait } = recordedWaits();
 
-    const prUrl = await publish(issue, branch, "a".repeat(40), true, push, () => "https://github.com/o/r/pull/1", wait);
+    const prUrl = await publish(issue, branch, "a".repeat(40), true, false, push, () => "https://github.com/o/r/pull/1", wait);
 
     assert.equal(prUrl, "https://github.com/o/r/pull/1");
     assert.equal(calls(), 3);
@@ -659,7 +911,7 @@ describe("publish", () => {
     };
     const { wait } = recordedWaits();
 
-    const prUrl = await publish(issue, branch, "a".repeat(40), true, push, createPullRequest, wait);
+    const prUrl = await publish(issue, branch, "a".repeat(40), true, false, push, createPullRequest, wait);
 
     assert.equal(prUrl, "https://github.com/o/r/pull/2");
     assert.equal(pushCalls(), 1);
@@ -671,7 +923,7 @@ describe("publish", () => {
     const { wait } = recordedWaits();
 
     await assert.rejects(
-      () => publish(issue, branch, "a".repeat(40), true, push, neverCreatePr, wait),
+      () => publish(issue, branch, "a".repeat(40), true, false, push, neverCreatePr, wait),
       (error: unknown) => error instanceof Error && error.message === nonFastForward,
     );
     assert.equal(calls(), 1);
@@ -681,8 +933,34 @@ describe("publish", () => {
     const { push, calls } = flaky(Infinity, serverError);
     const { wait } = recordedWaits();
 
-    await assert.rejects(() => publish(issue, branch, "a".repeat(40), true, push, neverCreatePr, wait));
+    await assert.rejects(() => publish(issue, branch, "a".repeat(40), true, false, push, neverCreatePr, wait));
     assert.equal(calls(), PUBLISH_RETRY_ATTEMPTS);
+  });
+
+  // Covers "A scribe failure still publishes the PR, and its body says the
+  // documentation step failed" from issue #72.
+  it("says the documentation step failed in the PR body when docsFailed is true", async () => {
+    let body = "";
+    const createPullRequest = (_branch: string, _title: string, prBody: string): string => {
+      body = prBody;
+      return "https://github.com/o/r/pull/1";
+    };
+
+    await publish(issue, branch, "a".repeat(40), true, true, () => {}, createPullRequest, async () => {});
+
+    assert.match(body, /documentation step failed/i);
+  });
+
+  it("says nothing about documentation when docsFailed is false", async () => {
+    let body = "";
+    const createPullRequest = (_branch: string, _title: string, prBody: string): string => {
+      body = prBody;
+      return "https://github.com/o/r/pull/1";
+    };
+
+    await publish(issue, branch, "a".repeat(40), true, false, () => {}, createPullRequest, async () => {});
+
+    assert.doesNotMatch(body, /documentation/i);
   });
 });
 
@@ -730,5 +1008,46 @@ describe("publicErrorText", () => {
 
   it("withholds an error that holds a secret", () => {
     assert.match(publicErrorText("token abcdefgh12345 rejected", (text) => text.includes("abcdefgh12345")), /isn't shown/);
+  });
+});
+
+// The architect's design note as the host posts it and reads it back
+// (lib/build.mts). The host finds its own comments by marker substring
+// (markerComments), so a note quoting a marker, as one for a change to
+// Sandcastle itself would, mustn't pass for a host comment (#228).
+describe("designComment", () => {
+  const note = `## Design\n\nOn failure, post ${BUILD_FAILED_MARKER} and keep ${DESIGN_MARKER} last.\n\n\`\`\`\`ts\nconst x = 1;\n\`\`\`\`\n\ncc @someone, see #12`;
+
+  it("carries the design marker once, and no other host marker", () => {
+    const body = designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.equal(body.split(DESIGN_MARKER).length, 2, body);
+    assert.ok(body.startsWith(DESIGN_MARKER), body);
+    assert.ok(!body.includes(BUILD_FAILED_MARKER), body);
+  });
+
+  it("puts the note in a code fence longer than any backtick run in it, so it can't mention or cross-reference", () => {
+    const body = designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.match(body, /^`````markdown\n[\s\S]*\n`````$/m);
+  });
+
+  it("cuts a note too long for a GitHub comment, and says where the whole of it is", () => {
+    const body = designComment("x".repeat(70_000), "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.ok(body.length < 65_536, String(body.length));
+    assert.match(body, /Cut short to fit in a comment\. The whole note is in the sandbox's `\.sandcastle\/work\/3\/design\.md`/);
+  });
+});
+
+describe("designNoteIn", () => {
+  it("gives the architect back the note it wrote, markers included", () => {
+    const note = `## Design\n\nPost ${BUILD_FAILED_MARKER}.\n\n\`\`\`ts\nconst x = 1;\n\`\`\``;
+
+    assert.equal(designNoteIn(designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md")), note);
+  });
+
+  it("gives back the body without the marker for a comment with no fence", () => {
+    assert.equal(designNoteIn(`${DESIGN_MARKER}\nSome note.`), "Some note.");
   });
 });

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { withSharedRules } from "./agents.mts";
 import type { SandcastleIssue } from "./github.mts";
-import { critiquePromptArgs, gateFixerPromptArgs, intakePromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import { architectPromptArgs, backendPromptArgs, critiquePromptArgs, gateFixerPromptArgs, intakePromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
 // What ownerApproved (see github.test.mts) leaves of an issue: only the
 // comments of authors with write access.
@@ -69,6 +69,43 @@ describe("gateFixerPromptArgs", () => {
     assert.equal(args.BRANCH, "feature/3-add-a-thing");
     assert.equal(args.CHECKPOINT, "2");
     assert.equal(args.GATE_OUTPUT, gateOutput);
+  });
+});
+
+// Covers "After an architect run, the issue has a comment with the design
+// note..." (issue #72): on a re-run the architect needs that earlier note
+// back, since .sandcastle/work/ is gitignored and may not have survived into
+// a fresh sandbox (see lib/build.mts and DESIGN_MARKER in lib/config.mts).
+describe("architectPromptArgs", () => {
+  it("preserves issue context alongside the design note", () => {
+    const args = architectPromptArgs(issue, "feature/3-add-a-thing", "## Design\n\nUse a Result<T>.");
+
+    assert.equal(args.TASK_ID, "3");
+    assert.equal(args.BRANCH, "feature/3-add-a-thing");
+    assert.equal(args.DESIGN_NOTE, "## Design\n\nUse a Result<T>.");
+  });
+
+  it("tells the architect it has no earlier design note on a first run", () => {
+    const args = architectPromptArgs(issue, "feature/3-add-a-thing", undefined);
+
+    assert.equal(args.DESIGN_NOTE, "(no earlier design note)");
+  });
+});
+
+describe("backendPromptArgs", () => {
+  it("preserves issue context", () => {
+    const args = backendPromptArgs(issue, "feature/3-add-a-thing", false);
+
+    assert.equal(args.TASK_ID, "3");
+    assert.equal(args.BRANCH, "feature/3-add-a-thing");
+  });
+
+  it("leaves Blazor components and pages to the UI developer when it runs after the backend", () => {
+    assert.match(backendPromptArgs(issue, "feature/3-add-a-thing", true).UI_DEVELOPER, /UI developer runs after you/);
+  });
+
+  it("tells the backend its run is the last developer run when no UI developer runs", () => {
+    assert.match(backendPromptArgs(issue, "feature/3-add-a-thing", false).UI_DEVELOPER, /last developer run/);
   });
 });
 

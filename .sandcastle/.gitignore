@@ -1,3 +1,5 @@
 .env
 logs/
 worktrees/
+# Notes passed between roles in a sandbox, such as the architect's design note.
+work/
