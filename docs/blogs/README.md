@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [docs(claude): Label every PR review:claude so Claude reviews it](2026-10-10-pr-197-docs-claude-label-every-pr-review-claude-so-claude-reviews-it.md) | release,automation |
 | 2026-10-10 | [fix(sandcastle): Mount the .git config and hooks through the provider's create()](2026-10-10-pr-195-fix-sandcastle-mount-the-git-config-and-hooks-through-the-provider-s-create.md) | release,automation |
 | 2026-10-10 | [chore: Re-apply the repo-ci-baseline Template](2026-10-10-pr-192-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-09 | [chore: Re-apply the repo-ci-baseline Template](2026-10-09-pr-190-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
