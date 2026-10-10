@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [feat(sandcastle): Stop unattended runs cleanly when there's no work, time or usage left](2026-10-10-pr-241-feat-sandcastle-stop-unattended-runs-cleanly-when-there-s-no-work-time-or-usage-left.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Scope the queue to work the repository owner approved](2026-10-10-pr-239-feat-sandcastle-scope-the-queue-to-work-the-repository-owner-approved.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Sweep open Sandcastle PRs each round and keep them current](2026-10-10-pr-237-feat-sandcastle-sweep-open-sandcastle-prs-each-round-and-keep-them-current.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Intake splits oversized issues into blocked child issues](2026-10-10-pr-234-feat-sandcastle-intake-splits-oversized-issues-into-blocked-child-issues.md) | release,automation |
