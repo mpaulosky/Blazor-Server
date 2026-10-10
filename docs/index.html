@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.110">v0.0.110</a></td>
+                <td>2026-10-10</td>
+                <td>feat(sandcastle): Intake splits oversized issues into blocked child issues</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-234-feat-sandcastle-intake-splits-oversized-issues-into-blocked-child-issues.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.109">v0.0.109</a></td>
                 <td>2026-10-10</td>
                 <td>fix(sandcastle): Judge every intake batch each round, and keep intake&#x27;s text from hiding or cross-referencing</td>
@@ -282,12 +288,6 @@
                 <td>feat(sandcastle): Hand an issue back to a human after two failed builds</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-213-feat-sandcastle-hand-an-issue-back-to-a-human-after-two-failed-builds.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.100">v0.0.100</a></td>
-                <td>2026-10-10</td>
-                <td>fix(sandcastle): Retry a publish that fails on a GitHub server error</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-202-fix-sandcastle-retry-a-publish-that-fails-on-a-github-server-error.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.110</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-234-feat-sandcastle-intake-splits-oversized-issues-into-blocked-child-issues.md">feat(sandcastle): Intake splits oversized issues into blocked child issues</a></h3>
+              <p class="post-excerpt">Intake (#74) can only mark an issue ready or hand it back. An issue that&#x27;s clear but too big for one PR either gets built as one oversized change, or sits waiting for a person to split it. #75 lets…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/234">PR #234</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.109</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-213-feat-sandcastle-hand-an-issue-back-to-a-human-after-two-failed-builds.md">feat(sandcastle): Hand an issue back to a human after two failed builds</a></h3>
               <p class="post-excerpt">An issue whose build fails every round was rebuilt forever, spending a full tester, backend, gate and review cycle each time with no sign to a person that it was stuck. This caps it at two failed…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/213">PR #213</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.100</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-202-fix-sandcastle-retry-a-publish-that-fails-on-a-github-server-error.md">fix(sandcastle): Retry a publish that fails on a GitHub server error</a></h3>
-              <p class="post-excerpt">When git push hit a transient GitHub error, a branch that had already been built, gated and reviewed was lost for the round. On 2026-10-07, #71 passed both gate checkpoints, then publishing it…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/202">PR #202</a></p>
             </article>
           </li>
         </ul>
