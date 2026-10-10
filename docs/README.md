@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.92](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.92) | 2026-10-10 | fix(sandcastle): Mount the .git config and hooks through the provider's create() | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-195-fix-sandcastle-mount-the-git-config-and-hooks-through-the-provider-s-create.md) |
 | [v0.0.91](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.91) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-192-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.90](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.90) | 2026-10-09 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-09-pr-190-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.89](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.89) | 2026-10-09 | fix(sandcastle): Keep agent-written code from running on the host | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-09-pr-188-fix-sandcastle-keep-agent-written-code-from-running-on-the-host.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.85](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.85) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-178-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.84](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.84) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-176-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.83](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.83) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-174-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.82](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.82) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-172-chore-re-apply-the-repo-ci-baseline-template.md) |
 
 <!-- RELEASES_END -->
 
