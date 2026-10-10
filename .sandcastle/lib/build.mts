@@ -192,12 +192,52 @@ const liveHost: BuildHost = {
 // stayed red. `publishFailed` is true only when the branch passed both
 // checkpoints but publishing it still failed, so the caller's round summary can
 // tell that apart from a round that built nothing.
+//
+// The issue carries sandcastle:building from before its sandbox is created
+// until after it closes (#150), so a second Sandcastle run's gate holds it
+// back, and a run that finds another already marked it never creates or
+// closes a sandbox on the worktree that run is using (worktreePathFor names
+// it after the branch alone).
 export async function buildIssue(
   issue: SandcastleIssue,
   branch: string,
   base: string,
   host: BuildHost = liveHost,
-): Promise<{ commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean }> {
+): Promise<BuildResult> {
+  // A label that can't be added stops the build: building unmarked is how two
+  // runs end up on one issue. The throw reaches main.mts's allSettled, so it
+  // skips this issue for the round without counting an attempt.
+  if (!host.markBuilding(issue.number)) {
+    console.error(`  ⏸ #${issue.number}: another run marked it ${BUILDING_LABEL} after this round's gate, so this run leaves it alone.`);
+    return { commits: [], prUrl: undefined, publishFailed: false };
+  }
+  try {
+    return await buildMarkedIssue(issue, branch, base, host);
+  } finally {
+    // A label that can't be removed mustn't replace the build's own outcome.
+    // The issue stays remembered, so this run's exit tries again (see
+    // main.mts), and failing that a later startup clears the label as stale
+    // (lib/building.mts).
+    try {
+      host.unmarkBuilding(issue.number);
+    } catch (error) {
+      console.error(
+        `  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so it's tried again when this run exits: ${error}`,
+      );
+    }
+  }
+}
+
+type BuildResult = { commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean };
+
+// buildIssue's work once the issue is marked: everything from creating the
+// sandbox to closing it.
+async function buildMarkedIssue(
+  issue: SandcastleIssue,
+  branch: string,
+  base: string,
+  host: BuildHost,
+): Promise<BuildResult> {
   const sandbox = await host.createSandbox(branch);
 
   const promptArgs = issuePromptArgs(issue, branch);
@@ -266,19 +306,7 @@ export async function buildIssue(
     return result.head;
   }
 
-  let marked = false;
   try {
-    // Before any role runs, so a second Sandcastle run's gate holds the issue
-    // back (#150). A label that can't be added stops the build: building
-    // unmarked is how two runs end up on one issue. The throw reaches
-    // main.mts's allSettled, so it skips this issue for the round without
-    // counting an attempt.
-    marked = host.markBuilding(issue.number);
-    if (!marked) {
-      console.error(`  ⏸ #${issue.number}: another run marked it ${BUILDING_LABEL} after this round's gate, so this run leaves it alone.`);
-      return notPublished;
-    }
-
     if (!(await developerFinishes("tester"))) return notPublished;
     if (!(await developerFinishes("backend"))) return notPublished;
 
@@ -357,18 +385,6 @@ export async function buildIssue(
       return { commits, prUrl: undefined, publishFailed: true };
     }
   } finally {
-    // A label that can't be removed mustn't replace the build's own outcome or
-    // keep the sandbox from closing. The issue stays remembered, so this run's
-    // exit tries again (see main.mts), and failing that a later startup clears
-    // the label as stale (lib/building.mts).
-    try {
-      if (marked) host.unmarkBuilding(issue.number);
-    } catch (error) {
-      console.error(
-        `  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so it's tried again when this run exits: ${error}`,
-      );
-    }
-
     // Sandcastle's close() runs git in the worktree; leave one that no longer
     // points at this repository, with its sandbox, for a person to look at.
     const problems = host.worktreeProblems(sandbox.worktreePath);

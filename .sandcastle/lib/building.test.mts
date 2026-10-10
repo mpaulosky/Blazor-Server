@@ -103,8 +103,10 @@ describe("clearStaleBuildingLabels", () => {
 });
 
 // A BuildingLabels stub over an in-memory label list per issue, recording
-// every call. `failRemove` makes removing the label from those issues throw.
-function labelStub(labels: Record<number, string[]> = {}, failRemove: number[] = []) {
+// every call. `failRemove` makes removing the label from those issues throw;
+// `failAdd` makes adding it throw after GitHub has applied it, as a timeout or
+// a proxy's 502 can.
+function labelStub(labels: Record<number, string[]> = {}, failRemove: number[] = [], failAdd: number[] = []) {
   const calls: string[] = [];
   const github: BuildingLabels = {
     issueLabels: (issueNumber) => {
@@ -114,6 +116,7 @@ function labelStub(labels: Record<number, string[]> = {}, failRemove: number[] =
     addLabel: (issueNumber, label) => {
       calls.push(`add #${issueNumber}`);
       (labels[issueNumber] ??= []).push(label);
+      if (failAdd.includes(issueNumber)) throw new Error("gh issue edit failed:\nHTTP 502: Bad Gateway");
     },
     removeLabel: (issueNumber, label) => {
       calls.push(`remove #${issueNumber}`);
@@ -148,6 +151,29 @@ describe("claimBuildingLabel", () => {
     assert.equal(claimed, false);
     assert.deepEqual(calls, ["labels #150"]);
     assert.deepEqual([...marked], []);
+  });
+});
+
+describe("claimBuildingLabel when adding the label fails", () => {
+  it("removes a label the failed add may have applied, forgets the issue and rethrows", () => {
+    const { calls, github, labels } = labelStub({ 150: [] }, [], [150]);
+    const marked = new Set<number>();
+
+    assert.throws(() => claimBuildingLabel(150, github, marked), /502/);
+
+    assert.deepEqual(calls, ["labels #150", "add #150", "remove #150"]);
+    assert.deepEqual(labels[150], []);
+    assert.deepEqual([...marked], []);
+  });
+
+  // Still remembered, so releaseAllBuildingLabels tries again on exit.
+  it("keeps remembering the issue when the label can't be removed either", () => {
+    const { github } = labelStub({ 150: [] }, [150], [150]);
+    const marked = new Set<number>();
+
+    assert.throws(() => claimBuildingLabel(150, github, marked), /502/);
+
+    assert.deepEqual([...marked], [150]);
   });
 });
 

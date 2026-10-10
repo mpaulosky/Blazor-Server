@@ -38,9 +38,9 @@ so Sandcastle builds its own upgrade.
 The host creates any missing `sandcastle:*` label at startup. The wayfinder map and its tickets must never carry `Sandcastle`.
 
 `sandcastle:building` exists because a manual `/implement-spec #71` started on 2026-10-07 while Sandcastle was already building #71, and only the run log showed it (#150).
-`buildIssue` adds it before the first role runs and removes it in its `finally`, so a pass, a failure or a thrown error all clear it.
+`buildIssue` adds it before creating the issue's sandbox and removes it after the sandbox closes, in a `finally`, so a pass, a failure or a thrown error all clear it.
 Two runs can both pass the gate before either adds the label, so `buildIssue` reads the issue's labels again just before adding it, and leaves an issue that already carries it to the
-run that marked it, without counting an attempt. Only the run that added the label removes it.
+run that marked it, without creating a sandbox or counting an attempt. Only the run that added the label removes it, and an add that fails is undone at once.
 A run stopped with Ctrl-C or SIGTERM, or one that crashes, removes the labels it still holds as the process exits.
 Only a killed process (SIGKILL) leaves one behind, so at startup the host removes the label from any issue whose most recent `labeled` event for it is more than 6 hours old
 (`BUILDING_LABEL_MAX_AGE_MS`), longer than any build runs. A newer label belongs to a run that's still going, and stays. To free an issue sooner, remove the label by hand.

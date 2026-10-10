@@ -87,7 +87,8 @@ export const liveBuildingLabels: BuildingLabels = {
 // SIGTERM and a crash skip buildIssue's finally.
 export const markedByThisRun = new Set<number>();
 
-// Marks the issue sandcastle:building for this run's build. The gate reads
+// Marks the issue sandcastle:building for this run's build, before its
+// sandbox is created. The gate reads
 // labels from the snapshot taken at the start of the round, so a second run
 // that started meanwhile can pick the same issue: the labels are read again
 // here, and an issue that already carries the label (in any case, as GitHub
@@ -100,8 +101,20 @@ export function claimBuildingLabel(
   marked: Set<number> = markedByThisRun,
 ): boolean {
   if (github.issueLabels(issueNumber).some((label) => label.toLowerCase() === BUILDING_LABEL)) return false;
-  github.addLabel(issueNumber, BUILDING_LABEL);
+  // Remembered before the add: an add that times out or gets a proxy's 502
+  // may still have applied the label. So a failed add is undone at once, and
+  // if that fails too the issue stays remembered for the exit release.
   marked.add(issueNumber);
+  try {
+    github.addLabel(issueNumber, BUILDING_LABEL);
+  } catch (error) {
+    try {
+      releaseBuildingLabel(issueNumber, github, marked);
+    } catch {
+      // Left in `marked`; releaseAllBuildingLabels reports it if it fails again.
+    }
+    throw error;
+  }
   return true;
 }
 

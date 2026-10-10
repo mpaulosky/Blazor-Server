@@ -93,7 +93,10 @@ function host(
   } as unknown as Sandbox;
   const buildingCalls: number[] = [];
   const buildHost: BuildHost = {
-    createSandbox: async () => sandbox,
+    createSandbox: async () => {
+      order.push("create");
+      return sandbox;
+    },
     commitsAhead: (aheadBranch, aheadBase) => {
       aheadBranches.push(aheadBranch);
       aheadBases.push(aheadBase);
@@ -492,12 +495,15 @@ describe("buildIssue marking the issue as building", () => {
     assert.deepEqual(buildingCalls, [69, 69]);
   });
 
-  it("unmarks the issue as building after a successful build, before the sandbox closes", async () => {
+  // The label covers the sandbox's whole life, so a second run never creates
+  // or closes a sandbox on the worktree this one is using.
+  it("marks the issue before creating its sandbox, and unmarks it after the sandbox closes", async () => {
     const { order, buildHost } = host([0, 0]);
 
     await buildIssue(issue, branch, base, buildHost);
 
-    assert.deepEqual(order.slice(-2), ["unmark", "close"]);
+    assert.deepEqual(order.slice(0, 2), ["mark", "create"]);
+    assert.deepEqual(order.slice(-2), ["close", "unmark"]);
   });
 
   for (const role of ["tester", "backend"]) {
@@ -551,7 +557,7 @@ describe("buildIssue marking the issue as building", () => {
 
   // Another run's gate read the issue's labels before this run marked it, so
   // both picked it: the second to mark it leaves it to the first.
-  it("leaves the issue alone when another run marked it first, without counting an attempt", async () => {
+  it("leaves the issue alone when another run marked it first, without a sandbox or counting an attempt", async () => {
     const { order, recordBuildFailureCalls, buildHost } = host([0, 0]);
     buildHost.markBuilding = () => {
       order.push("mark refused");
@@ -561,11 +567,11 @@ describe("buildIssue marking the issue as building", () => {
     const result = await buildIssue(issue, branch, base, buildHost);
 
     assert.equal(result.prUrl, undefined);
-    assert.deepEqual(order, ["mark refused", "close"]);
+    assert.deepEqual(order, ["mark refused"]);
     assert.deepEqual(recordBuildFailureCalls, []);
   });
 
-  it("stops the build without counting an attempt when the label can't be added", async () => {
+  it("stops the build before creating a sandbox, without counting an attempt, when the label can't be added", async () => {
     const { order, recordBuildFailureCalls, buildHost } = host([0, 0]);
     buildHost.markBuilding = () => {
       throw new Error("gh issue edit failed:\nHTTP 502: Bad Gateway");
@@ -573,7 +579,7 @@ describe("buildIssue marking the issue as building", () => {
 
     await assert.rejects(() => buildIssue(issue, branch, base, buildHost), /502/);
 
-    assert.deepEqual(order, ["close"]);
+    assert.deepEqual(order, []);
     assert.deepEqual(recordBuildFailureCalls, []);
   });
 

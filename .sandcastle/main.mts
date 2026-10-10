@@ -91,10 +91,15 @@ cacheHostLogin();
 
 // Ctrl-C, SIGTERM and a crash skip buildIssue's finally, which would leave
 // sandcastle:building holding the issue back for BUILDING_LABEL_MAX_AGE_MS.
-// While a label is on, its sandbox is open, so Sandcastle's own signal
-// handler is installed: it removes the containers and calls process.exit,
-// which runs this listener. Only SIGKILL gets past it, and the startup
-// clearing below covers that.
+// The exit listener releases every label the run still holds. A label goes on
+// before its sandbox exists, while Node's default signal handling would end
+// the process without an exit event, so the signals exit here. Sandcastle's
+// own signal handler, installed while a sandbox is open, never runs then, but
+// the exit listener it installs alongside runs the same container teardown.
+// Only SIGKILL gets past this, and the startup clearing below covers that.
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+  process.on(signal, () => process.exit(code));
+}
 process.on("exit", () => {
   for (const issueNumber of releaseAllBuildingLabels()) {
     console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL} as the run stopped.`);
