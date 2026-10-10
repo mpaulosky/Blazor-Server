@@ -255,6 +255,11 @@ export const liveFollowUpGitHub: FollowUpGitHub = {
   addPullRequestLabel: (number, label) => addPullRequestLabel(number, label),
 };
 
+// What the sweep found that needs an agent: the PRs it logged as needing a
+// follow-up pass (#147's early exit reads this, so a round with one of these
+// still has work).
+export type SweepResult = { needsPass: number[] };
+
 // Reads the host's login, the in-scope issues and the open PRs once, then
 // for each PR either skips it (sweepSkipReason) or applies `decide`, logging
 // what happened. A PR whose sandcastle:needs-human someone other than the
@@ -268,11 +273,15 @@ export function sweepPullRequests(
   github: FollowUpGitHub = liveFollowUpGitHub,
   log: (line: string) => void = console.log,
   now: number = Date.now(),
-): void {
+): SweepResult {
   const host = github.hostLogin();
   const issues = github.inScopeIssues();
   const inScope = new Set(issues.map((issue) => issue.number));
   const openPrs = github.openPullRequests();
+  // #147's early exit needs to know which PRs still need an agent's pass;
+  // collecting that is for the backend developer's build, not the tester's
+  // stub.
+  const needsPass: number[] = [];
 
   for (const pr of openPrs) {
     try {
@@ -306,7 +315,7 @@ export function sweepPullRequests(
     openPrs.filter((pr) => pr.isCrossRepository === false).flatMap((pr) => issueNumberOf(pr.headRefName) ?? []),
   );
   const candidates = issues.filter((issue) => !hasLabel(issue, NEEDS_HUMAN) && !withOpenPr.has(issue.number));
-  if (candidates.length === 0) return;
+  if (candidates.length === 0) return { needsPass };
   const closed = github.closedPullRequests(host);
   for (const issue of candidates) {
     try {
@@ -320,6 +329,7 @@ export function sweepPullRequests(
       log(`  ⚠ Couldn't check whether #${issue.number}'s last PR closed without merging, so it's checked again next round: ${error}`);
     }
   }
+  return { needsPass };
 }
 
 // Carries out one PR's decision and logs it.
@@ -348,12 +358,17 @@ function followUp(pr: SweepPullRequest, decision: SweepDecision, github: FollowU
 // The follow-up sweep as main.mts runs it at the start of each round, before
 // intake. A failure, such as GitHub's API being unavailable, is logged and
 // the sweep runs again next round: it's housekeeping, never a reason to stop
-// building.
-export function followUpPhase(sweep: () => void = () => sweepPullRequests(), warn: (message: string) => void = console.error): void {
+// building. Returns { needsPass: [] } for a failed sweep, so #147's early
+// exit never treats a sweep failure as work found.
+export function followUpPhase(
+  sweep: () => SweepResult = () => sweepPullRequests(),
+  warn: (message: string) => void = console.error,
+): SweepResult {
   try {
-    sweep();
+    return sweep();
   } catch (error) {
     warn(`  ✗ Couldn't sweep the open pull requests, so they're swept again next round: ${error}`);
+    return { needsPass: [] };
   }
 }
 

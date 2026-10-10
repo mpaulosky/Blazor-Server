@@ -850,6 +850,69 @@ describe("followUpPhase", () => {
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /GitHub's API is unavailable/);
   });
+
+  // #147: the early exit reads followUpPhase's result, so a failed sweep
+  // must never look like it found work.
+  it("returns no PRs needing a pass when the sweep throws", () => {
+    const result = followUpPhase(
+      () => {
+        throw new Error("GitHub's API is unavailable");
+      },
+      () => {},
+    );
+
+    assert.deepEqual(result, { needsPass: [] });
+  });
+
+  it("returns the sweep's result when it succeeds", () => {
+    const result = followUpPhase(() => ({ needsPass: [101, 102] }));
+
+    assert.deepEqual(result, { needsPass: [101, 102] });
+  });
+});
+
+// #147: the early exit needs the PRs the sweep found needing a follow-up
+// pass, and only those, so it doesn't start an agent for a PR the sweep
+// already updated or is still waiting on.
+describe("sweepPullRequests' needsPass result", () => {
+  it("collects the PR numbers logged as needing a follow-up pass, and only those", () => {
+    const needsPassPr = pr({ number: 101, mergeStateStatus: "DIRTY" });
+    const updatedPr = pr({
+      number: 102,
+      id: "PR_102",
+      headRefName: "feature/43-add-sorting",
+      mergeStateStatus: "BEHIND",
+      reviews: [{ author: COPILOT_REVIEWER, commitOid: "a".repeat(40) }],
+    });
+    const waitingPr = pr({
+      number: 103,
+      id: "PR_103",
+      headRefName: "feature/44-add-paging",
+      reviews: [],
+      reviewRequests: [],
+      checks: [{ name: "build", completed: false, green: false, completedAt: null }],
+    });
+    const { github } = stubGithub({
+      prs: [needsPassPr, updatedPr, waitingPr],
+      issues: [
+        { number: 42, labels: [] },
+        { number: 43, labels: [] },
+        { number: 44, labels: [] },
+      ],
+    });
+
+    const result = sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(result, { needsPass: [101] });
+  });
+
+  it("is empty when nothing needs a follow-up pass", () => {
+    const { github } = stubGithub({ prs: [pr({ mergeStateStatus: "BEHIND" })] });
+
+    const result = sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(result, { needsPass: [] });
+  });
 });
 
 describe("startFromMain", () => {
