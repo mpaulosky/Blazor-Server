@@ -397,8 +397,8 @@ Issue #214 came out of the review of #213: an organization never posts, so "the 
 | [Run the gate at two checkpoints with a gate-fixer role](https://github.com/mpaulosky/Blazor-Server/issues/69) | #66, #67 |
 | [Skip the pre-push hook's gate for commits the sandbox already gated](https://github.com/mpaulosky/Blazor-Server/issues/70) | #69 |
 | [Replace the implementer with a tester and a backend developer](https://github.com/mpaulosky/Blazor-Server/issues/71) | #69 |
-| [Add architect, UI developer and scribe roles picked by the planner](https://github.com/mpaulosky/Blazor-Server/issues/72) | #68, #71, #73, #149 |
 | [Hand an issue back to a human after two failed builds](https://github.com/mpaulosky/Blazor-Server/issues/73) | #69, #149 |
+| [Add architect, UI developer and scribe roles picked by the planner](https://github.com/mpaulosky/Blazor-Server/issues/72) | #68, #71, #73, #149 |
 | [Intake judges each issue against the Definition of Ready](https://github.com/mpaulosky/Blazor-Server/issues/74) | #68, #73 |
 | [Intake splits oversized issues into blocked child issues](https://github.com/mpaulosky/Blazor-Server/issues/75) | #74 |
 | [Critique each round's plan and defer picks that aren't safe in parallel](https://github.com/mpaulosky/Blazor-Server/issues/76) | #68 |
