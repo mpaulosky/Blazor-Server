@@ -602,6 +602,16 @@ describe("buildIssue optional roles", () => {
     });
   }
 
+  it("tells the backend developer whether the UI developer runs after it", async () => {
+    for (const [roles, expected] of [[["ui"], /UI developer runs after you/], [[], /last developer run/]] as const) {
+      const { runs, buildHost } = host([0, 0]);
+
+      await buildIssue(withRoles([...roles]), branch, base, buildHost);
+
+      assert.match(String(runs.find((run) => run.name === "backend")?.promptArgs?.UI_DEVELOPER), expected);
+    }
+  });
+
   it("reads the architect's latest design note and gives it to the architect's prompt", async () => {
     const { runs, buildHost } = host([0, 0], { designNote: "## Design\n\nUse a Result<T>." });
 

@@ -23,7 +23,7 @@ import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
-import { architectPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
+import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
@@ -293,6 +293,17 @@ async function buildMarkedIssue(
   const notPublished = { commits, prUrl: undefined, publishFailed: false };
   const log = (line: string) => host.log(`  #${issue.number} ${line}`);
 
+  function developerPromptArgs(role: "architect" | "tester" | "backend" | "ui"): sandcastle.PromptArgs {
+    switch (role) {
+      case "architect":
+        return architectPromptArgs(issue, branch, host.latestDesignNote(issue.number));
+      case "backend":
+        return backendPromptArgs(issue, branch, issue.roles.includes("ui"));
+      default:
+        return promptArgs;
+    }
+  }
+
   // Run the architect, the tester, the backend developer or the UI developer.
   // Returns false when the run threw, timed out or used up its iterations
   // without signalling completion: the design, the tests or the code aren't
@@ -301,9 +312,9 @@ async function buildMarkedIssue(
   // issue's build attempts, as a checkpoint that stays red does. An
   // UncountedStopError is rethrown instead.
   async function developerFinishes(role: "architect" | "tester" | "backend" | "ui"): Promise<boolean> {
-    // Read outside the try: a gh failure reading the earlier design note is
+    // Built outside the try: a gh failure reading the earlier design note is
     // the host's, not the architect's, so it mustn't count as a failed attempt.
-    const roleArgs = role === "architect" ? architectPromptArgs(issue, branch, host.latestDesignNote(issue.number)) : promptArgs;
+    const roleArgs = developerPromptArgs(role);
     let failure: string;
     try {
       const run = await runRoleInSandbox(sandbox, role, {
