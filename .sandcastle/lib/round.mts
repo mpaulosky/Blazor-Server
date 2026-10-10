@@ -7,7 +7,7 @@ import type { OutcomeEntry } from "./report.mts";
 type BuildResult = { prUrl: string | undefined; publishFailed: boolean };
 
 // What the run report needs from each build's result; see buildIssue.
-type BuildOutcome = Pick<OutcomeEntry, "outcome" | "detail">;
+type BuildReportFields = Pick<OutcomeEntry, "outcome" | "detail">;
 
 // The summary's lines: each pull request the round opened, then each branch
 // that passed both checkpoints but couldn't be pushed or get a PR. That work is
@@ -70,7 +70,7 @@ export function roundSummary(
 // since the build threw rather than return a result.
 export function roundOutcomes(
   work: readonly { issue: { number: number }; branch: string }[],
-  settled: readonly PromiseSettledResult<BuildResult & BuildOutcome>[],
+  settled: readonly PromiseSettledResult<BuildResult & BuildReportFields>[],
 ): OutcomeEntry[] {
   return work.flatMap(({ issue }, i): OutcomeEntry[] => {
     const result = settled[i];

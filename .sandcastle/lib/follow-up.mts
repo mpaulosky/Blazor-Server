@@ -271,10 +271,10 @@ export type SweepResult = { needsPass: number[]; passes: PassTarget[] };
 // Each PR runs in its own try/catch, so one failure doesn't stop the rest.
 // An updated PR reaches `outcomes` as "updated", and every PR that reached
 // `decide` with unresolved threads a person opened replaces `waiting`'s list,
-// so the run report shows the latest sweep's view. Once that's done, hands back any in-scope issue, not labelled
-// sandcastle:needs-human and with no open PR, whose latest Sandcastle PR
-// closed without merging (closedWithoutMerging), each in its own try/catch
-// too.
+// so the run report shows the latest sweep's view. Once that's done, hands
+// back any in-scope issue, not labelled sandcastle:needs-human and with no
+// open PR, whose latest Sandcastle PR closed without merging
+// (closedWithoutMerging), each in its own try/catch too.
 export function sweepPullRequests(
   github: FollowUpGitHub = liveFollowUpGitHub,
   log: (line: string) => void = console.log,

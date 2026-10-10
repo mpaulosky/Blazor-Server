@@ -389,8 +389,8 @@ try {
   }
   // A loop that ended on the time budget or the usage limit (no new round,
   // or a build that stopped) stopped rather than finished.
-  const stopReason = runLimits.stopReason();
-  ending = stopReason === undefined ? { kind: "finished" } : { kind: "stopped", reason: stopReason };
+  const limitReason = runLimits.stopReason();
+  ending = limitReason === undefined ? { kind: "finished" } : { kind: "stopped", reason: limitReason };
 } catch (error) {
   if (!(error instanceof UncountedStopError)) throw error;
   ending = { kind: "stopped", reason: error.message };

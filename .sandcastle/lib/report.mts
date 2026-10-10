@@ -3,7 +3,7 @@
 // run and written at its end to .sandcastle/logs/ and the job summary (see
 // "Observability" in docs/plans/sandcastle-workflow.md).
 
-import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import type { IterationUsage } from "@ai-hero/sandcastle";
 
 type Usage = { -readonly [K in keyof IterationUsage]: number };
@@ -218,12 +218,12 @@ function endingSentence(ending: RunEnding): string {
 // Each touched target's rows sit together, issues before PRs, in the order
 // they were recorded; a hand-back adds its own "handed back" row.
 function outcomeLines(input: SummaryInput, link: (target: ReportTarget) => string): string[] {
-  const rows = [
-    ...input.outcomes.map(({ kind, number, outcome, detail }) => ({ kind, number, outcome: outcome as string, detail })),
+  const rows: (ReportTarget & { outcome: Outcome | "handed back"; detail: string })[] = [
+    ...input.outcomes,
     ...input.handBacks.map(({ kind, number, label, reason }) => ({
       kind,
       number,
-      outcome: "handed back",
+      outcome: "handed back" as const,
       detail: `\`${label}\`: ${reason}`,
     })),
   ];
@@ -241,11 +241,7 @@ function outcomeLines(input: SummaryInput, link: (target: ReportTarget) => strin
 // the repository name couldn't be read for the rest of the report.
 function handBackLines(handBacks: readonly HandBackEntry[]): string[] {
   if (handBacks.length === 0) return ["None."];
-  return handBacks.map(
-    (entry) =>
-      `- [${targetName(entry)}](${entry.url}): ` +
-      `\`${cell(entry.label)}\`, ${cell(entry.reason)}`,
-  );
+  return handBacks.map((entry) => `- [${targetName(entry)}](${entry.url}): \`${cell(entry.label)}\`, ${cell(entry.reason)}`);
 }
 
 // The latest sweep's waiting PRs plus any PR a follow-up pass found a
@@ -260,10 +256,10 @@ function waitingLines(
   if (prs.length === 0) return ["None."];
   return prs.flatMap((pr) => {
     const threads = counts.get(pr);
-    const count =
-      threads === undefined
-        ? ""
-        : `: ${threads} unresolved review ${threads === 1 ? "thread" : "threads"} opened by people`;
+    let count = "";
+    if (threads !== undefined) {
+      count = `: ${threads} unresolved review ${threads === 1 ? "thread" : "threads"} opened by people`;
+    }
     return [
       `- ${link({ kind: "pr", number: pr })}${count}`,
       ...humanThreads
@@ -276,19 +272,18 @@ function waitingLines(
 function usageLines(usage: ReadonlyMap<string, IterationUsage>): string[] {
   if (usage.size === 0) return ["No role ran."];
   const total = zero();
-  const row = (role: string, u: IterationUsage): string =>
-    `| ${role} | ${u.inputTokens} | ${u.cacheCreationInputTokens} | ${u.cacheReadInputTokens} | ${u.outputTokens} |`;
-  const lines = [...usage].map(([role, u]) => {
+  for (const u of usage.values()) {
     total.inputTokens += u.inputTokens;
     total.cacheCreationInputTokens += u.cacheCreationInputTokens;
     total.cacheReadInputTokens += u.cacheReadInputTokens;
     total.outputTokens += u.outputTokens;
-    return row(cell(role), u);
-  });
+  }
+  const row = (role: string, u: IterationUsage): string =>
+    `| ${role} | ${u.inputTokens} | ${u.cacheCreationInputTokens} | ${u.cacheReadInputTokens} | ${u.outputTokens} |`;
   return [
     "| Role | Input | Cache creation | Cache read | Output |",
     "| --- | ---: | ---: | ---: | ---: |",
-    ...lines,
+    ...[...usage].map(([role, u]) => row(cell(role), u)),
     row("**Total**", total),
   ];
 }

@@ -457,12 +457,13 @@ async function buildMarkedIssue(
   }
 
   // Run the architect, the tester, the backend developer or the UI developer.
-  // Returns the build's result when the run threw, timed out or used up its
-  // iterations without signalling completion, and undefined when it finished:
-  // the design, the tests or the code aren't done, so the issue stops for this
-  // round. Whatever the run committed stays on the branch for the next round,
-  // and the failure counts as one of the issue's build attempts, as a
-  // checkpoint that stays red does. An UncountedStopError is rethrown instead.
+  // Returns undefined when the run finished. When it threw, timed out or used
+  // up its iterations without signalling completion, the design, the tests or
+  // the code aren't done, so it returns the build's result and the issue stops
+  // for this round. Whatever the run committed stays on the branch for the
+  // next round, and the failure counts as one of the issue's build attempts,
+  // as a checkpoint that stays red does. An UncountedStopError is rethrown
+  // instead.
   async function developerFails(role: DeveloperRole): Promise<BuildResult | undefined> {
     // Built outside the try: a gh failure reading the earlier design note is
     // the host's, not the architect's, so it mustn't count as a failed attempt.
@@ -489,7 +490,9 @@ async function buildMarkedIssue(
     } catch (error) {
       if (error instanceof UncountedStopError) throw error;
       failure = `the ${role} failed: ${error}`;
-      result = isRoleTimeout(error) ? unpublished("timed out", `the ${role} timed out`) : unpublished("role failed", `the ${role} failed`);
+      result = isRoleTimeout(error)
+        ? unpublished("timed out", `the ${role} timed out`)
+        : unpublished("role failed", `the ${role} failed`);
     }
     console.error(`  ✗ #${issue.number}: ${failure}, so ${branch} isn't published.`);
     host.recordBuildFailure(issue.number, branch, developerFailureComment(failure, branch));
