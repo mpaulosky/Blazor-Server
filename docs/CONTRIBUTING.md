@@ -161,15 +161,20 @@ include appropriate tests.
 
 #### Running the E2E tests locally
 
-`tests/UI.Tests.E2E` uses Playwright to drive a real browser against `UI`, hosted on a real Kestrel port. Before
-running it locally (or after a fresh `dotnet build`), install the Playwright browser binaries once:
+`tests/UI.Tests.E2E` uses Playwright to drive headless Chromium against `UI`, started through the Aspire AppHost as
+the `WebApp` resource. Run it like any other test project:
 
 ```bash
-pwsh tests/UI.Tests.E2E/bin/Release/net10.0/playwright.ps1 install chromium
+dotnet test --project tests/UI.Tests.E2E/UI.Tests.E2E.csproj
 ```
 
-(On a machine without PowerShell, install it first, or run the equivalent `playwright install chromium` via the
-Playwright CLI.) CI installs browsers automatically as part of the pipeline.
+There's no separate browser install step: the test fixture installs Chromium itself on the first run, and skips the
+download once it's there. On Linux, Chromium also needs its system libraries; if it fails to start with an error about a
+missing shared library, install them once with `pnpm dlx playwright install-deps chromium` (it needs root).
+
+Set `PLAYWRIGHT_ARTIFACTS=true` to save a Playwright trace for each test under
+`tests/UI.Tests.E2E/bin/<Configuration>/net10.0/TestResults/playwright-artifacts/`. CI sets it and uploads the traces,
+and `pnpm dlx playwright show-trace <file>.zip` opens one.
 
 Any code that is written to support a component or new functionality are required to be accompanied with unit tests at the time the pull request is submitted.
 Pull requests without unit tests will be delayed and asked for unit tests to prove their functionality.

@@ -139,6 +139,7 @@ tests/Architecture.Tests/        -- Architecture rules (Domain's dependencies, U
 tests/Domain.Tests.Unit/         -- Shared Kernel unit tests
 tests/UI.Tests.Unit/             -- UI component tests (bUnit)
 tests/UI.Tests.Integration/      -- UI integration tests (WebApplicationFactory)
+tests/UI.Tests.E2E/              -- End-to-end tests (Playwright, through the AppHost)
 docs/adr/                        -- Architecture decision records
 aspire.config.json               -- Aspire CLI settings, pointing at src/AppHost
 CONTEXT.md                       -- Domain language

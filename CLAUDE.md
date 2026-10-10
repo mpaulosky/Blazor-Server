@@ -35,7 +35,8 @@ matching files.
   `src/UI/package.json`, part of the pnpm workspace) to write `src/UI/wwwroot/css/app.css`, which git ignores.
 - `tests/Architecture.Tests/`, `tests/Domain.Tests.Unit/`, `tests/UI.Tests.Unit/` (bUnit),
   `tests/UI.Tests.Integration/` (`WebApplicationFactory<Program>`), `tests/AppHost.Tests.Integration/`
-  (`Aspire.Hosting.Testing`, starts the AppHost): test projects, named `<Project>.Tests.<Kind>`.
+  (`Aspire.Hosting.Testing`, starts the AppHost), `tests/UI.Tests.E2E/` (Playwright in headless Chromium, through the
+  AppHost; its fixture installs Chromium itself): test projects, named `<Project>.Tests.<Kind>`.
 - `aspire.config.json` (the Aspire CLI's shared settings) lives at the repo root and points at
   `src/AppHost/AppHost.csproj`. It's the only copy: delete any the CLI writes elsewhere, such as next to the AppHost.
 - `.sandcastle/`: the unattended agent pipeline (TypeScript, run with Claude Code).
