@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.101](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.101) | 2026-10-10 | feat(sandcastle): Hand an issue back to a human after two failed builds | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-213-feat-sandcastle-hand-an-issue-back-to-a-human-after-two-failed-builds.md) |
 | [v0.0.100](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.100) | 2026-10-10 | fix(sandcastle): Retry a publish that fails on a GitHub server error | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-202-fix-sandcastle-retry-a-publish-that-fails-on-a-github-server-error.md) |
 | [v0.0.99](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.99) | 2026-10-10 | feat(sandcastle): Give the developer roles build, test and stub steps for both stacks | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-208-feat-sandcastle-give-the-developer-roles-build-test-and-stub-steps-for-both-stacks.md) |
 | [v0.0.98](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.98) | 2026-10-10 | docs(sandcastle): Bring the plan's issue table up to date and add a Sandcastle task template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-205-docs-sandcastle-bring-the-plan-s-issue-table-up-to-date-and-add-a-sandcastle-task-template.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.94](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.94) | 2026-10-10 | chore(sandcastle): Add a pnpm script to start a run | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-199-chore-sandcastle-add-a-pnpm-script-to-start-a-run.md) |
 | [v0.0.93](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.93) | 2026-10-10 | docs(claude): Label every PR review:claude so Claude reviews it | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-197-docs-claude-label-every-pr-review-claude-so-claude-reviews-it.md) |
 | [v0.0.92](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.92) | 2026-10-10 | fix(sandcastle): Mount the .git config and hooks through the provider's create() | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-195-fix-sandcastle-mount-the-git-config-and-hooks-through-the-provider-s-create.md) |
-| [v0.0.91](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.91) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-192-chore-re-apply-the-repo-ci-baseline-template.md) |
 
 <!-- RELEASES_END -->
 
