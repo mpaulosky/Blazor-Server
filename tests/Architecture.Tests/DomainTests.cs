@@ -14,7 +14,6 @@ namespace Architecture.Tests;
 public class DomainTests
 {
 	[Theory]
-	[InlineData("Core")]
 	[InlineData("UI")]
 	[InlineData("Microsoft.AspNetCore")]
 	[InlineData("MongoDB")]

@@ -31,7 +31,13 @@ Read the sections that govern the changed code before commenting on it:
 **Shared Kernel boundary.** `src/Domain` holds only operation outcomes (`Result`, `Result<T>`, `ResultErrorCode`) and
 the names the Template relies on (`ApplicationConstants`), and it references no other project and no package. Flag
 entities, feature logic, validators, persistence types, or a new reference there; feature code belongs in
-`Core/Features/<Feature>/`.
+`src/UI/Components/Features/<Feature>/`.
+
+**Feature slices.** Each slice keeps everything its use case needs in its own `src/UI/Components/Features/<Feature>/`
+folder (ADR 0005), and no slice uses another slice's types. `src/UI` references no project other than `src/Domain`.
+`tests/Architecture.Tests` enforces both, so flag a change that loosens those tests or works around them, for example
+by reaching another slice's types through reflection. App-wide layout and pages stay in `Components/Layout/` and
+`Components/Pages/`.
 
 **Tests.** Every new or changed behaviour has a test, following the Testing section of `CODING_STANDARDS.md`. For a
 `Result`-returning handler, that means its success value and each error code it can return.

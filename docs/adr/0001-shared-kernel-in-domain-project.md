@@ -1,5 +1,7 @@
 # Shared Kernel lives in a separate Domain project
 
+Amended by [ADR 0005](0005-feature-slices-live-in-the-ui-project.md): there is no `Core` project; feature slices live in `UI` under `Components/Features/<Feature>/`.
+
 The Template's building blocks that any Generated App needs (`Result`/`Result<T>` and the names the Template relies
 on, such as the Admin policy, the role name, and the Theme and Palette cookie names) live in their own `src/Domain`
 project. They don't live in `Core/Shared/`, as the Template originally planned. `Domain` references no other project

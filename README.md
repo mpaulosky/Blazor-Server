@@ -32,7 +32,8 @@ The Template is intended to give every Generated App:
 
 See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md) for the exact meaning of these terms.
 
-**Status:** early stage. The Template currently contains only the **Shared Kernel** (`src/Domain`) and its tests.
+**Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
+scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build) and their tests.
 
 ## Releases
 
@@ -68,7 +69,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 2. Install the prerequisites:
 
    - The .NET SDK `10.0.401`, as pinned in [global.json](https://github.com/mpaulosky/Blazor-Server/blob/main/global.json) (later 10.0 feature bands are accepted).
-   - Node.js and pnpm (`corepack enable`), used by the git hooks and the lint tools. The repo refuses `npm install`.
+   - Node.js and pnpm (`corepack enable`), used by the Tailwind CSS build, the git hooks and the lint tools. The repo refuses `npm install`.
    - [yamllint](https://yamllint.readthedocs.io/), which the pre-push hook runs on changed YAML files.
 
 3. Install the pnpm packages, then build and test each test project:
@@ -81,6 +82,15 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
    Run the test projects one at a time, as `scripts/gate.sh` and CI do. Under Microsoft Testing Platform,
    `dotnet test --solution` can report zero tests even when the projects pass.
+
+   `pnpm install` must come first: `dotnet build` runs the Tailwind CLI to write `src/UI/wwwroot/css/app.css`, and fails
+   with an error naming `pnpm install` when the packages are missing. Run the app with:
+
+   ```bash
+   dotnet run --project src/UI
+   ```
+
+   While editing markup, `pnpm --dir src/UI run watch:css` rebuilds the CSS as you save.
 
 4. Optionally enable the git hooks in `.github/hooks` (markdownlint on commit, and `scripts/gate.sh` on push):
 
@@ -108,8 +118,13 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 ```text
 src/Domain/                      -- Shared Kernel: Result, Result<T>, ApplicationConstants
-tests/Architecture.Tests/        -- Architecture rules (keeps Domain free of forbidden dependencies)
+src/UI/                          -- Blazor Web App (server-rendered)
+src/UI/Components/Features/      -- One folder per feature slice (e.g. Home)
+src/UI/Styles/                   -- Tailwind CSS v4 source
+tests/Architecture.Tests/        -- Architecture rules (Domain's dependencies, UI's references, slice boundaries)
 tests/Domain.Tests.Unit/         -- Shared Kernel unit tests
+tests/UI.Tests.Unit/             -- UI component tests (bUnit)
+tests/UI.Tests.Integration/      -- UI integration tests (WebApplicationFactory)
 docs/adr/                        -- Architecture decision records
 CONTEXT.md                       -- Domain language
 .sandcastle/                     -- Sandcastle agent setup
@@ -124,7 +139,6 @@ CLAUDE.md, .claude/              -- Claude Code instructions, rules and skills
 
 All of the following are *planned* and don't exist yet:
 
-- *Planned:* the Blazor Web App (server-rendered).
 - *Planned:* the light/dark **Theme**, defaulting to the OS preference.
 - *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
 - *Planned:* Auth0 authentication, with a Profile page for a **User** and an Admin page for an **Admin**.

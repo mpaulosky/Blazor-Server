@@ -81,7 +81,8 @@ updates:
         patterns:
           - "*"
 
-  # Maintain the root pnpm packages (dev tooling: sandcastle, markdownlint)
+  # Maintain the pnpm workspace (root dev tooling: sandcastle, markdownlint;
+  # and src/UI's Tailwind CLI). directory "/" covers every workspace package.
   - package-ecosystem: "npm"
     directory: "/"
     target-branch: "main"

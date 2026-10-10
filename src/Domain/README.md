@@ -1,7 +1,7 @@
 # Domain
 
 The Template's **Shared Kernel** (see [CONTEXT.md](../../CONTEXT.md)): the building blocks every Generated App
-needs, no matter what it does or where it stores data. The `Core` and `UI` projects, once they exist, reference it.
+needs, no matter what it does or where it stores data. The `UI` project references it.
 
 ## Contents
 
@@ -12,8 +12,9 @@ needs, no matter what it does or where it stores data. The `Core` and `UI` proje
 
 ## Rules
 
-- No business concepts. Entities, feature logic and validators belong in `Core/Features/<Feature>/`.
+- No business concepts. Entities, feature logic and validators belong in the UI project's feature slices,
+  `src/UI/Components/Features/<Feature>/` (see [ADR-0005](../../docs/adr/0005-feature-slices-live-in-the-ui-project.md)).
 - No persistence. `Domain` references no other project and no package, so a Generated App can choose any data store. `tests/Architecture.Tests` enforces this.
 - Add a folder only when something needs it.
 
-The decision to host the Shared Kernel here rather than in `Core/Shared/` is recorded in [ADR-0001](../../docs/adr/0001-shared-kernel-in-domain-project.md).
+The decision to host the Shared Kernel in its own project rather than beside the feature slices is recorded in [ADR-0001](../../docs/adr/0001-shared-kernel-in-domain-project.md).
