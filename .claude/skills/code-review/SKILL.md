@@ -49,6 +49,14 @@ docs follow `feature/{issue}-{slug}`, `fix/{issue}-{slug}`, `hotfix/{issue}-{slu
 the next backtick as a shell command before the agent sees the prompt. Flag that sequence anywhere it isn't an
 intended command expansion, for example in inline code about the null-forgiving operator.
 
+**Sandcastle role prompts can always finish.** When a change touches `.sandcastle/*-prompt.md` or
+`.sandcastle/roles/`, follow every case the prompt allows, including an exemption, a re-run whose work is already
+committed and "nothing to do", and check each one ends in a reachable `<promise>COMPLETE</promise>`. Flag any
+instruction that contradicts an exemption stated elsewhere in the same prompt or in another role's prompt, for
+example a tester exempt from manual criteria who can only finish after committing a failing test, or a reviewer told
+to add a test for every missing criterion, including the exempt ones. No lint catches these: read the prompts
+together.
+
 ## Out of scope
 
 Leave compiler and analyzer findings to the build: `TreatWarningsAsErrors` and `AnalysisMode=All` already fail CI on
