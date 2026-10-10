@@ -103,6 +103,15 @@ export function tail(output: string, lines: number): string {
   return output.replace(/\n$/, "").split("\n").slice(-lines).join("\n");
 }
 
+// The last `limit` characters of `text`, never starting halfway through a
+// character: a CI log's error is at its end (lib/github.mts#failedCheckLogs,
+// lib/follow-up-pass.mts's CI_LOG_LIMIT).
+export function endOf(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const end = text.slice(-limit);
+  return /^[\uDC00-\uDFFF]/.test(end) ? end.slice(1) : end;
+}
+
 // The issue comment for a checkpoint that stayed red past the fixer's attempts.
 export function gateFailureComment(checkpoint: Checkpoint, branch: string, output: string): string {
   const quoted = tail(output, GATE_COMMENT_LINES);

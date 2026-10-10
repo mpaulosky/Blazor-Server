@@ -113,7 +113,7 @@ describe("follow-up role prompt", () => {
   const prompt = () => read("roles/follow-up.md");
 
   it("takes the PR number, the merge note and the threads given to it", () => {
-    for (const placeholder of ["{{PR_NUMBER}}", "{{MERGE}}", "{{THREADS_JSON}}"]) {
+    for (const placeholder of ["{{PR_NUMBER}}", "{{MERGE}}", "{{THREADS_JSON}}", "{{CODEQL_LOG}}"]) {
       assert.ok(prompt().includes(placeholder), placeholder);
     }
   });

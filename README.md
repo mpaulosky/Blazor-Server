@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.120](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.120) | 2026-10-10 | feat(sandcastle): Follow-up passes fix red CI on Sandcastle PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-259-feat-sandcastle-follow-up-passes-fix-red-ci-on-sandcastle-prs.md) |
 | [v0.0.119](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.119) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-257-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.118](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.118) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-255-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.117](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.117) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-253-chore-re-apply-the-repo-ci-baseline-template.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.113](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.113) | 2026-10-10 | feat(sandcastle): Stop unattended runs cleanly when there's no work, time or usage left | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-241-feat-sandcastle-stop-unattended-runs-cleanly-when-there-s-no-work-time-or-usage-left.md) |
 | [v0.0.112](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.112) | 2026-10-10 | feat(sandcastle): Scope the queue to work the repository owner approved | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-239-feat-sandcastle-scope-the-queue-to-work-the-repository-owner-approved.md) |
 | [v0.0.111](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.111) | 2026-10-10 | feat(sandcastle): Sweep open Sandcastle PRs each round and keep them current | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-237-feat-sandcastle-sweep-open-sandcastle-prs-each-round-and-keep-them-current.md) |
-| [v0.0.110](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.110) | 2026-10-10 | feat(sandcastle): Intake splits oversized issues into blocked child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-234-feat-sandcastle-intake-splits-oversized-issues-into-blocked-child-issues.md) |
 
 <!-- RELEASES_END -->
 
