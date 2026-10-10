@@ -154,6 +154,77 @@ describe("applyVerdicts", () => {
   });
 });
 
+describe("applyVerdicts beyond the acceptance criteria", () => {
+  it("adds bug before sandcastle:ready, so a failed bug edit leaves the issue unready", () => {
+    const gh = recordingGh();
+
+    applyVerdicts([issue(3)], [verdict(3, { bug: true })], gh.run, "o/r", new HandBackReport());
+
+    const added = gh.calls.filter((call) => call.args[1] === "edit").map((call) => call.args.at(-1));
+    assert.deepEqual(added, ["bug", "sandcastle:ready"]);
+  });
+
+  it("applies only the first verdict on an issue and logs the rest", () => {
+    const gh = recordingGh();
+    const lines: string[] = [];
+
+    applyVerdicts(
+      [issue(1)],
+      [verdict(1), verdict(1, { verdict: "needs-info", questions: ["Why?"] })],
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+      (line) => lines.push(line),
+    );
+
+    const edits = gh.calls.filter((call) => call.args[1] === "edit");
+    assert.deepEqual(edits.map((call) => call.args.at(-1)), ["sandcastle:ready"]);
+    assert.ok(lines.some((line) => line.includes("#1") && line.includes("already has a verdict")), lines.join("\n"));
+  });
+
+  it("logs an issue intake gave no verdict on, and labels nothing", () => {
+    const gh = recordingGh();
+    const lines: string[] = [];
+
+    applyVerdicts([issue(1), issue(2)], [verdict(1)], gh.run, "o/r", new HandBackReport(), (line) => lines.push(line));
+
+    assert.ok(!gh.calls.some((call) => call.args[2] === "2"));
+    assert.ok(lines.some((line) => line.includes("#2") && line.includes("no verdict")), lines.join("\n"));
+  });
+
+  it("leaves an issue unlabelled when its comment is rejected, and still applies the next verdict", () => {
+    const calls: (readonly string[])[] = [];
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push(args);
+      if (args[1] === "comment" && args[2] === "1") throw new Error("HTTP 422");
+      return "";
+    }) as unknown as typeof execFileSync;
+    const lines: string[] = [];
+
+    applyVerdicts([issue(1), issue(2)], [verdict(1), verdict(2)], run, "o/r", new HandBackReport(), (line) => lines.push(line));
+
+    const edits = calls.filter((args) => args[1] === "edit");
+    assert.deepEqual(edits.map((args) => args[2]), ["2"]);
+    assert.ok(lines.some((line) => line.includes("#1") && line.includes("HTTP 422")), lines.join("\n"));
+  });
+
+  it("explains in the needs-info comment why, and how to re-queue the issue", () => {
+    const gh = recordingGh();
+
+    applyVerdicts(
+      [issue(7)],
+      [verdict(7, { verdict: "needs-info", questions: ["Which page?"], reason: "the page isn't named" })],
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+    );
+
+    const body = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.match(body, /the page isn't named/);
+    assert.match(body, /remove `sandcastle:needs-info`/);
+  });
+});
+
 describe("intakeRound", () => {
   it("skips the intake run when every issue already has a verdict label", async () => {
     let ran = false;
