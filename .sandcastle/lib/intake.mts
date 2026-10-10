@@ -342,7 +342,7 @@ function applySplit(
     throw error;
   }
   const queueLabel = splitGithub.queueLabel();
-  const labels = [...(verdict.bug ? [queueLabel, "bug"] : [queueLabel]), "sandcastle:needs-human"];
+  const labels = [queueLabel, ...(verdict.bug ? ["bug"] : []), "sandcastle:needs-human"];
   const children: SplitChild[] = [];
   let sandcastleRemoved = false;
   // The title of the child being created, while its create call runs.

@@ -47,18 +47,17 @@ export function closeFinishedUmbrellas(
   scope: QueueScope = activeQueueScope(),
 ): number[] {
   const closed: number[] = [];
-  const queueLabel = queueLabelOf(scope).toLowerCase();
+  // A split that failed after its umbrella comment landed is handed back
+  // with sandcastle:needs-human, and a person may re-queue it with
+  // Sandcastle or the scope's own queue label: either way it isn't an
+  // umbrella to close (#234).
+  const holding = [QUEUE_LABEL, queueLabelOf(scope), "sandcastle:needs-human"].map((label) => label.toLowerCase());
   const umbrellas = github.openUmbrellas().filter((umbrella) => scope.kind === "label" || umbrella === scope.number);
   for (const umbrella of umbrellas) {
     // One umbrella whose children can't be read, or that won't close, waits
     // for the next round without holding up the others.
     try {
-      // A split that failed after its umbrella comment landed is handed back
-      // with sandcastle:needs-human, and a person may re-queue it with
-      // Sandcastle: either way it isn't an umbrella to close (#234).
-      const held = github
-        .labels(umbrella)
-        .find((label) => [QUEUE_LABEL.toLowerCase(), queueLabel, "sandcastle:needs-human"].includes(label.toLowerCase()));
+      const held = github.labels(umbrella).find((label) => holding.includes(label.toLowerCase()));
       if (held) {
         log(`  ☂ #${umbrella} stays open: it carries ${held}.`);
         continue;

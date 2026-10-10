@@ -16,7 +16,7 @@
 import { discardClosedWork, isIssueBranch, type BranchRefs } from "./branches.mts";
 import { COPILOT_REREQUEST_AFTER_MS, PR_MARKER } from "./config.mts";
 import {
-  addPullRequestLabel as addPrLabel,
+  addPullRequestLabel,
   closedPullRequests,
   handBack,
   hasLabel,
@@ -66,6 +66,11 @@ export type SweepPullRequest = PullRequestIdentity & {
 export { isCopilot };
 
 const NEEDS_HUMAN = "sandcastle:needs-human";
+
+// The PR-level counterpart of lib/queue.mts#ISSUE_LABEL_RULES: a PR's
+// needs-human removal counts as a re-queue only when the repository owner
+// made it (#146). Nothing on a PR is trusted as an add.
+const PR_LABEL_RULES = { trustAdds: [], trustRemovals: [NEEDS_HUMAN] } as const;
 
 // The issue number a PR's head branch names, read from
 // feature/{n}-..., fix/{n}-... or hotfix/{n}-..., but only when it's a branch
@@ -247,18 +252,18 @@ export const liveFollowUpGitHub: FollowUpGitHub = {
   handBack: (issueNumber, reason, body) => handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body),
   isOwner: (login) => pushAccess(login),
   pullRequestEvents: (number) => issueEvents(number),
-  addPullRequestLabel: (number, label) => addPrLabel(number, label),
+  addPullRequestLabel: (number, label) => addPullRequestLabel(number, label),
 };
 
 // Reads the host's login, the in-scope issues and the open PRs once, then
 // for each PR either skips it (sweepSkipReason) or applies `decide`, logging
 // what happened. A PR whose sandcastle:needs-human someone other than the
 // repository owner removed gets it back instead, and is left alone (#146).
-// Each PR runs in its own try/catch, so one failure doesn't
-// stop the rest. Once that's done, hands back any in-scope issue, not
-// labelled sandcastle:needs-human and with no open PR, whose latest
-// Sandcastle PR closed without merging (closedWithoutMerging), each in its
-// own try/catch too.
+// Each PR runs in its own try/catch, so one failure doesn't stop the rest.
+// Once that's done, hands back any in-scope issue, not labelled
+// sandcastle:needs-human and with no open PR, whose latest Sandcastle PR
+// closed without merging (closedWithoutMerging), each in its own try/catch
+// too.
 export function sweepPullRequests(
   github: FollowUpGitHub = liveFollowUpGitHub,
   log: (line: string) => void = console.log,
@@ -278,10 +283,7 @@ export function sweepPullRequests(
       }
       // A stranger's removal of the PR's hand-back label isn't a re-queue
       // (#146): put the label back and leave the PR alone this round.
-      const origin = labelOriginFixes(pr.labels, github.pullRequestEvents(pr.number), github.isOwner, {
-        trustAdds: [],
-        trustRemovals: [NEEDS_HUMAN],
-      });
+      const origin = labelOriginFixes(pr.labels, github.pullRequestEvents(pr.number), github.isOwner, PR_LABEL_RULES);
       if (origin.unknown.length > 0) {
         log(`  · PR #${pr.number} isn't swept: couldn't check whether the repository owner removed ${NEEDS_HUMAN}.`);
         continue;
