@@ -1,12 +1,23 @@
 // Parallel Planner with Review — plan → execute → review → PR loop
 //
 // This template drives a multi-phase workflow:
-//   Phase 0 (Gate):             The host resolves each open issue's blockers
+//   Phase 0a (Intake):          One run judges every open issue that carries
+//                               none of sandcastle:ready, sandcastle:needs-info
+//                               and sandcastle:needs-human against the
+//                               Definition of Ready (intake-prompt.md). The
+//                               host adds sandcastle:ready, or hands the issue
+//                               back with sandcastle:needs-info and numbered
+//                               questions, and adds bug when the verdict says
+//                               so (lib/intake.mts).
+//   Phase 0b (Gate):            The host resolves each open issue's blockers
 //                               (GitHub "blocked by" links and "Blocked by #N"
 //                               / "Depends on #N" lines) and holds back every
 //                               issue whose blocker hasn't landed yet, that
-//                               already has an open PR, or that another run is
-//                               building (sandcastle:building).
+//                               already has an open PR, that another run is
+//                               building (sandcastle:building), that intake
+//                               hasn't marked sandcastle:ready, or that's
+//                               handed back (sandcastle:needs-info or
+//                               sandcastle:needs-human).
 //   Phase 1 (Plan):             The planner analyzes the ready issues, builds
 //                               a dependency graph, and outputs a <plan> JSON
 //                               listing unblocked issues.
@@ -58,8 +69,9 @@ import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { BUILDING_LABEL, MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
 import { gateIssues } from "./lib/gate.mts";
-import { cacheHostLogin, ensureLabels } from "./lib/github.mts";
+import { cacheHostLogin, ensureLabels, listSandcastleIssues, openPullRequests } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
+import { intakePhase } from "./lib/intake.mts";
 import { planRound } from "./lib/plan.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
@@ -104,7 +116,14 @@ try {
     console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
     // -----------------------------------------------------------------------
-    // Phase 0: Gate
+    // Phase 0a: Intake
+    // -----------------------------------------------------------------------
+    // See lib/intake.mts#intakePhase: a failed intake is logged and costs only
+    // the issues it was judging this round.
+    await intakePhase(() => ({ issues: listSandcastleIssues(), openPrs: openPullRequests() }));
+
+    // -----------------------------------------------------------------------
+    // Phase 0b: Gate
     // -----------------------------------------------------------------------
     // No build of this run is going between rounds, so any label it still
     // holds is one whose removal failed: try again before the gate, which
@@ -122,7 +141,7 @@ try {
     if (ready.length === 0) {
       console.log(
         blocked.length > 0
-          ? "Every open issue is waiting on a blocker, a pull request or another run. Exiting."
+          ? "Every open issue is waiting on a blocker, a pull request, another run, intake or a human. Exiting."
           : "No open Sandcastle issues. Exiting.",
       );
       break;

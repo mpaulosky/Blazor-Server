@@ -13,6 +13,7 @@ import {
   cacheHostLogin,
   hostLogin,
   handBack,
+  hasLabel,
   markerComments,
   markerCommentsSince,
   openPullRequest,
@@ -530,6 +531,16 @@ describe("issue labels", () => {
     assert.deepEqual(calls.map((call) => call.args), [["issue", "edit", "150", "--repo", "o/r", "--add-label", "sandcastle:building"]]);
   });
 
+  it("adds several labels to an issue in one edit", () => {
+    const { calls, run } = recordingGh();
+
+    addIssueLabel(150, ["bug", "sandcastle:ready"], run, "o/r");
+
+    assert.deepEqual(calls.map((call) => call.args), [
+      ["issue", "edit", "150", "--repo", "o/r", "--add-label", "bug", "--add-label", "sandcastle:ready"],
+    ]);
+  });
+
   it("removes a label from an issue in the named repository", () => {
     const { calls, run } = recordingGh();
 
@@ -695,5 +706,15 @@ describe("handBack", () => {
     assert.deepEqual(calls[1]!.args, ["pr", "edit", "17", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
     assert.equal(calls[0]!.input, "Giving up on this PR.");
     assert.deepEqual(report.items(), [{ target: "pr #17", label: "sandcastle:needs-human", reason: "follow-up gave up" }]);
+  });
+});
+
+describe("hasLabel", () => {
+  it("matches a label whatever its case, as GitHub does", () => {
+    assert.equal(hasLabel({ labels: ["Sandcastle", "Sandcastle:Ready"] }, "sandcastle:ready"), true);
+  });
+
+  it("doesn't match a label the issue doesn't carry", () => {
+    assert.equal(hasLabel({ labels: ["Sandcastle"] }, "sandcastle:ready"), false);
   });
 });

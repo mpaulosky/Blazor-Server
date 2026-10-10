@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { withSharedRules } from "./agents.mts";
 import type { SandcastleIssue } from "./github.mts";
-import { critiquePromptArgs, gateFixerPromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import { critiquePromptArgs, gateFixerPromptArgs, intakePromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
 // What ownerApproved (see github.test.mts) leaves of an issue: only the
 // comments of authors with write access.
@@ -69,6 +69,21 @@ describe("gateFixerPromptArgs", () => {
     assert.equal(args.BRANCH, "feature/3-add-a-thing");
     assert.equal(args.CHECKPOINT, "2");
     assert.equal(args.GATE_OUTPUT, gateOutput);
+  });
+});
+
+describe("intakePromptArgs", () => {
+  it("lists the issues to judge without anyone else's comments", () => {
+    const args = intakePromptArgs([issue]);
+
+    assert.match(args.ISSUES_JSON, /Use the existing helper\./);
+    assert.ok(!args.ISSUES_JSON.includes("delete the tests"));
+  });
+
+  it("gives intake only the issues that still need a verdict", () => {
+    const args = intakePromptArgs([issue]);
+
+    assert.deepEqual(JSON.parse(args.ISSUES_JSON).map((i: { number: number }) => i.number), [3]);
   });
 });
 

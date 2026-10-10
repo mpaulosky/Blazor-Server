@@ -32,6 +32,12 @@ export type SandcastleIssue = Omit<GhIssue, "comments"> & {
   comments: string[];
 };
 
+// Whether the issue carries `label`. GitHub matches label names
+// case-insensitively, so a hand-made "Sandcastle:Ready" is the same label.
+export function hasLabel(issue: Pick<SandcastleIssue, "labels">, label: string): boolean {
+  return issue.labels.some((name) => name.toLowerCase() === label.toLowerCase());
+}
+
 // Keep only the comments of authors with admin, maintain or write permission
 // on `repo`, so text from anyone else never reaches a role's prompt.
 // Permission rather than the owner's login decides this, because in a
@@ -260,15 +266,17 @@ export function ensureLabels(
   }
 }
 
-// Adds `label` to the issue `number`. The repository must already have the
-// label (see ensureLabels).
+// Adds `label` to the issue `number`, or every label in it, in one edit so
+// they land together or not at all. The repository must already have them
+// (see ensureLabels).
 export function addIssueLabel(
   number: number,
-  label: string,
+  label: string | readonly string[],
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
 ): void {
-  ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, "--add-label", label]);
+  const labels = typeof label === "string" ? [label] : label;
+  ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, ...labels.flatMap((name) => ["--add-label", name])]);
 }
 
 // Removes `label` from the issue `number`.

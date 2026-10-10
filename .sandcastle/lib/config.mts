@@ -80,7 +80,9 @@ export const BUILDING_LABEL = "sandcastle:building";
 export const BUILDING_LABEL_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 // Every label from the Labels table that the host, not a human, is
-// responsible for creating. `Sandcastle` and `bug` are a human's to add.
+// responsible for creating. `Sandcastle` is a human's to add. `bug` is
+// GitHub's default label, but intake adds it too (#74), and an add fails for a
+// label a repository has deleted.
 export const SANDCASTLE_LABELS: readonly SandcastleLabel[] = [
   { name: "sandcastle:ready", color: "0E8A16", description: "The issue passed the Definition of Ready and isn't re-checked." },
   {
@@ -98,6 +100,7 @@ export const SANDCASTLE_LABELS: readonly SandcastleLabel[] = [
     color: "D93F0B",
     description: "Sandcastle tried and couldn't. A person needs to look at this issue or pull request.",
   },
+  { name: "bug", color: "d73a4a", description: "Something isn't working" },
 ];
 
 // The HTML comment marking an issue comment as a failed build attempt, so the

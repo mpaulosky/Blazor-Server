@@ -33,6 +33,13 @@ export function plannerPromptArgs(ready: SandcastleIssue[]) {
   return { ISSUES_JSON: JSON.stringify(ready) };
 }
 
+// The issues intake must judge against the Definition of Ready: every open
+// in-scope issue that has none of sandcastle:ready, sandcastle:needs-info and
+// sandcastle:needs-human yet (see lib/intake.mts#needsIntake).
+export function intakePromptArgs(issues: SandcastleIssue[]): { ISSUES_JSON: string } {
+  return { ISSUES_JSON: JSON.stringify(issues) };
+}
+
 // An open Sandcastle issue whose PR is waiting for review, with the files that
 // PR changes.
 export type InFlightPrompt = { issue: SandcastleIssue; pr: number; branch: string; files: string[] };
