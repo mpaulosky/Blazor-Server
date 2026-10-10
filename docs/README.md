@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.103](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.103) | 2026-10-10 | fix(sandcastle): Keep comments from anyone with write access, not only the repository owner's | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-218-fix-sandcastle-keep-comments-from-anyone-with-write-access-not-only-the-repository-owner-s.md) |
 | [v0.0.102](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.102) | 2026-10-10 | docs(sandcastle): Add #214 to the plan table and record the blockers added since | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-216-docs-sandcastle-add-214-to-the-plan-table-and-record-the-blockers-added-since.md) |
 | [v0.0.101](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.101) | 2026-10-10 | feat(sandcastle): Hand an issue back to a human after two failed builds | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-213-feat-sandcastle-hand-an-issue-back-to-a-human-after-two-failed-builds.md) |
 | [v0.0.100](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.100) | 2026-10-10 | fix(sandcastle): Retry a publish that fails on a GitHub server error | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-202-fix-sandcastle-retry-a-publish-that-fails-on-a-github-server-error.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.96](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.96) | 2026-10-10 | build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-201-build-sandcastle-install-actionlint-shellcheck-and-zizmor-in-the-sandbox-image.md) |
 | [v0.0.95](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.95) | 2026-10-10 | docs(review): Check that Sandcastle role prompts can always finish | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-200-docs-review-check-that-sandcastle-role-prompts-can-always-finish.md) |
 | [v0.0.94](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.94) | 2026-10-10 | chore(sandcastle): Add a pnpm script to start a run | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-199-chore-sandcastle-add-a-pnpm-script-to-start-a-run.md) |
-| [v0.0.93](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.93) | 2026-10-10 | docs(claude): Label every PR review:claude so Claude reviews it | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-197-docs-claude-label-every-pr-review-claude-so-claude-reviews-it.md) |
 
 <!-- RELEASES_END -->
 
