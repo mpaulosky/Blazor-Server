@@ -348,6 +348,10 @@ export type PassTarget = {
   headRefOid: string;
   issueNumber: number;
   reasons: string[];
+  // GitHub said the PR conflicts with main (DIRTY), so a pass merges main
+  // in. A PR that's only behind isn't merged by a pass: the sweep updates it
+  // on GitHub once it's settled.
+  conflicted: boolean;
 };
 
 // What lib/follow-up-pass.mts#runPass reads of a needs-pass PR. Only an
@@ -355,7 +359,15 @@ export type PassTarget = {
 function passTarget(pr: SweepPullRequest, reasons: string[]): PassTarget {
   const issueNumber = issueNumberOf(pr.headRefName);
   if (issueNumber === undefined) throw new Error(`PR #${pr.number}'s branch ${pr.headRefName} names no issue`);
-  return { number: pr.number, id: pr.id, headRefName: pr.headRefName, headRefOid: pr.headRefOid, issueNumber, reasons };
+  return {
+    number: pr.number,
+    id: pr.id,
+    headRefName: pr.headRefName,
+    headRefOid: pr.headRefOid,
+    issueNumber,
+    reasons,
+    conflicted: pr.mergeStateStatus === "DIRTY",
+  };
 }
 
 // Carries out one PR's decision and logs it.

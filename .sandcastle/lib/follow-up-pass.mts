@@ -528,16 +528,17 @@ async function followUpVerdicts(
 
 // Splits `verdicts` into those the host acts on and the ids of "fixed" ones
 // it doesn't. A "fixed" verdict is kept only when its commit is one this pass
-// added: it resolves in the sandbox, `gated` contains it and `head` (the PR's
-// head before the pass) doesn't. Otherwise the reply would say "Fixed in" a
+// added: it resolves in the sandbox, `gated` contains it, and neither `head`
+// (the PR's head before the pass) nor `base` (main, whose commits a merge
+// brings in) does, and it isn't `hostMerge`, the merge commit the host made
+// itself when main merged in cleanly. Otherwise the reply would say "Fixed in" a
 // commit the PR doesn't hold, or resolve a bot thread nothing changed for, and
 // nobody would look at it again. An unverified verdict's thread is left open,
 // so the next pass sees it again.
 async function fixesInPush(
   sandbox: Pick<sandcastle.Sandbox, "exec">,
   verdicts: readonly ThreadVerdict[],
-  gated: string,
-  head: string,
+  { gated, head, base, hostMerge }: { gated: string; head: string; base: string; hostMerge: string | undefined },
 ): Promise<{ kept: ThreadVerdict[]; unverified: string[] }> {
   const kept: ThreadVerdict[] = [];
   const unverified: string[] = [];
@@ -553,8 +554,10 @@ async function fixesInPush(
     const added =
       resolved !== undefined &&
       /^[0-9a-f]{40,64}$/.test(resolved) &&
+      resolved !== hostMerge &&
       (await sandboxContains(sandbox, gated, resolved)) &&
-      !(await sandboxContains(sandbox, head, resolved));
+      !(await sandboxContains(sandbox, head, resolved)) &&
+      !(await sandboxContains(sandbox, base, resolved));
     if (added) kept.push(verdict);
     else unverified.push(verdict.threadId);
   }
@@ -626,8 +629,11 @@ function planPass(
   // Only a needed merge or a bot thread starts a pass. A PR that's only red
   // on CI waits for #79, and one with only owner threads keeps the sweep's
   // rule that human threads alone don't start a pass, so an owner thread is
-  // answered only alongside one of the two.
-  const needsMerge = !host.contains(target.headRefOid, base);
+  // answered only alongside one of the two. A merge is needed only when the
+  // PR conflicts with main: one that's merely behind is updated by the sweep
+  // once it's settled, so a red-CI PR doesn't spend a counted pass every
+  // time main moves.
+  const needsMerge = target.conflicted && !host.contains(target.headRefOid, base);
   if (!needsMerge && !sorted.forRole.some((thread) => thread.from === "bot")) {
     return skip("there's nothing a follow-up pass handles yet");
   }
@@ -687,11 +693,13 @@ async function passOnMarkedIssue(
     // Merged, never rebased: the push that follows is a plain one, so the
     // PR's history stays as reviewers saw it.
     let merged: PassReport["merged"] = "none";
+    let hostMerge: string | undefined;
     let mergeNote = "The branch already contains main, so there's no merge to finish.";
     if (needsMerge) {
       const merge = await sandbox.exec(`git merge --no-edit -m ${shellWord(`Merge main into ${branch}`)} ${shellWord(base)}`);
       if (merge.exitCode === 0) {
         merged = "clean";
+        hostMerge = (await sandbox.exec("git rev-parse HEAD")).stdout.trim();
         mergeNote = "The host merged main into the branch cleanly, so there's no merge to finish.";
       } else {
         const conflicted = await sandbox.exec("git diff --name-only --diff-filter=U");
@@ -797,7 +805,7 @@ async function passOnMarkedIssue(
       }
     }
 
-    const { kept, unverified } = await fixesInPush(sandbox, verdicts, gated, target.headRefOid);
+    const { kept, unverified } = await fixesInPush(sandbox, verdicts, { gated, head: target.headRefOid, base, hostMerge });
     if (unverified.length > 0) log(`left ${unverified.length} "fixed" verdict(s) unanswered: their commit isn't one this pass added`);
     const { actions, ignored } = threadActions(kept, forRole);
     const failedWrites = answerThreads(actions, host, log);

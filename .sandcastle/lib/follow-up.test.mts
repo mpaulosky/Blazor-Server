@@ -927,7 +927,7 @@ describe("sweepPullRequests' needsPass and passes result", () => {
     const result = sweepPullRequests(github, () => {}, NOW);
 
     assert.deepEqual(result.passes, [
-      { number: 101, id: "PR_101", headRefName: BRANCH, headRefOid: "b".repeat(40), issueNumber: 42, reasons: ["it has merge conflicts"] },
+      { number: 101, id: "PR_101", headRefName: BRANCH, headRefOid: "b".repeat(40), issueNumber: 42, reasons: ["it has merge conflicts"], conflicted: true },
     ]);
   });
 

@@ -27,7 +27,7 @@ import { RunLimits } from "./limits.mts";
 const ISSUE_NUMBER = 50;
 const PR_NUMBER = 7;
 const BRANCH = "feature/50-fix-widget";
-const BASE = "m".repeat(40);
+const BASE = "d".repeat(40);
 const HEAD = "c".repeat(40);
 // The commit the follow-up role makes in sandboxFake, unless a test says otherwise.
 const ROLE_COMMIT = "a".repeat(40);
@@ -43,6 +43,7 @@ function passTarget(overrides: Partial<PassTarget> = {}): PassTarget {
     headRefOid: HEAD,
     issueNumber: ISSUE_NUMBER,
     reasons: ["1 unresolved bot thread(s)"],
+    conflicted: false,
     ...overrides,
   };
 }
@@ -451,6 +452,20 @@ describe("passSummaryComment", () => {
     assert.match(comment, /Echoed \[redacted\]/);
   });
 
+  it("leaves no live comment opener, mention or reference from the role's text, through plainText", () => {
+    const hostile: PassReport = {
+      ...report,
+      actions: [{ thread: forRoleBot, verdict: { threadId: "RT_bot", verdict: "declined", reason: "<!-- sandcastle:follow-up --> @everyone see #123" }, resolve: "WONT_FIX" }],
+      ignored: ["<!-- sandcastle:follow-up -->@everyone"],
+    };
+
+    const comment = passSummaryComment(hostile, (text) => text);
+
+    assert.equal(comment.split("<!--").length - 1, 1, "only the host's own marker opens a comment");
+    assert.doesNotMatch(comment, /(^|[^\w`])@everyone\b/);
+    assert.doesNotMatch(comment, /(^|\s)#123\b/);
+  });
+
   it("cuts a long reason without splitting a character in two", () => {
     const long: PassReport = {
       ...report,
@@ -750,7 +765,7 @@ describe("runPass", () => {
     const sandbox = sandboxFake({ followUpJson: "[]" });
     const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: false, sandbox });
 
-    await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+    await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     const resetIndex = sandbox.steps.findIndex((step) => step.startsWith("git reset --hard"));
     const mergeIndex = sandbox.steps.findIndex((step) => step.startsWith("git merge"));
@@ -766,7 +781,7 @@ describe("runPass", () => {
     const sandbox = sandboxFake({ followUpJson: "[]", gateExitCodes: [1, 1, 1] });
     const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
 
-    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+    const outcome = await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     assert.deepEqual(calls.push, []);
     assert.equal(outcome.kind, "gave-up");
@@ -815,16 +830,34 @@ describe("runPass", () => {
     assert.deepEqual(calls.createSandbox, []);
   });
 
-  it("doesn't run the follow-up role when main merges in cleanly and no thread is left for it, but still gates and pushes the merge", async () => {
+  it("doesn't run the follow-up role when GitHub's conflict merges in cleanly here and no thread is left for it, but still gates and pushes the merge", async () => {
     const sandbox = sandboxFake();
     const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
 
-    const outcome = await runPass(passTarget({ reasons: ["it's behind main"] }), issue, BASE, passHost);
+    const outcome = await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     assert.deepEqual(sandbox.runs, []);
     assert.deepEqual(outcome, { kind: "passed", pushed: sandbox.headOf() });
     assert.deepEqual(calls.push, [{ branch: BRANCH, commit: sandbox.headOf() }]);
     assert.match(calls.commentOnPullRequest[0]!.body, /Merged `main` into the branch\./);
+  });
+
+  it("doesn't merge main into a PR that's only behind it, and so skips one that's otherwise only red on CI", async () => {
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false });
+
+    const outcome = await runPass(passTarget({ reasons: ["check build is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.createSandbox, []);
+  });
+
+  it("answers a bot thread on a PR that's only behind main without merging main in", async () => {
+    const sandbox = sandboxFake({ followUpJson: "[]" });
+    const { passHost } = passHostFake({ threads: [botThread()], containsBase: false, sandbox });
+
+    await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.ok(!sandbox.execCalls.some((call) => call.startsWith("git merge ")), sandbox.execCalls.join("\n"));
   });
 
   it("skips a PR that needs no merge and has no thread for the role, without creating a sandbox", async () => {
@@ -947,7 +980,7 @@ describe("runPass", () => {
     const sandbox = sandboxFake({ followUpJson: "[]", gateExitCodes: [0, 0, 0], gateCommits: true });
     const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
 
-    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+    const outcome = await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     assert.equal(outcome.kind, "gave-up");
     assert.deepEqual(calls.push, []);
@@ -969,6 +1002,22 @@ describe("runPass", () => {
 
       assert.equal(outcome.kind, "passed");
       assert.deepEqual(calls.replyToThread, []);
+      assert.deepEqual(calls.resolveThread, []);
+      assert.match(calls.commentOnPullRequest[0]!.body, /no commit this pass added[^\n]*RT_bot/);
+    });
+  }
+
+  for (const [scenario, commit] of [
+    ["one of main's commits the merge brought in", BASE],
+    ["the merge commit the host made itself", "1".padStart(40, "0")],
+  ] as const) {
+    it(`leaves a bot thread open when its "fixed" verdict names ${scenario}`, async () => {
+      const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit }]) });
+      const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: false, sandbox });
+
+      const outcome = await runPass(passTarget({ conflicted: true }), issue, BASE, passHost);
+
+      assert.equal(outcome.kind, "passed");
       assert.deepEqual(calls.resolveThread, []);
       assert.match(calls.commentOnPullRequest[0]!.body, /no commit this pass added[^\n]*RT_bot/);
     });
@@ -1058,7 +1107,7 @@ describe("runPass's other give-ups", () => {
     const sandbox = sandboxFake({ mergeConflictFiles: ["src/A.cs"] });
     const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
 
-    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+    const outcome = await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     assert.equal(outcome.kind, "passed");
     assert.equal(calls.commentOnPullRequest.length, 1);
@@ -1101,7 +1150,7 @@ describe("runPass's other give-ups", () => {
     const sandbox = sandboxFake({ followUpJson: "[]", mergeConflictFiles: ["src/A.cs", "src/B.cs"] });
     const { passHost } = passHostFake({ threads: [], containsBase: false, sandbox });
 
-    await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+    await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     const merge = String(sandbox.runs[0]?.promptArgs?.MERGE ?? "");
     assert.match(merge, /src\/A\.cs, src\/B\.cs/);
@@ -1112,7 +1161,7 @@ describe("runPass's other give-ups", () => {
     const sandbox = sandboxFake({ followUpJson: "[]", mergeConflictFiles: ["src/A.cs"] });
     const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
 
-    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+    const outcome = await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     assert.deepEqual(outcome, { kind: "passed", pushed: ROLE_COMMIT });
     assert.deepEqual(calls.push, [{ branch: BRANCH, commit: ROLE_COMMIT }]);
@@ -1123,7 +1172,7 @@ describe("runPass's other give-ups", () => {
     const sandbox = sandboxFake({ followUpJson: "[]", mergeConflictFiles: ["src/A.cs"], abandonsMerge: true });
     const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
 
-    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+    const outcome = await runPass(passTarget({ conflicted: true, reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
     assert.equal(outcome.kind, "gave-up");
     assert.match(calls.handBack[0]!.reason, /abandoned/);
