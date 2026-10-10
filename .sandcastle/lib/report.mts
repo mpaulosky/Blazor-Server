@@ -172,14 +172,142 @@ export type SummaryInput = {
 // issue and PR with its outcome (plus one row per hand-back), the hand-backs
 // themselves with links, the PRs waiting on a person, and a token-usage table
 // by role with a total row.
-export function renderSummary(_input: SummaryInput): string {
-  throw new Error("Not implemented");
+export function renderSummary(input: SummaryInput): string {
+  const { repo } = input;
+  const link = (target: ReportTarget): string =>
+    repo === undefined ? targetName(target) : `[${targetName(target)}](${targetUrl(repo, target)})`;
+  return [
+    "## Sandcastle run",
+    "",
+    `Queue: ${cell(input.queue)}. ${endingSentence(input.ending)}`,
+    "",
+    "### Issues and pull requests",
+    "",
+    ...outcomeLines(input, link),
+    "",
+    "### Hand-backs",
+    "",
+    ...handBackLines(input.handBacks),
+    "",
+    "### Pull requests waiting on a person",
+    "",
+    ...waitingLines(input.waitingPrs, input.humanThreads, link),
+    "",
+    "### Token usage by role",
+    "",
+    ...usageLines(input.usage),
+    "",
+  ].join("\n");
+}
+
+function targetName(target: ReportTarget): string {
+  return `${target.kind === "issue" ? "issue" : "PR"} #${target.number}`;
+}
+
+function endingSentence(ending: RunEnding): string {
+  switch (ending.kind) {
+    case "finished":
+      return "The run finished.";
+    case "stopped":
+      return `The run stopped cleanly: ${cell(ending.reason.replace(/\.$/, ""))}.`;
+    case "crashed":
+      return "The run ended on an error; see the run log.";
+  }
+}
+
+// Each touched target's rows sit together, issues before PRs, in the order
+// they were recorded; a hand-back adds its own "handed back" row.
+function outcomeLines(input: SummaryInput, link: (target: ReportTarget) => string): string[] {
+  const rows = [
+    ...input.outcomes.map(({ kind, number, outcome, detail }) => ({ kind, number, outcome: outcome as string, detail })),
+    ...input.handBacks.map(({ kind, number, label, reason }) => ({
+      kind,
+      number,
+      outcome: "handed back",
+      detail: `\`${label}\`: ${reason}`,
+    })),
+  ];
+  if (rows.length === 0) return ["Nothing was touched."];
+  const order = (kind: ReportTarget["kind"]): number => (kind === "issue" ? 0 : 1);
+  rows.sort((a, b) => order(a.kind) - order(b.kind) || a.number - b.number);
+  return [
+    "| Issue or PR | Outcome | Detail |",
+    "| --- | --- | --- |",
+    ...rows.map((row) => `| ${link(row)} | ${row.outcome} | ${cell(row.detail)} |`),
+  ];
+}
+
+// Each hand-back carries its own link, so this section stays linked even when
+// the repository name couldn't be read for the rest of the report.
+function handBackLines(handBacks: readonly HandBackEntry[]): string[] {
+  if (handBacks.length === 0) return ["None."];
+  return handBacks.map(
+    (entry) =>
+      `- [${targetName(entry)}](${entry.url}): ` +
+      `\`${cell(entry.label)}\`, ${cell(entry.reason)}`,
+  );
+}
+
+// The latest sweep's waiting PRs plus any PR a follow-up pass found a
+// person's thread on; a PR only the passes saw has no count to show.
+function waitingLines(
+  waitingPrs: readonly WaitingPrEntry[],
+  humanThreads: readonly HumanThreadEntry[],
+  link: (target: ReportTarget) => string,
+): string[] {
+  const counts = new Map(waitingPrs.map(({ pr, threads }) => [pr, threads]));
+  const prs = [...new Set([...waitingPrs.map(({ pr }) => pr), ...humanThreads.map(({ pr }) => pr)])];
+  if (prs.length === 0) return ["None."];
+  return prs.flatMap((pr) => {
+    const threads = counts.get(pr);
+    const count =
+      threads === undefined
+        ? ""
+        : `: ${threads} unresolved review ${threads === 1 ? "thread" : "threads"} opened by people`;
+    return [
+      `- ${link({ kind: "pr", number: pr })}${count}`,
+      ...humanThreads
+        .filter((thread) => thread.pr === pr)
+        .map((thread) => `  - [thread by ${cell(thread.author ?? "a deleted account")}](${thread.url})`),
+    ];
+  });
+}
+
+function usageLines(usage: ReadonlyMap<string, IterationUsage>): string[] {
+  if (usage.size === 0) return ["No role ran."];
+  const total = zero();
+  const row = (role: string, u: IterationUsage): string =>
+    `| ${role} | ${u.inputTokens} | ${u.cacheCreationInputTokens} | ${u.cacheReadInputTokens} | ${u.outputTokens} |`;
+  const lines = [...usage].map(([role, u]) => {
+    total.inputTokens += u.inputTokens;
+    total.cacheCreationInputTokens += u.cacheCreationInputTokens;
+    total.cacheReadInputTokens += u.cacheReadInputTokens;
+    total.outputTokens += u.outputTokens;
+    return row(cell(role), u);
+  });
+  return [
+    "| Role | Input | Cache creation | Cache read | Output |",
+    "| --- | ---: | ---: | ---: | ---: |",
+    ...lines,
+    row("**Total**", total),
+  ];
+}
+
+const CELL_LIMIT = 300;
+
+// Text for a table cell or list line. A hand-back reason can come from an
+// agent (intake's needs-info reason), so nothing in it may break the table or
+// inject HTML into the job summary.
+function cell(text: string): string {
+  const flat = text.replace(/\r?\n/g, " ");
+  const cut = flat.length > CELL_LIMIT ? `${flat.slice(0, CELL_LIMIT - 1)}…` : flat;
+  return cut.replace(/\|/g, "\\|").replace(/</g, "&lt;");
 }
 
 // handbacks.json: an array of `{ kind, number, label, reason, url }`, one per
 // hand-back this run made; "[]\n" when there were none.
-export function handBacksJson(_handBacks: readonly HandBackEntry[]): string {
-  throw new Error("Not implemented");
+export function handBacksJson(handBacks: readonly HandBackEntry[]): string {
+  return `${JSON.stringify(handBacks, null, 2)}\n`;
 }
 
 // Where writeRunReport writes summary.md and handbacks.json.
@@ -204,11 +332,24 @@ export const liveReportFs: ReportFs = {
 // must never throw over the run's own error. A missing handbacks.json then
 // fails the workflow step that reads it, which is the fail-closed outcome.
 export function writeRunReport(
-  _summary: string,
-  _handBacks: readonly HandBackEntry[],
-  _env: NodeJS.ProcessEnv = process.env,
-  _fs: ReportFs = liveReportFs,
-  _warn: (line: string) => void = console.error,
+  summary: string,
+  handBacks: readonly HandBackEntry[],
+  env: NodeJS.ProcessEnv = process.env,
+  fs: ReportFs = liveReportFs,
+  warn: (line: string) => void = console.error,
 ): void {
-  throw new Error("Not implemented");
+  const attempt = (what: string, write: () => void): void => {
+    try {
+      write();
+    } catch (error) {
+      warn(`Couldn't ${what}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  attempt(`create ${REPORT_DIR}`, () => fs.mkdir(REPORT_DIR));
+  attempt(`write ${REPORT_DIR}/handbacks.json`, () => fs.writeFile(`${REPORT_DIR}/handbacks.json`, handBacksJson(handBacks)));
+  attempt(`write ${REPORT_DIR}/summary.md`, () => fs.writeFile(`${REPORT_DIR}/summary.md`, summary));
+  const stepSummary = env.GITHUB_STEP_SUMMARY;
+  if (stepSummary) {
+    attempt("append to GITHUB_STEP_SUMMARY", () => fs.appendFile(stepSummary, summary));
+  }
 }
