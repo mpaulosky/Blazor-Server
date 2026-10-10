@@ -128,14 +128,24 @@ import { UncountedStopError } from "./lib/errors.mts";
 import { followUpPassPhase } from "./lib/follow-up-pass.mts";
 import { followUpPhase } from "./lib/follow-up.mts";
 import { gateIssues } from "./lib/gate.mts";
-import { cacheHostLogin, ensureLabels, openPullRequests } from "./lib/github.mts";
+import { cacheHostLogin, ensureLabels, openPullRequests, repoName } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { runLimits } from "./lib/limits.mts";
 import { planRound, resolveRoles } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
-import { handBackReport, humanThreadReport, usageReport } from "./lib/report.mts";
-import { roundSummary } from "./lib/round.mts";
+import {
+  handBackReport,
+  humanThreadReport,
+  outcomeReport,
+  renderSummary,
+  REPORT_DIR,
+  usageReport,
+  waitingPrReport,
+  writeRunReport,
+  type RunEnding,
+} from "./lib/report.mts";
+import { roundOutcomes, roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
 import { umbrellaPhase } from "./lib/umbrella.mts";
@@ -167,43 +177,62 @@ try {
 runLimits.start(budgetMinutes);
 console.log(`Time budget: ${budgetMinutes} minutes`);
 
-const envFile = ".sandcastle/.env";
-const leakedTokens = existsSync(envFile) ? githubTokensIn(readFileSync(envFile, "utf8")) : [];
-if (leakedTokens.length > 0) {
-  throw new Error(
-    `${envFile} sets ${leakedTokens.join(" and ")}, which Sandcastle would pass into the sandbox. ` +
-      "Remove it: the host uses its own gh auth, and agents must not reach GitHub.",
-  );
-}
+// How the run ended, for the run report: set to "finished" or "stopped" by
+// the try below, so anything that throws past it reads as a crash.
+let ending: RunEnding = { kind: "crashed" };
 
-// Every git command this process starts, Sandcastle's included, runs with hooks
-// off and its config pinned to this repository's .git: agents can write hooks
-// and files that point git elsewhere. Throws if .git/commondir exists. See
-// lib/host-safety.mts, which also keeps .git/config and .git/hooks read-only in
-// every sandbox.
-protectHostGit();
-forgetGatedHead();
-
-// The hand-backs and intake add sandcastle:* labels, which gh can't add until
-// the repository has them. The host's login, which the failed-attempt count
-// filters by, is read now so a token that can't read it fails before any work.
-ensureLabels();
-cacheHostLogin();
-
-// Release the labels this run holds however the process ends (see
-// lib/building.mts).
-installBuildingLabelRelease(process);
-
-// A run that crashed left sandcastle:building on the issue it was building.
-// Only a label older than any real build is cleared, so a live run's stays.
-for (const issueNumber of clearStaleBuildingLabels()) {
-  console.log(`  🧹 #${issueNumber}: cleared a stale ${BUILDING_LABEL} label left by a run that didn't finish.`);
-}
+// Whether protectHostGit() has pinned every git command's environment. Only
+// past this point is it safe for the finally's reportRepo() to shell out to
+// gh, which reads git remotes: before it, a planted .git/commondir (the case
+// protectHostGit() guards against) could make gh read a config an agent
+// wrote. Set once startup has finished, not right after protectHostGit()
+// itself, so one failed later startup step (ensureLabels, cacheHostLogin)
+// still leaves the report unlinked rather than guess which of them left git
+// safe to use.
+let startedUp = false;
 
 // An UncountedStopError from any phase (intake, the planner, the critique)
 // means the budget has passed or Claude's usage limit was hit: the catch below
 // ends the run cleanly rather than crash, since the next run picks the work up.
+// The try starts this early so its finally writes the run report
+// (.sandcastle/logs/) after every run that got past reading its arguments,
+// even one that fails a startup check: a workflow step reads handbacks.json.
 try {
+  const envFile = ".sandcastle/.env";
+  const leakedTokens = existsSync(envFile) ? githubTokensIn(readFileSync(envFile, "utf8")) : [];
+  if (leakedTokens.length > 0) {
+    throw new Error(
+      `${envFile} sets ${leakedTokens.join(" and ")}, which Sandcastle would pass into the sandbox. ` +
+        "Remove it: the host uses its own gh auth, and agents must not reach GitHub.",
+    );
+  }
+
+  // Every git command this process starts, Sandcastle's included, runs with hooks
+  // off and its config pinned to this repository's .git: agents can write hooks
+  // and files that point git elsewhere. Throws if .git/commondir exists. See
+  // lib/host-safety.mts, which also keeps .git/config and .git/hooks read-only in
+  // every sandbox.
+  protectHostGit();
+  forgetGatedHead();
+
+  // The hand-backs and intake add sandcastle:* labels, which gh can't add until
+  // the repository has them. The host's login, which the failed-attempt count
+  // filters by, is read now so a token that can't read it fails before any work.
+  ensureLabels();
+  cacheHostLogin();
+
+  // Release the labels this run holds however the process ends (see
+  // lib/building.mts).
+  installBuildingLabelRelease(process);
+
+  // A run that crashed left sandcastle:building on the issue it was building.
+  // Only a label older than any real build is cleared, so a live run's stays.
+  for (const issueNumber of clearStaleBuildingLabels()) {
+    console.log(`  🧹 #${issueNumber}: cleared a stale ${BUILDING_LABEL} label left by a run that didn't finish.`);
+  }
+
+  startedUp = true;
+
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // No new round once the budget has passed or the usage limit was hit.
     const stopReason = runLimits.stopReason();
@@ -358,6 +387,9 @@ try {
     for (const line of summary.lines) {
       console.log(line);
     }
+    for (const entry of roundOutcomes(work, settled)) {
+      outcomeReport.record(entry);
+    }
 
     if (summary.stop !== undefined) {
       // Nothing reached a PR, so the next plan would pick the same issues and
@@ -367,23 +399,28 @@ try {
       break;
     }
   }
+  // A loop that ended on the time budget or the usage limit (no new round,
+  // or a build that stopped) stopped rather than finished.
+  const limitReason = runLimits.stopReason();
+  ending = limitReason === undefined ? { kind: "finished" } : { kind: "stopped", reason: limitReason };
 } catch (error) {
   if (!(error instanceof UncountedStopError)) throw error;
+  ending = { kind: "stopped", reason: error.message };
   console.log(`\n⏹ Stopping the run cleanly: ${error.message}. Nothing more starts; the next run picks the work up.`);
 } finally {
   console.log("\nToken usage by role:");
   const lines = usageReport.lines();
   console.log(lines.length > 0 ? lines.join("\n") : "  (no role ran)");
 
-  // Only logged here. Ending the run red on a hand-back is the trigger
-  // workflow's final step (#82), reading the list #81 writes to
-  // .sandcastle/logs/handbacks.json; exiting non-zero here would make a local
-  // run that hands something back look like a crash.
+  // Only logged and written here. Ending the run red on a hand-back is the
+  // trigger workflow's final step (#82), reading the list written to
+  // .sandcastle/logs/handbacks.json below; exiting non-zero here would make a
+  // local run that hands something back look like a crash.
   const handBacks = handBackReport.items();
   if (handBacks.length > 0) {
     console.log("\nHanded back to a human:");
-    for (const { target, label, reason } of handBacks) {
-      console.log(`  ${target}: ${label} (${reason})`);
+    for (const { kind, number, label, reason } of handBacks) {
+      console.log(`  ${kind} #${number}: ${label} (${reason})`);
     }
   }
 
@@ -396,6 +433,38 @@ try {
       console.log(`  PR #${pr}: ${author ?? "a deleted account"} (${url})`);
     }
   }
+
+  // writeRunReport never throws, so the run's own error, if any, still
+  // reaches the process.
+  const summary = renderSummary({
+    queue: describeQueueScope(scope),
+    repo: reportRepo(),
+    ending,
+    outcomes: outcomeReport.items(),
+    handBacks,
+    waitingPrs: waitingPrReport.items(),
+    humanThreads,
+    usage: usageReport.totals(),
+  });
+  writeRunReport(summary, handBacks);
+  console.log(`\nRun report: ${REPORT_DIR}/summary.md`);
 }
 
 console.log("\nAll done.");
+
+// The repository the run report links to: GitHub Actions names it, and a
+// local run asks gh, but only once startup has pinned every git command's
+// environment (startedUp): asking before then would run gh, which reads git
+// remotes, before protectHostGit() has ruled out a planted commondir file.
+// Undefined when neither can, since gh may be what failed, or startup hasn't
+// finished, and the report then names its issues and PRs unlinked.
+function reportRepo(): string | undefined {
+  if (!startedUp) {
+    return process.env.GITHUB_REPOSITORY;
+  }
+  try {
+    return process.env.GITHUB_REPOSITORY || repoName();
+  } catch {
+    return undefined;
+  }
+}

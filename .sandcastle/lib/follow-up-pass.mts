@@ -59,7 +59,7 @@ import { plainText, withoutReferences } from "./intake.mts";
 import { runLimits, type RunLimits } from "./limits.mts";
 import { followUpPromptArgs, gateFixerPromptArgs } from "./prompts.mts";
 import { ownerCheck, type IsOwner } from "./queue.mts";
-import { humanThreadReport, type HumanThreadEntry } from "./report.mts";
+import { humanThreadReport, outcomeReport, type HumanThreadEntry, type OutcomeEntry, type OutcomeReport } from "./report.mts";
 import { containsSandboxSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
@@ -451,6 +451,22 @@ export type PassOutcome =
   | { kind: "passed"; pushed: string | undefined }
   | { kind: "push-failed"; error: string }
   | { kind: "gave-up"; reason: string };
+
+// `target`'s entry for the run report (lib/report.mts), or undefined for a
+// pass that was skipped or gave up: a gave-up pass's hand-back already makes
+// a row (the hand-back's own), and a skipped PR touched nothing this round.
+export function passOutcomeEntry(target: PassTarget, outcome: PassOutcome): OutcomeEntry | undefined {
+  const pr = { kind: "pr", number: target.number, outcome: "follow-up pass" } as const;
+  switch (outcome.kind) {
+    case "passed":
+      return { ...pr, detail: outcome.pushed === undefined ? "nothing needed pushing" : `pushed ${outcome.pushed.slice(0, 7)}` };
+    case "push-failed":
+      return { ...pr, detail: "its push failed; see the run log; swept again next round" };
+    case "gave-up":
+    case "skipped":
+      return undefined;
+  }
+}
 
 // What runPass needs from outside the pass itself; tests pass a stub. The
 // live wiring sits at the bottom of this module.
@@ -1180,13 +1196,16 @@ function answerThreads(actions: readonly ThreadAction[], host: PassHost, log: (l
 // every pass has settled, the first UncountedStopError among them (a usage
 // or time-budget stop from the follow-up role or the gate-fixer) is
 // rethrown, so main.mts's catch ends the run cleanly rather than the round
-// carrying on as if nothing had stopped it. Returns one outcome per target,
-// in order; a PR that wasn't passed on is "skipped".
+// carrying on as if nothing had stopped it. Each settled pass reaches
+// `report` first (passOutcomeEntry, or "stopped" for a stop), so a stop
+// doesn't lose the round's rows. Returns one outcome per target, in order; a
+// PR that wasn't passed on is "skipped".
 export async function followUpPassPhase(
   targets: readonly PassTarget[],
   issues: readonly SandcastleIssue[],
   base: string,
   host: PassHost = livePassHost,
+  report: OutcomeReport = outcomeReport,
 ): Promise<PassOutcome[]> {
   const byNumber = new Map(issues.map((issue) => [issue.number, issue]));
   const outcomes: PassOutcome[] = targets.map(() => ({ kind: "skipped", reason: "not started" }));
@@ -1215,13 +1234,18 @@ export async function followUpPassPhase(
     const target = targets[index]!;
     if (result.status === "fulfilled") {
       outcomes[index] = result.value;
+      const entry = passOutcomeEntry(target, result.value);
+      if (entry !== undefined) report.record(entry);
       continue;
     }
+    const pr = { kind: "pr", number: target.number } as const;
     if (result.reason instanceof UncountedStopError) {
       stop ??= result.reason;
       host.log(`  ⏹ PR #${target.number}: the follow-up pass stopped uncounted: ${result.reason.message}`);
+      report.record({ ...pr, outcome: "stopped", detail: result.reason.message });
     } else {
       host.log(`  ✗ PR #${target.number}: the follow-up pass failed, so it's swept again next round: ${result.reason}`);
+      report.record({ ...pr, outcome: "follow-up pass", detail: "the pass failed; see the run log" });
     }
     outcomes[index] = { kind: "skipped", reason: `the pass threw: ${result.reason}` };
   }

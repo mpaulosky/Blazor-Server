@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { endOf } from "./checkpoint.mts";
 import { COPILOT_REVIEWER, QUEUE_LABEL, SANDCASTLE_LABELS, type QueueScope, type SandcastleLabel } from "./config.mts";
 import type { CheckState, SweepPullRequest } from "./follow-up.mts";
-import { handBackReport, type HandBackReport } from "./report.mts";
+import { handBackReport, targetUrl, type HandBackReport } from "./report.mts";
 import { sh } from "./shell.mts";
 
 let repo: string | undefined;
@@ -364,7 +364,7 @@ type SweepNode = {
   labels: Connection<{ name: string }>;
   reviewRequests: Connection<{ requestedReviewer: Login }>;
   reviews: Connection<{ author: Login; commit: { oid?: string } | null }>;
-  reviewThreads: Connection<{ isResolved: boolean; comments: Connection<{ author?: { __typename?: string } | null }> }>;
+  reviewThreads: Connection<{ isResolved: boolean; comments: Connection<{ author?: { __typename?: string; login?: string } | null }> }>;
   commits: Connection<{ commit: { oid?: string; statusCheckRollup: { contexts: Connection<CheckContext> } | null } | null }>;
   timelineItems: Connection<{ createdAt?: string; requestedReviewer?: Login }>;
 };
@@ -427,7 +427,7 @@ function sweepPullRequest(node: SweepNode): SweepPullRequest {
     threads: nodesOf(node.reviewThreads).map((thread) => {
       const first = nodesOf(thread.comments)[0];
       const author = first?.author;
-      return { resolved: thread.isResolved, byBot: author?.__typename === "Bot" };
+      return { resolved: thread.isResolved, byBot: author?.__typename === "Bot", author: authorLogin(author) };
     }),
     checks: nodesOf(contexts).map(checkState),
     copilotRequestedAt: nodesOf(node.timelineItems)
@@ -1264,5 +1264,5 @@ export function handBack(
   // the work stays in the queue, rather than leaving it with no explanation.
   ghWithStderr(run, [target.kind, "comment", number, "--repo", repo, "--body-file", "-"], body);
   ghWithStderr(run, [target.kind, "edit", number, "--repo", repo, "--add-label", label, ...removeReady]);
-  report.record({ target: `${target.kind} #${target.number}`, label, reason });
+  report.record({ kind: target.kind, number: target.number, label, reason, url: targetUrl(repo, target) });
 }

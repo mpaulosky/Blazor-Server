@@ -49,7 +49,7 @@ import {
   type TimestampedComment,
   updatePullRequestBranch,
 } from "./github.mts";
-import { HandBackReport } from "./report.mts";
+import { HandBackReport, targetUrl } from "./report.mts";
 
 describe("ownerApproved", () => {
   // An issue carrying `comments`, each an [author, body] pair.
@@ -843,7 +843,9 @@ describe("handBack", () => {
     assert.deepEqual(calls[0]!.args, ["issue", "comment", "69", "--repo", "o/r", "--body-file", "-"]);
     assert.equal(calls[0]!.input, "Giving up.");
     assert.deepEqual(calls[1]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-human", "--remove-label", "sandcastle:ready"]);
-    assert.deepEqual(report.items(), [{ target: "issue #69", label: "sandcastle:needs-human", reason: "two failed build attempts" }]);
+    assert.deepEqual(report.items(), [
+      { kind: "issue", number: 69, label: "sandcastle:needs-human", reason: "two failed build attempts", url: targetUrl("o/r", { kind: "issue", number: 69 }) },
+    ]);
   });
 
   // The comment explains the hand-back, so it goes first: if GitHub rejects
@@ -881,7 +883,9 @@ describe("handBack", () => {
     assert.deepEqual(calls[0]!.args, ["pr", "comment", "17", "--repo", "o/r", "--body-file", "-"]);
     assert.deepEqual(calls[1]!.args, ["pr", "edit", "17", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
     assert.equal(calls[0]!.input, "Giving up on this PR.");
-    assert.deepEqual(report.items(), [{ target: "pr #17", label: "sandcastle:needs-human", reason: "follow-up gave up" }]);
+    assert.deepEqual(report.items(), [
+      { kind: "pr", number: 17, label: "sandcastle:needs-human", reason: "follow-up gave up", url: targetUrl("o/r", { kind: "pr", number: 17 }) },
+    ]);
   });
 });
 
@@ -1047,8 +1051,8 @@ describe("openPullRequestsForSweep", () => {
     assert.deepEqual(pr!.reviewRequests, [COPILOT_REVIEWER]);
     assert.deepEqual(pr!.reviews, [{ author: COPILOT_REVIEWER, commitOid: "a".repeat(40) }]);
     assert.deepEqual(pr!.threads, [
-      { resolved: false, byBot: true },
-      { resolved: false, byBot: false },
+      { resolved: false, byBot: true, author: "github-advanced-security[bot]" },
+      { resolved: false, byBot: false, author: "reviewer" },
     ]);
     assert.deepEqual(pr!.checks, [{ name: "build", completed: true, green: true, completedAt: "2026-10-01T00:00:00Z" }]);
     assert.equal(pr!.truncated, false);

@@ -9,9 +9,11 @@ import {
   giveUpComment,
   isGateCovered,
   parseVerdicts,
+  passOutcomeEntry,
   passSummaryComment,
   planRedCi,
   type PassHost,
+  type PassOutcome,
   type PassReport,
   replyBody,
   runPass,
@@ -24,7 +26,7 @@ import {
 } from "./follow-up-pass.mts";
 import type { HeadCheck, ReviewThread, SandcastleIssue } from "./github.mts";
 import type { IsOwner } from "./queue.mts";
-import type { HumanThreadEntry } from "./report.mts";
+import { OutcomeReport, type HumanThreadEntry } from "./report.mts";
 import { RunLimits } from "./limits.mts";
 
 const ISSUE_NUMBER = 50;
@@ -1269,6 +1271,54 @@ describe("runPass", () => {
 // followUpPassPhase
 // ---------------------------------------------------------------------------
 
+// AC: every PR a follow-up pass touched reaches the run report with its outcome.
+describe("passOutcomeEntry", () => {
+  it("names a passed pass's pushed commit, abbreviated", () => {
+    const outcome: PassOutcome = { kind: "passed", pushed: "a".repeat(40) };
+
+    assert.deepEqual(passOutcomeEntry(passTarget(), outcome), {
+      kind: "pr",
+      number: PR_NUMBER,
+      outcome: "follow-up pass",
+      detail: `pushed ${"a".repeat(7)}`,
+    });
+  });
+
+  it("says nothing needed pushing when a passed pass pushed nothing", () => {
+    const outcome: PassOutcome = { kind: "passed", pushed: undefined };
+
+    assert.deepEqual(passOutcomeEntry(passTarget(), outcome), {
+      kind: "pr",
+      number: PR_NUMBER,
+      outcome: "follow-up pass",
+      detail: "nothing needed pushing",
+    });
+  });
+
+  it("gives a neutral detail for a push-failed outcome, since the error isn't always a moved head", () => {
+    const outcome: PassOutcome = { kind: "push-failed", error: "non-fast-forward" };
+
+    assert.deepEqual(passOutcomeEntry(passTarget(), outcome), {
+      kind: "pr",
+      number: PR_NUMBER,
+      outcome: "follow-up pass",
+      detail: "its push failed; see the run log; swept again next round",
+    });
+  });
+
+  it("is undefined for a pass that gave up, since the hand-back already makes a row", () => {
+    const outcome: PassOutcome = { kind: "gave-up", reason: "it has had 2 follow-up passes already" };
+
+    assert.equal(passOutcomeEntry(passTarget(), outcome), undefined);
+  });
+
+  it("is undefined for a skipped pass, since nothing was touched", () => {
+    const outcome: PassOutcome = { kind: "skipped", reason: "its head moved since the sweep read it" };
+
+    assert.equal(passOutcomeEntry(passTarget(), outcome), undefined);
+  });
+});
+
 describe("followUpPassPhase", () => {
   const otherIssue: SandcastleIssue = { number: 51, title: "Tidy up the widget", body: "", labels: ["Sandcastle"], comments: [] };
   const targets = [passTarget(), passTarget({ number: 8, id: "PR_8", headRefName: "feature/51-tidy-widget", issueNumber: 51 })];
@@ -1311,6 +1361,22 @@ describe("followUpPassPhase", () => {
 
     assert.deepEqual(calls.unmarkBuilding.toSorted(), [ISSUE_NUMBER, 51]);
     assert.deepEqual(calls.commentOnPullRequest.map((comment) => comment.pr), [8]);
+  });
+
+  // Recorded before the rethrow, so a stop mid-round still shows up in the
+  // run report rather than being lost with the process exit.
+  it("records the stopped PR's outcome before rethrowing the UncountedStopError", async () => {
+    const stop = new UncountedStopError("usage limit reached");
+    const stoppingSandbox = sandboxFake({ roleFailing: ["follow-up"], roleFailWith: { "follow-up": stop } });
+    const { passHost } = passHostFake({ threads: [botThread()], containsBase: true, sandbox: stoppingSandbox });
+    const report = new OutcomeReport();
+
+    await assert.rejects(
+      () => followUpPassPhase([passTarget()], [issue], BASE, passHost, report),
+      (error: unknown) => error instanceof UncountedStopError,
+    );
+
+    assert.deepEqual(report.items(), [{ kind: "pr", number: PR_NUMBER, outcome: "stopped", detail: stop.message }]);
   });
 });
 

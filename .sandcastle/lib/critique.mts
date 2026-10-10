@@ -24,6 +24,7 @@ import {
   type SandcastleIssue,
 } from "./github.mts";
 import { critiquePromptArgs, type CritiquePromptArgs } from "./prompts.mts";
+import { outcomeReport, type OutcomeReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
 const critiqueSchema = z.object({
@@ -112,15 +113,17 @@ function wouldCycle(id: number, blocker: number, blockersOf: (number: number) =>
 
 // Apply the critique's verdicts and return the picks still to build this
 // round. Each applied defer adds a native link and one comment on the deferred
-// issue; keeps are only logged. A verdict is ignored, with a log line, when its
-// issue wasn't picked or already has a verdict, or when its blocker is missing,
-// closed, a pull request, or would create a cycle. A defer GitHub won't link is
-// ignored too: without the link the deferral wouldn't outlast the round.
+// issue, and reaches the run report as "deferred"; keeps are only logged. A
+// verdict is ignored, with a log line, when its issue wasn't picked or already
+// has a verdict, or when its blocker is missing, closed, a pull request, or
+// would create a cycle. A defer GitHub won't link is ignored too: without the
+// link the deferral wouldn't outlast the round.
 export function applyVerdicts(
   picks: SandcastleIssue[],
   verdicts: CritiqueVerdict[],
   github: CritiqueGitHub = liveGitHub,
   log: (line: string) => void = console.log,
+  report: OutcomeReport = outcomeReport,
 ): SandcastleIssue[] {
   const picked = new Set(picks.map((issue) => String(issue.number)));
   const judged = new Set<string>();
@@ -196,6 +199,7 @@ export function applyVerdicts(
     added.set(id, [...(added.get(id) ?? []), blocker]);
     judged.add(verdict.id);
     deferred.add(id);
+    report.record({ kind: "issue", number: id, outcome: "deferred", detail: `behind #${blocker}` });
     log(`  ⏸ The critique defers ${ref} behind #${blocker}: ${verdict.reason}`);
 
     try {
@@ -224,6 +228,7 @@ export async function critiqueRound(
   run: CritiqueRun = runCritique,
   github: CritiqueGitHub = liveGitHub,
   log: (line: string) => void = console.log,
+  report: OutcomeReport = outcomeReport,
 ): Promise<SandcastleIssue[]> {
   const [firstPick] = picks;
   if (!firstPick) return picks;
@@ -249,5 +254,5 @@ export async function critiqueRound(
     return [firstPick];
   }
 
-  return applyVerdicts(picks, verdicts, github, log);
+  return applyVerdicts(picks, verdicts, github, log, report);
 }

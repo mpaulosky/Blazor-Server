@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { ROLE_AGENTS, type Role } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import { RunLimits, runLimits, usageLimitLine } from "./limits.mts";
+import { MAX_CAUSE_DEPTH, RunLimits, runLimits, usageLimitLine } from "./limits.mts";
 import { usageReport } from "./report.mts";
 
 // The options a role fixes; callers supply everything else.
@@ -78,6 +78,33 @@ export async function runRoleInSandbox(
   );
   usageReport.record(role, result.iterations);
   return result;
+}
+
+// Exact names a role's own timeout carries: AbortSignal.timeout's
+// TimeoutError, the same wrapped in an Effect FiberFailure, and Sandcastle's
+// AgentIdleTimeoutError (by _tag, not name). A suffix match such as
+// /TimeoutError$/ would also catch undici's ConnectTimeoutError,
+// HeadersTimeoutError and BodyTimeoutError, which Node's fetch throws on a
+// host-side network timeout that has nothing to do with the role.
+const TIMEOUT_NAMES = new Set(["TimeoutError", "(FiberFailure) TimeoutError"]);
+const TIMEOUT_TAG = "AgentIdleTimeoutError";
+const TIMEOUT_MESSAGE = /aborted due to timeout|Agent idle for/;
+
+// Whether a role run's error is its own timeout: ROLE_AGENTS' timeoutMinutes
+// (AbortSignal.timeout's TimeoutError, which Sandcastle dies with, possibly
+// wrapped in an Effect FiberFailure) or Sandcastle's AgentIdleTimeoutError.
+// Reads name, _tag and message along the cause chain, MAX_CAUSE_DEPTH deep, as
+// lib/limits.mts#usageLimitLine does for a usage-limit line.
+export function isRoleTimeout(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && typeof current === "object" && current !== null; depth++) {
+    const { name, _tag, message } = current as { name?: unknown; _tag?: unknown; message?: unknown };
+    if (typeof name === "string" && TIMEOUT_NAMES.has(name)) return true;
+    if (_tag === TIMEOUT_TAG) return true;
+    if (typeof message === "string" && TIMEOUT_MESSAGE.test(message)) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 // Runs one role through `start`, refusing to start once `limits` say stop. A
