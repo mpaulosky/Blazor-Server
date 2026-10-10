@@ -2,6 +2,7 @@
 // from a single sandbox, so every role and the gate share the same worktree.
 // Nothing is merged locally: every change reaches main through a reviewed PR.
 
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
@@ -20,7 +21,7 @@ import {
 } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
-import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
+import { commentOnIssue, markerComments, openPullRequest, repoName, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
@@ -140,8 +141,10 @@ const BROKEN_COMMENT_OPEN = "<!\u200B--";
 // saying where the whole of it is (`path`, in the sandbox). designNoteIn
 // reads the note back.
 export function designComment(note: string, branch: string, path: string): string {
-  const cut = note.length > DESIGN_NOTE_LIMIT;
-  const kept = (cut ? note.slice(0, DESIGN_NOTE_LIMIT) : note).replaceAll("<!--", BROKEN_COMMENT_OPEN);
+  // Broken before it's measured, since each break adds a character (#230).
+  const broken = note.replaceAll("<!--", BROKEN_COMMENT_OPEN);
+  const cut = broken.length > DESIGN_NOTE_LIMIT;
+  const kept = cut ? cutAtCharacter(broken, DESIGN_NOTE_LIMIT) : broken;
   const longestRun = Math.max(0, ...(kept.match(/`+/g) ?? []).map((run) => run.length));
   const fence = "`".repeat(Math.max(3, longestRun + 1));
   return [
@@ -152,13 +155,39 @@ export function designComment(note: string, branch: string, path: string): strin
   ].join("\n\n");
 }
 
+// `text` cut to at most `limit` UTF-16 code units, without splitting a
+// surrogate pair: GitHub refuses a comment holding a lone surrogate.
+function cutAtCharacter(text: string, limit: number): string {
+  const cut = text.slice(0, limit);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
+
 // The architect's design note in a comment designComment wrote, as the
 // architect wrote it, for a re-run's prompt. A comment with no fence gives
-// its body without the marker.
+// its body without the marker. Line endings are normalised first: GitHub
+// stores a comment edited on github.com with CRLF (#230).
 export function designNoteIn(body: string): string {
+  body = body.replace(/\r\n?/g, "\n");
   const fenced = /^(`{3,})markdown\n([\s\S]*?)\n\1$/m.exec(body);
   if (!fenced) return body.replace(DESIGN_MARKER, "").trim();
   return fenced[2]!.replaceAll(BROKEN_COMMENT_OPEN, "<!--");
+}
+
+// The architect's latest design note on issue `issueNumber`, as it wrote it
+// (see designNoteIn), or undefined when it hasn't posted one. Only the host's
+// own comments count (markerComments): anyone can comment on a public issue,
+// and this goes straight into the architect's prompt. Scoped like the
+// failed-attempt count: a person who re-queues a handed-back issue may have
+// rewritten it, so the architect starts that issue afresh rather than build on
+// a design that went with the failed attempts.
+export function latestDesignNote(
+  issueNumber: number,
+  repo: string = repoName(),
+  run: typeof execFileSync = execFileSync,
+  poster?: string,
+): string | undefined {
+  const latest = markerComments(issueNumber, "sandcastle:needs-human", DESIGN_MARKER, repo, run, poster).at(-1);
+  return latest && designNoteIn(latest.body);
 }
 
 // An issue with the optional roles the planner picked for it (see
@@ -248,13 +277,7 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
-  // Scoped like the failed-attempt count: a person who re-queues a handed-back
-  // issue may have rewritten it, so the architect starts that issue afresh
-  // rather than build on a design that went with the failed attempts.
-  latestDesignNote: (issueNumber) => {
-    const latest = markerComments(issueNumber, "sandcastle:needs-human", DESIGN_MARKER).at(-1);
-    return latest && designNoteIn(latest.body);
-  },
+  latestDesignNote: (issueNumber) => latestDesignNote(issueNumber),
   markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
   unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
@@ -329,6 +352,7 @@ async function buildMarkedIssue(
   const commits: { sha: string }[] = [];
   const notPublished = { commits, prUrl: undefined, publishFailed: false };
   const log = (line: string) => host.log(`  #${issue.number} ${line}`);
+  const designNotePath = `.sandcastle/work/${issue.number}/design.md`;
 
   function developerPromptArgs(role: DeveloperRole): sandcastle.PromptArgs {
     switch (role) {
@@ -413,7 +437,7 @@ async function buildMarkedIssue(
   // symlink to a host file). A missing note or a failed comment is logged,
   // not a failed build: this build's roles still read the file itself.
   async function postDesignNote(): Promise<void> {
-    const path = `.sandcastle/work/${issue.number}/design.md`;
+    const path = designNotePath;
     const read = await sandbox.exec(`cat ${path} 2>/dev/null`);
     const note = read.exitCode === 0 ? read.stdout.trim() : "";
     if (note === "") {
@@ -454,6 +478,10 @@ async function buildMarkedIssue(
   }
 
   try {
+    // The worktree is named after the branch, so it may still hold an earlier
+    // round's design note, and every role follows the note when it exists:
+    // only this build's architect may have written it (#230).
+    await sandbox.exec(`rm -f ${designNotePath}`);
     if (issue.roles.includes("architect")) {
       if (!(await developerFinishes("architect"))) return notPublished;
       await postDesignNote();
