@@ -24,8 +24,9 @@ import { UncountedStopError } from "./errors.mts";
 import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, repoName, type SandcastleIssue } from "./github.mts";
-import { recordFailedAttempt } from "./handback.mts";
+import { handBackWorkflowChange as recordWorkflowHandBack, recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
+import { runLimits, type RunLimits } from "./limits.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
@@ -254,6 +255,13 @@ export type BuildHost = {
   // note), made safe to post on the public issue.
   publicError(error: unknown): string;
   log(line: string): void;
+  // The run's limits (#147): buildIssue runs every role through
+  // runRoleInSandbox(..., host.limits), and checks it before publishing.
+  limits: RunLimits;
+  // Hands the issue back with sandcastle:needs-human after a push GitHub
+  // refused for a .github/workflows/** change (lib/handback.mts#handBackWorkflowChange).
+  // `detail` is the publicError text of the push's error.
+  handBackWorkflowChange(issueNumber: number, branch: string, detail: string): void;
 };
 
 // An error's text as it can go on a public issue: no colour codes, no
@@ -264,6 +272,15 @@ export function publicErrorText(text: string, holdsSecret: (text: string) => boo
     .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi, "$1***@")
     .trim();
   return holdsSecret(cleaned) ? "(This text isn't shown: it looked like it held a secret. See the run log.)" : cleaned;
+}
+
+// Whether a failed push was GitHub refusing a change to a workflow file
+// because the token lacks the Workflows permission. Like isGitHubServerError,
+// it reads only the output after "failed:\n". Matches "a Personal Access
+// Token", "an OAuth App" and "a GitHub App", and both the singular
+// "permission" and plural "permissions" GitHub uses.
+export function isWorkflowPushRejection(error: unknown): boolean {
+  throw new Error("Not implemented");
 }
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
@@ -297,6 +314,8 @@ const liveHost: BuildHost = {
   publish,
   worktreeProblems,
   log: console.log,
+  limits: runLimits,
+  handBackWorkflowChange: (issueNumber, branch, detail) => recordWorkflowHandBack(issueNumber, branch, detail),
 };
 
 // The branch comes from prepareBranches, which has already fetched it when it

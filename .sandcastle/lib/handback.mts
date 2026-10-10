@@ -123,3 +123,28 @@ export function recordFailedAttempt(
     report,
   );
 }
+
+// The comment for a push GitHub refused because it touches
+// .github/workflows/**. Says Sandcastle's token has no Workflows permission,
+// so a person must make that change; that `branch` keeps its commits; and
+// how to re-queue the issue: make the workflow change in its own PR, drop it
+// from the branch, then remove sandcastle:needs-human. Ends with `detail` in
+// a fence longer than any backtick run in it, as the publish-failure comment
+// does. No BUILD_FAILED_MARKER: this isn't a failed attempt.
+export function workflowHandBackComment(branch: string, detail: string): string {
+  throw new Error("Not implemented");
+}
+
+// handBack({ kind: "issue", number }, "sandcastle:needs-human", `a push to
+// ${branch} touched .github/workflows/**`, workflowHandBackComment(branch,
+// detail), run, repo, report).
+export function handBackWorkflowChange(
+  issueNumber: number,
+  branch: string,
+  detail: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  report: HandBackReport = handBackReport,
+): void {
+  throw new Error("Not implemented");
+}

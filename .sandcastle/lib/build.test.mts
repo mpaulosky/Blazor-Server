@@ -8,6 +8,7 @@ import {
   designNoteIn,
   latestDesignNote,
   isGitHubServerError,
+  isWorkflowPushRejection,
   publicErrorText,
   publish,
   UncountedStopError,
@@ -22,6 +23,7 @@ import {
   PUBLISH_RETRY_ATTEMPTS,
   type OptionalRole,
 } from "./config.mts";
+import { RunLimits } from "./limits.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [], roles: [] as OptionalRole[] };
 
@@ -134,6 +136,7 @@ function host(
   const designNoteCalls: number[] = [];
   const publishCalls: { reviewed: boolean; docsFailed: boolean }[] = [];
   const startFromMainCalls: { issueNumber: number; branch: string; base: string }[] = [];
+  const handBackWorkflowChangeCalls: { issueNumber: number; branch: string; detail: string }[] = [];
   const buildHost: BuildHost = {
     createSandbox: async () => {
       order.push("create");
@@ -187,10 +190,14 @@ function host(
     },
     worktreeProblems: () => worktreeProblems,
     publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), () => false),
+    limits: new RunLimits(),
+    handBackWorkflowChange: (issueNumber, failureBranch, detail) => {
+      handBackWorkflowChangeCalls.push({ issueNumber, branch: failureBranch, detail });
+    },
   };
   return {
     steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
-    order, buildingCalls, designNoteCalls, publishCalls, workCommands, startFromMainCalls,
+    order, buildingCalls, designNoteCalls, publishCalls, workCommands, startFromMainCalls, handBackWorkflowChangeCalls,
   };
 }
 
@@ -532,6 +539,77 @@ describe("buildIssue publishing", () => {
     assert.ok(!steps.includes("close"));
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /no longer points at this repository/);
+  });
+});
+
+// #147: a role run that hits Claude's usage limit, or a build the time
+// budget has already stopped, must end the build uncounted rather than
+// treating it as a failed attempt or publishing unreviewed work.
+describe("buildIssue and the usage limit", () => {
+  it("rejects with UncountedStopError, without recording a failed attempt, commenting or publishing, when the tester hits Claude's usage limit", async () => {
+    const usageLimitError = new Error("claude-code exited with code 1:\nClaude AI usage limit reached|1760000000");
+    const { comments, recordBuildFailureCalls, pushed, order, buildHost } = host([], {
+      failing: ["tester"],
+      failWith: { tester: usageLimitError },
+    });
+
+    await assert.rejects(
+      () => buildIssue(issue, branch, base, buildHost),
+      (error: unknown) => error instanceof UncountedStopError,
+    );
+
+    assert.deepEqual(comments, []);
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.deepEqual(pushed, []);
+    assert.ok(order.includes("close"), order.join(", "));
+    assert.ok(order.includes("unmark"), order.join(", "));
+  });
+
+  it("rejects with UncountedStopError and doesn't publish once the run's limits have recorded a usage-limit stop", async () => {
+    const { pushed, buildHost } = host([0, 0]);
+    buildHost.limits.hitUsageLimit("usage limit reached during the reviewer run");
+
+    await assert.rejects(
+      () => buildIssue(issue, branch, base, buildHost),
+      (error: unknown) => error instanceof UncountedStopError,
+    );
+
+    assert.deepEqual(pushed, []);
+  });
+});
+
+// #147: a push GitHub refuses because it touches .github/workflows/** without
+// Workflows permission needs a person, not a retry and not a generic
+// publish-failure comment.
+describe("buildIssue publishing a workflow file", () => {
+  const workflowRejection =
+    "git push --quiet origin abc:refs/heads/x failed:\n ! [remote rejected] abc -> x (refusing to allow a GitHub App to " +
+    "create or update workflow `.github/workflows/ci.yml` without `workflows` permission)";
+
+  it("hands the issue back instead of posting the generic publish-failure comment", async () => {
+    const { comments, recordBuildFailureCalls, handBackWorkflowChangeCalls, buildHost } = host([0, 0], {
+      publishError: workflowRejection,
+    });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(handBackWorkflowChangeCalls.length, 1);
+    assert.equal(handBackWorkflowChangeCalls[0]!.issueNumber, issue.number);
+    assert.equal(handBackWorkflowChangeCalls[0]!.branch, branch);
+    assert.match(handBackWorkflowChangeCalls[0]!.detail, /refusing to allow/);
+    assert.deepEqual(comments, []);
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.equal(result.prUrl, undefined);
+    assert.equal(result.publishFailed, true);
+  });
+
+  it("still resolves when the hand-back for a workflow-file rejection itself fails", async () => {
+    const { buildHost } = host([0, 0], { publishError: workflowRejection });
+    buildHost.handBackWorkflowChange = () => {
+      throw new Error("gh issue edit failed: HTTP 502");
+    };
+
+    await assert.doesNotReject(() => buildIssue(issue, branch, base, buildHost));
   });
 });
 
@@ -1068,6 +1146,55 @@ describe("isGitHubServerError", () => {
     const output = "gh pr create --title Show a page on Internal Server Error or HTTP 503 failed:\nHTTP 422: Validation Failed";
 
     assert.equal(isGitHubServerError(new Error(output)), false);
+  });
+});
+
+// #147: a push GitHub refused because it touches .github/workflows/** without
+// Workflows permission must hand the issue back, not be treated as a
+// transient server error or a generic publish failure.
+describe("isWorkflowPushRejection", () => {
+  it("recognises git's real output for a Personal Access Token without the workflow scope", () => {
+    const output =
+      "git push --quiet origin abc:refs/heads/feature/69-run-the-gate failed:\n" +
+      " ! [remote rejected] abc -> feature/69-run-the-gate (refusing to allow a Personal Access Token to create or " +
+      "update workflow `.github/workflows/ci.yml` without `workflow` scope)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), true);
+  });
+
+  it("recognises the rejection for an OAuth App", () => {
+    const output =
+      "git push failed:\n ! [remote rejected] abc -> x (refusing to allow an OAuth App to create or update workflow " +
+      "`.github/workflows/ci.yml` without `workflow` scope)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), true);
+  });
+
+  it("recognises the rejection for a GitHub App", () => {
+    const output =
+      "git push failed:\n ! [remote rejected] abc -> x (refusing to allow a GitHub App to create or update workflow " +
+      "`.github/workflows/ci.yml` without `workflows` permission)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), true);
+  });
+
+  it("doesn't take a non-fast-forward rejection for a workflow rejection", () => {
+    const output = "git push --quiet origin abc:refs/heads/x failed:\n ! [rejected] abc -> x (non-fast-forward)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), false);
+  });
+
+  it("doesn't take a server error for a workflow rejection", () => {
+    const output = "git push failed:\nremote: Internal Server Error";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), false);
+  });
+
+  it("reads only the command's output, not a command line that names a workflow branch", () => {
+    const output =
+      "git push --quiet origin abc:refs/heads/feature/5-workflow-tweak failed:\n ! [rejected] abc -> x (non-fast-forward)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), false);
   });
 });
 
