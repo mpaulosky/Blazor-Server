@@ -312,13 +312,12 @@ export function openIssuesWithComment(
       "--json", "number", "--jq", "[.[].number]",
     ]),
   ) as number[];
-  return matches.filter((number) =>
-    (
-      jsonLines(
-        ghWithStderr(run, ["api", "--paginate", `repos/${repo}/issues/${number}/comments`, "--jq", ".[] | {body, author: .user.login} | @json"]),
-      ) as { body: string; author: string }[]
-    ).some((comment) => comment.author === poster && comment.body.includes(marker)),
-  );
+  return matches.filter((number) => {
+    const comments = jsonLines(
+      ghWithStderr(run, ["api", "--paginate", `repos/${repo}/issues/${number}/comments`, "--jq", ".[] | {body, author: .user.login} | @json"]),
+    ) as { body: string; author: string }[];
+    return comments.some((comment) => comment.author === poster && comment.body.includes(marker));
+  });
 }
 
 export function commentOnIssue(

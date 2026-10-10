@@ -274,7 +274,8 @@ function applySplit(
   const children: SplitChild[] = [];
   try {
     for (const draft of drafted) {
-      const child = { number: splitGithub.createChild(draft.title.trim(), draft.body, labels), title: draft.title.trim() };
+      const title = draft.title.trim();
+      const child = { number: splitGithub.createChild(title, draft.body, labels), title };
       const previous = children.at(-1);
       children.push(child);
       splitGithub.addSubIssue(number, child.number);
@@ -284,7 +285,7 @@ function applySplit(
     splitGithub.comment(number, umbrellaComment(verdict, children));
   } catch (error) {
     if (children.length === 0) throw error;
-    log(`  ⚠ Splitting #${number} failed after creating ${children.map((child) => `#${child.number}`).join(", ")}: ${error}`);
+    log(`  ⚠ Splitting #${number} failed after creating ${issueRefs(children)}: ${error}`);
     handBack(
       { kind: "issue", number },
       "sandcastle:needs-human",
@@ -297,10 +298,14 @@ function applySplit(
     return `🛑 Intake's split of #${number} failed partway, so it's handed back with sandcastle:needs-human.`;
   }
   const bugNote = verdict.bug ? " (a bug)" : "";
-  return `✂ Intake splits #${number} into ${children.map((child) => `#${child.number}`).join(", ")}${bugNote}: ${verdict.reason}`;
+  return `✂ Intake splits #${number} into ${issueRefs(children)}${bugNote}: ${verdict.reason}`;
 }
 
 type SplitChild = { number: number; title: string };
+
+function issueRefs(children: readonly SplitChild[]): string {
+  return children.map((child) => `#${child.number}`).join(", ");
+}
 
 // Why a split verdict's drafted children can't be applied, or undefined when
 // they can. Each child must carry acceptance criteria, since a child without

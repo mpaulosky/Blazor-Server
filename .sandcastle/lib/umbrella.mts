@@ -10,9 +10,8 @@
 // open too: its own work isn't finished either way.
 // ---------------------------------------------------------------------------
 
-import { execFileSync } from "node:child_process";
 import { UMBRELLA_MARKER } from "./config.mts";
-import { closeIssueAsCompleted, openIssuesWithComment, repoName, subIssuesOf, type SubIssue } from "./github.mts";
+import { closeIssueAsCompleted, openIssuesWithComment, subIssuesOf, type SubIssue } from "./github.mts";
 
 // The GitHub reads and writes closing an umbrella needs; tests pass a stub.
 export type UmbrellaGitHub = {
@@ -25,7 +24,7 @@ export type UmbrellaGitHub = {
 };
 
 export const liveUmbrellaGitHub: UmbrellaGitHub = {
-  openUmbrellas: () => openIssuesWithComment(UMBRELLA_MARKER, execFileSync, repoName()),
+  openUmbrellas: () => openIssuesWithComment(UMBRELLA_MARKER),
   subIssues: subIssuesOf,
   closeCompleted: closeIssueAsCompleted,
 };
