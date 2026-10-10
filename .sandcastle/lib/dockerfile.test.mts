@@ -18,7 +18,11 @@ describe("the sandbox image's linters", () => {
       const pinned = setting(read("scripts/gate.sh"), name);
 
       assert.ok(pinned, `scripts/gate.sh doesn't set ${name}`);
-      assert.equal(setting(read(".sandcastle/Dockerfile"), name), pinned);
+      assert.equal(
+        setting(read(".sandcastle/Dockerfile"), name),
+        pinned,
+        `Set ${name} in .sandcastle/Dockerfile to ${pinned}, and its SHA-256s to that release's`,
+      );
     });
   }
 });
