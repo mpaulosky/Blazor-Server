@@ -16,9 +16,11 @@ import {
   type ContentEdit,
   createIssue,
   ensureLabels,
+  failedCheckLogs,
   type GhIssue,
   handBack,
   hasLabel,
+  headChecksOf,
   hostLogin,
   issueEvents,
   issueLabels,
@@ -36,6 +38,7 @@ import {
   removeIssueLabel,
   replyToReviewThread,
   requestCopilotReview,
+  rerunFailedChecksOnce,
   resolveReviewThread,
   reviewThreadsOf,
   sameRepoBlockers,
@@ -1165,6 +1168,146 @@ describe("reviewThreadsOf", () => {
     const run = (() => JSON.stringify({ data: { repository: { pullRequest: null } } })) as unknown as typeof execFileSync;
 
     assert.throws(() => reviewThreadsOf(42, run, "o/r"), /no such pull request|pull request 42/i);
+  });
+});
+
+// #79: a follow-up pass reads a PR's head checks with the GitHub Actions run
+// behind each, so it can re-run a flaky one or read a failed one's log.
+describe("head checks and their runs", () => {
+  const HEAD_OID = "a".repeat(40);
+  type Context = Record<string, unknown>;
+  const checkRun = (name: string, conclusion: string, runId: number | null): Context => ({
+    __typename: "CheckRun",
+    name,
+    status: "COMPLETED",
+    conclusion,
+    completedAt: "2026-10-10T09:00:00Z",
+    checkSuite: { workflowRun: runId === null ? null : { databaseId: runId } },
+  });
+  const page = (contexts: Context[], options: { oid?: string; hasNextPage?: boolean } = {}) =>
+    JSON.stringify({
+      data: {
+        repository: {
+          pullRequest: {
+            headRefOid: HEAD_OID,
+            commits: {
+              nodes: [
+                {
+                  commit: {
+                    oid: options.oid ?? HEAD_OID,
+                    statusCheckRollup: { contexts: { pageInfo: { hasNextPage: options.hasNextPage ?? false }, nodes: contexts } },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+  // A gh stub answering the checks query with `contexts`, each run's attempt
+  // from `attempts`, and each run's failed-job log from `logs`; it records
+  // every call.
+  const gh = (contexts: Context[], attempts: Record<number, number> = {}, logs: Record<number, string> = {}) => {
+    const calls: string[][] = [];
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push([...args]);
+      if (args[0] === "api" && args[1] === "graphql") return page(contexts);
+      const attempt = /^repos\/o\/r\/actions\/runs\/(\d+)$/.exec(args[1] ?? "");
+      if (args[0] === "api" && attempt !== null) return `${attempts[Number(attempt[1])] ?? 1}\n`;
+      if (args[0] === "run" && args[1] === "rerun") return "";
+      if (args[0] === "run" && args[1] === "view") return logs[Number(args[2])] ?? "";
+      throw new Error(`unexpected gh call: ${args.join(" ")}`);
+    }) as unknown as typeof execFileSync;
+    return { calls, run };
+  };
+
+  describe("headChecksOf", () => {
+    it("normalises each check on the PR's head with the Actions run behind it, and a status with none", () => {
+      const { run } = gh([
+        checkRun("Build Solution", "FAILURE", 11),
+        { __typename: "StatusContext", context: "ci/legacy", state: "SUCCESS", createdAt: "2026-10-10T09:00:00Z" },
+      ]);
+
+      const { headRefOid, checks } = headChecksOf(7, run, "o/r");
+
+      assert.equal(headRefOid, HEAD_OID);
+      assert.deepEqual(checks, [
+        { name: "Build Solution", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z", runId: 11 },
+        { name: "ci/legacy", completed: true, green: true, completedAt: "2026-10-10T09:00:00Z", runId: undefined },
+      ]);
+    });
+
+    it("throws when the checks are truncated, rather than deciding from part of them", () => {
+      const run = (() => page([], { hasNextPage: true })) as unknown as typeof execFileSync;
+
+      assert.throws(() => headChecksOf(7, run, "o/r"), /truncated/i);
+    });
+
+    it("throws when the checks read are on a commit other than the PR's head", () => {
+      const run = (() => page([], { oid: "b".repeat(40) })) as unknown as typeof execFileSync;
+
+      assert.throws(() => headChecksOf(7, run, "o/r"), /head/i);
+    });
+  });
+
+  describe("rerunFailedChecksOnce", () => {
+    it("re-runs the failed jobs of a run not re-run before, once per run, and reports its checks as running", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21), checkRun("Tests: B", "FAILURE", 21)]);
+
+      const states = rerunFailedChecksOnce(7, ["Tests: A", "Tests: B"], run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "rerun", "21", "--failed", "--repo", "o/r"]],
+      );
+      assert.deepEqual(
+        states.map((state) => [state.name, state.completed]),
+        [
+          ["Tests: A", false],
+          ["Tests: B", false],
+        ],
+      );
+    });
+
+    it("doesn't re-run a run already on a later attempt: its checks are reported as they stand", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21)], { 21: 2 });
+
+      const states = rerunFailedChecksOnce(7, ["Tests: A"], run, "o/r");
+
+      assert.ok(!calls.some((args) => args[0] === "run" && args[1] === "rerun"), "nothing was re-run");
+      assert.deepEqual(states, [{ name: "Tests: A", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z" }]);
+    });
+
+    it("throws for a check with no Actions run to re-run", () => {
+      const { run } = gh([checkRun("Tests: A", "FAILURE", null)]);
+
+      assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], run, "o/r"), /Tests: A/);
+    });
+  });
+
+  describe("failedCheckLogs", () => {
+    it("reads each run's failed-job log once, under a header naming its checks", () => {
+      const { calls, run } = gh(
+        [checkRun("Analyze (csharp)", "FAILURE", 31), checkRun("Analyze (actions)", "FAILURE", 31)],
+        {},
+        { 31: "##[error] CS8600" },
+      );
+
+      const log = failedCheckLogs(7, ["Analyze (csharp)", "Analyze (actions)"], run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "view", "31", "--log-failed", "--repo", "o/r"]],
+      );
+      assert.match(log, /Analyze \(csharp\), Analyze \(actions\)/);
+      assert.match(log, /##\[error\] CS8600/);
+    });
+
+    it("says a check has no Actions log rather than failing the pass", () => {
+      const { run } = gh([checkRun("CodeQL", "FAILURE", null)]);
+
+      assert.match(failedCheckLogs(7, ["CodeQL"], run, "o/r"), /CodeQL[\s\S]*no GitHub Actions/);
+    });
   });
 });
 

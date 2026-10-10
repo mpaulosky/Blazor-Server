@@ -119,10 +119,9 @@ that human resolves them. That is deliberate: a human who comments has joined th
    posts one pass-summary PR comment carrying `<!-- sandcastle:follow-up -->`. GitHub's `resolveReviewThread` takes only the thread id, so the resolution is named in the reply's first
    line and in the pass summary, not on the thread. A `declined` verdict with `"invalid": true` resolves as `INVALID`, any other as `WONT_FIX`.
 
-Only a conflict with `main` (`DIRTY`) or an unresolved bot thread starts a pass; an owner thread is answered only alongside one of them. A pass merges `main` in only for
-a conflict: a PR that's merely behind is updated by the sweep once it's settled. A PR whose only problem is red CI gets no pass and isn't counted yet: the red-CI half of a
-pass comes with [#79](https://github.com/mpaulosky/Blazor-Server/issues/79). When `main` merges in cleanly and no thread is left for the role, the follow-up role doesn't
-run: the host gates and pushes the merge itself.
+Only a conflict with `main` (`DIRTY`), an unresolved bot thread or a red check starts a pass; an owner thread is answered only alongside one of them. A pass merges `main` in
+only for a conflict: a PR that's merely behind is updated by the sweep once it's settled. When `main` merges in cleanly and nothing is left for the role, the follow-up role
+doesn't run: the host gates and pushes the merge itself.
 
 **Thread rules.** Follow-up acts on bot threads (Copilot, CodeQL) and the repository owner's threads, but resolves only bot threads. Threads anyone else opens never reach the role; they
 stay open for the owner, and the job summary lists them. The owner resolves their own threads, because that's their sign-off. It may decline a
@@ -130,9 +129,11 @@ bot thread without a change only because the suggestion contradicts the issue's 
 the issue's scope. Outdated threads whose concern the current code handles are resolved `ADDRESSED`. When it disagrees with an owner thread, it replies with its reasoning and leaves the
 thread open.
 
-**Red CI.** The gate decides. If `scripts/gate.sh` is red on the head, the gate-fixer takes it. If the gate is green but a gate-covered CI check (build, test, lint) is red, the host
-re-runs the failed jobs once as flaky. If a check the gate doesn't cover (CodeQL) is red, its `gh run view --log-failed` output goes to the follow-up role. Pending checks mean the PR
-waits for a later sweep.
+**Red CI.** The gate decides, run on the head before anything changes it. If `scripts/gate.sh` is red on the head, the gate-fixer takes it. If the gate is green but a gate-covered
+CI check (build, test, lint) is red, the host re-runs the failed jobs once as flaky, unless the pass pushed, which starts CI afresh anyway. If a check the gate doesn't cover
+(CodeQL) is red, its `gh run view --log-failed` output goes to the follow-up role. Pending checks mean the PR waits for a later sweep. The host doesn't wait for a re-run: it
+starts one and the sweep waits for it like any running check. A run already on a later attempt has had its one re-run, so a check still red there hands the PR back
+([#79](https://github.com/mpaulosky/Blazor-Server/issues/79)).
 
 **Parallelism.** The host fetches every PR branch it will pass on serially, in one step before any pass starts, because concurrent fetches contend on the shared git ref lock (the reason
 `main.mts` already fetches `origin/main` once per round). Then passes for different PRs run with `Promise.allSettled`. The build phase starts after the sweep. The reviewer role doesn't run

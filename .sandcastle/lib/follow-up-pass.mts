@@ -2,13 +2,15 @@
 // Follow-up pass
 //
 // The sweep (lib/follow-up.mts) decides which PRs need a pass; this module is
-// the pass itself. One pass resets the PR's worktree to its head, merges main
-// in when the PR needs it, runs the follow-up role to resolve the merge and
-// the PR's bot and owner review threads, gates and pushes the result, then
-// replies to and resolves the role's verdicts and posts a pass-summary
-// comment. See docs/plans/sandcastle-workflow.md, "Phase 1: Follow-up sweep",
-// and this issue's design note (.sandcastle/work/78/design.md) for the
-// step-by-step this module follows.
+// the pass itself. One pass resets the PR's worktree to its head, gates the
+// head when a check is red to tell a real failure from a flaky one (#79),
+// merges main in when the PR needs it, runs the follow-up role to resolve the
+// merge, the PR's bot and owner review threads and any red check the gate
+// doesn't cover, gates and pushes the result, re-runs a flaky check the gate
+// passes, then replies to and resolves the role's verdicts and posts a
+// pass-summary comment. See docs/plans/sandcastle-workflow.md, "Phase 1:
+// Follow-up sweep", and #78's design note (.sandcastle/work/78/design.md) for
+// the step-by-step this module follows.
 // ---------------------------------------------------------------------------
 
 import { setTimeout as sleep } from "node:timers/promises";
@@ -38,10 +40,13 @@ import { UncountedStopError } from "./errors.mts";
 import type { CheckState, PassTarget } from "./follow-up.mts";
 import {
   commentOnPullRequest,
+  failedCheckLogs,
   handBack,
+  headChecksOf,
   markerComments,
   pushAccess,
   replyToReviewThread,
+  rerunFailedChecksOnce,
   resolveReviewThread,
   reviewThreadsOf,
   signedInHostLogin,
@@ -469,15 +474,18 @@ export type PassHost = {
   remoteHead(branch: string): string | undefined;
   // A fresh read of the PR's current checks on its head, since the ones the
   // sweep read (lib/follow-up.mts#SweepPullRequest.checks) may be stale by
-  // the time a pass claims the PR.
+  // the time a pass claims the PR (lib/github.mts#headChecksOf).
   checks(pr: number): CheckState[];
   // `gh run rerun --failed` for the run(s) backing each of `checkNames`
-  // (planRedCi's `rerun`), then the rechecked state of exactly those checks
-  // once the re-run settles.
+  // (planRedCi's `rerun`), then the state of exactly those checks: running
+  // for a run it re-ran, or as they stand for a run already re-run once,
+  // where a red one means the re-run failed too. It doesn't wait for a re-run
+  // to finish, since that would hold the issue's building label, and the
+  // whole host, for as long as CI takes (lib/github.mts#rerunFailedChecksOnce).
   rerunFailedChecks(pr: number, checkNames: readonly string[]): CheckState[];
   // `gh run view --log-failed` for the run(s) backing each of `checkNames`
   // (planRedCi's `forward`), concatenated: the text the follow-up role gets
-  // to fix what the gate doesn't cover.
+  // to fix what the gate doesn't cover (lib/github.mts#failedCheckLogs).
   failedCheckLog(pr: number, checkNames: readonly string[]): string;
   // lib/github.mts#replyToReviewThread.
   replyToThread(threadId: string, body: string): void;
@@ -519,15 +527,9 @@ export const livePassHost: PassHost = {
       (ms) => sleep(ms),
     ),
   remoteHead: (branch) => originRefs.remoteHead(branch),
-  checks: () => {
-    throw new Error("Not implemented");
-  },
-  rerunFailedChecks: () => {
-    throw new Error("Not implemented");
-  },
-  failedCheckLog: () => {
-    throw new Error("Not implemented");
-  },
+  checks: (pr) => headChecksOf(pr).checks,
+  rerunFailedChecks: (pr, checkNames) => rerunFailedChecksOnce(pr, checkNames),
+  failedCheckLog: (pr, checkNames) => failedCheckLogs(pr, checkNames),
   replyToThread: (threadId, body) => replyToReviewThread(threadId, body),
   resolveThread: (threadId) => resolveReviewThread(threadId),
   commentOnPullRequest: (pr, body) => commentOnPullRequest(pr, body),
@@ -986,7 +988,7 @@ async function passOnMarkedIssue(
         );
       }
       rerun = redCi.rerun;
-      log(`re-ran ${rerun.join(", ")} once as flaky`);
+      log(`re-ran the failed jobs of ${rerun.join(", ")} once as flaky`);
     }
 
     const matched = threadActions(verdicts, forRole);
