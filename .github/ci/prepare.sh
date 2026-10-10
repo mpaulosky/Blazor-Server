@@ -21,7 +21,7 @@ test_name="${2:-}"
 # Every job builds UI, whose build runs the Tailwind CLI from src/UI's pnpm
 # packages, so every job installs them first.
 setup_pnpm() {
-  corepack enable pnpm
+  command -v pnpm >/dev/null || corepack enable pnpm
   export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
   if [[ -n "${GITHUB_ENV:-}" ]]; then
     echo "COREPACK_ENABLE_DOWNLOAD_PROMPT=0" >> "$GITHUB_ENV"
