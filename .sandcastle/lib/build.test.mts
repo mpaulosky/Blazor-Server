@@ -785,7 +785,7 @@ describe("buildIssue marking the issue as building", () => {
 
     await buildIssue(issue, branch, base, buildHost);
 
-    assert.deepEqual(order.slice(0, 2), ["mark", "create"]);
+    assert.deepEqual(order.slice(0, 3), ["mark", "startFromMain", "create"]);
     assert.deepEqual(order.slice(-2), ["close", "unmark"]);
   });
 

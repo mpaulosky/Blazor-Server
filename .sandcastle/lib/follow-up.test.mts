@@ -555,7 +555,14 @@ describe("sweepPullRequests", () => {
 
   it("still updates the next PR when one PR's update fails", () => {
     const failing = pr({ number: 101, mergeStateStatus: "BEHIND" });
-    const ok = pr({ number: 102, id: "PR_102", headRefOid: "b".repeat(40), headRefName: "feature/43-add-sorting", mergeStateStatus: "BEHIND" });
+    const ok = pr({
+      number: 102,
+      id: "PR_102",
+      headRefOid: "b".repeat(40),
+      headRefName: "feature/43-add-sorting",
+      mergeStateStatus: "BEHIND",
+      reviews: [{ author: COPILOT_REVIEWER, commitOid: "b".repeat(40) }],
+    });
     const updated: { number: number; expectedHeadSha: string }[] = [];
     const github: FollowUpGitHub = {
       hostLogin: () => HOST,
