@@ -88,7 +88,10 @@ export type PromptThread = {
 // answered it and is waiting on the owner, so it's dropped from every list
 // rather than handed to the role again. Comments by anyone else don't count
 // either way, so a stranger can neither hide an owner thread by quoting the
-// marker nor reopen one by replying after the host. Any other thread,
+// marker nor reopen one by replying after the host. A bot thread whose last
+// comment by a bot, the owner or the host is the host's own reply goes to
+// `resolveOnly` instead: the host answered it, but resolving it failed, so
+// it's resolved again rather than answered twice. Any other thread,
 // including one with no author at all, goes to `leftForHuman`
 // (lib/report.mts#recordHumanThread records each one). A thread whose first
 // author `isOwner` can't answer for goes to `unknown`, so a pass never
@@ -99,15 +102,25 @@ export function threadsForRole(
   threads: readonly ReviewThread[],
   isOwner: IsOwner,
   hostLogin: string,
-): { forRole: PromptThread[]; leftForHuman: ReviewThread[]; unknown: ReviewThread[] } {
+): { forRole: PromptThread[]; leftForHuman: ReviewThread[]; unknown: ReviewThread[]; resolveOnly: string[] } {
   const forRole: PromptThread[] = [];
   const leftForHuman: ReviewThread[] = [];
   const unknown: ReviewThread[] = [];
+  const resolveOnly: string[] = [];
+  const hostReply = (comment: ReviewThread["comments"][number] | undefined) =>
+    comment?.author === hostLogin && comment.body.startsWith(FOLLOW_UP_REPLY_MARKER);
   for (const thread of threads) {
     if (thread.resolved) continue;
     const first = thread.comments[0];
     let from: PromptThread["from"];
     if (first?.byBot === true) {
+      const last = thread.comments.findLast(
+        (comment) => comment.byBot || comment.author === hostLogin || isOwner(comment.author) === true,
+      );
+      if (hostReply(last)) {
+        resolveOnly.push(thread.id);
+        continue;
+      }
       from = "bot";
     } else {
       const owner = first === undefined ? false : isOwner(first.author);
@@ -120,7 +133,7 @@ export function threadsForRole(
         continue;
       }
       const last = thread.comments.findLast((comment) => comment.author === hostLogin || isOwner(comment.author) === true);
-      if (last?.author === hostLogin && last.body.startsWith(FOLLOW_UP_REPLY_MARKER)) continue;
+      if (hostReply(last)) continue;
       from = "owner";
     }
     forRole.push({
@@ -136,7 +149,7 @@ export function threadsForRole(
         .map((comment) => ({ author: comment.author, body: comment.body })),
     });
   }
-  return { forRole, leftForHuman, unknown };
+  return { forRole, leftForHuman, unknown, resolveOnly };
 }
 
 // One entry of the follow-up role's .sandcastle/follow-up.json, one per
@@ -629,6 +642,16 @@ function planPass(
   for (const thread of sorted.leftForHuman) {
     const first = thread.comments[0];
     host.recordHumanThread({ pr: target.number, author: first?.author ?? null, url: first?.url ?? "" });
+  }
+  // Resolving is idempotent, so it's safe before the claim too. One that
+  // fails again is tried again next round.
+  for (const threadId of sorted.resolveOnly) {
+    try {
+      host.resolveThread(threadId);
+      host.log(`  PR #${target.number} resolved thread ${threadId}, which the host had already answered`);
+    } catch (error) {
+      host.log(`  PR #${target.number} resolving thread ${threadId} failed again, so it's tried next round: ${error}`);
+    }
   }
   // Only a needed merge or a bot thread starts a pass. A PR that's only red
   // on CI waits for #79, and one with only owner threads keeps the sweep's

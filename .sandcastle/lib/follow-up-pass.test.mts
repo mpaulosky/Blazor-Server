@@ -194,6 +194,32 @@ describe("threadsForRole", () => {
     assert.deepEqual(forRole.map((thread) => thread.threadId), ["RT_owner"]);
   });
 
+  it("sends a bot thread the host already answered to resolveOnly, not back to the role", () => {
+    const answered = botThread({
+      comments: [...botThread().comments, { author: HOST_LOGIN, byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nFixed.`, url: "https://github.com/o/r/pull/7#discussion_r4" }],
+    });
+
+    const { forRole, resolveOnly } = threadsForRole([answered], isOwner, HOST_LOGIN);
+
+    assert.deepEqual(forRole, []);
+    assert.deepEqual(resolveOnly, ["RT_bot"]);
+  });
+
+  it("gives a bot thread back to the role when the bot comments again after the host's reply", () => {
+    const followedUp = botThread({
+      comments: [
+        ...botThread().comments,
+        { author: HOST_LOGIN, byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nFixed.`, url: "https://github.com/o/r/pull/7#discussion_r4" },
+        { author: "copilot-pull-request-reviewer", byBot: true, body: "Still not fixed.", url: "https://github.com/o/r/pull/7#discussion_r5" },
+      ],
+    });
+
+    const { forRole, resolveOnly } = threadsForRole([followedUp], isOwner, HOST_LOGIN);
+
+    assert.deepEqual(forRole.map((thread) => thread.threadId), ["RT_bot"]);
+    assert.deepEqual(resolveOnly, []);
+  });
+
   it("drops a resolved thread outright, whoever opened it", () => {
     const { forRole, leftForHuman, unknown } = threadsForRole([botThread({ resolved: true })], isOwner, HOST_LOGIN);
 
@@ -889,6 +915,29 @@ describe("runPass", () => {
     await runPass(passTarget(), issue, BASE, passHost);
 
     assert.ok(!sandbox.execCalls.some((call) => call.startsWith("git merge ")), sandbox.execCalls.join("\n"));
+  });
+
+  it("resolves a bot thread whose reply posted but whose resolve failed, on the next pass, without replying again or running the role", async () => {
+    // First pass: the reply posts, the resolve fails.
+    const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "declined", reason: "Out of scope." }]) });
+    const first = passHostFake({ threads: [botThread()], containsBase: true, sandbox });
+    first.passHost.resolveThread = () => {
+      throw new Error("gh api graphql failed");
+    };
+    await runPass(passTarget(), issue, BASE, first.passHost);
+    const reply = first.calls.replyToThread[0]!;
+
+    // Second pass: GitHub now shows the host's reply on the thread.
+    const answered = botThread({
+      comments: [...botThread().comments, { author: HOST_LOGIN, byBot: false, body: reply.body, url: "https://github.com/o/r/pull/7#discussion_r4" }],
+    });
+    const second = passHostFake({ threads: [answered], containsBase: true });
+    const outcome = await runPass(passTarget(), issue, BASE, second.passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(second.calls.resolveThread, ["RT_bot"]);
+    assert.deepEqual(second.calls.replyToThread, []);
+    assert.deepEqual(second.calls.createSandbox, []);
   });
 
   it("skips a PR that needs no merge and has no thread for the role, without creating a sandbox", async () => {
