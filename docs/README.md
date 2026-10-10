@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.108](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.108) | 2026-10-10 | fix(sandcastle): Close the design note's edge cases from #228's review | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-232-fix-sandcastle-close-the-design-note-s-edge-cases-from-228-s-review.md) |
 | [v0.0.107](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.107) | 2026-10-10 | feat(sandcastle): Add architect, UI developer and scribe roles picked by the planner | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-228-feat-sandcastle-add-architect-ui-developer-and-scribe-roles-picked-by-the-planner.md) |
 | [v0.0.106](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.106) | 2026-10-10 | fix(sandcastle): Keep one bad intake verdict from costing the batch, and post intake's text as plain text | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-225-fix-sandcastle-keep-one-bad-intake-verdict-from-costing-the-batch-and-post-intake-s-text-as-plain-text.md) |
 | [v0.0.105](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.105) | 2026-10-10 | feat(sandcastle): Intake judges each issue against the Definition of Ready | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-222-feat-sandcastle-intake-judges-each-issue-against-the-definition-of-ready.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.101](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.101) | 2026-10-10 | feat(sandcastle): Hand an issue back to a human after two failed builds | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-213-feat-sandcastle-hand-an-issue-back-to-a-human-after-two-failed-builds.md) |
 | [v0.0.100](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.100) | 2026-10-10 | fix(sandcastle): Retry a publish that fails on a GitHub server error | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-202-fix-sandcastle-retry-a-publish-that-fails-on-a-github-server-error.md) |
 | [v0.0.99](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.99) | 2026-10-10 | feat(sandcastle): Give the developer roles build, test and stub steps for both stacks | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-208-feat-sandcastle-give-the-developer-roles-build-test-and-stub-steps-for-both-stacks.md) |
-| [v0.0.98](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.98) | 2026-10-10 | docs(sandcastle): Bring the plan's issue table up to date and add a Sandcastle task template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-205-docs-sandcastle-bring-the-plan-s-issue-table-up-to-date-and-add-a-sandcastle-task-template.md) |
 
 <!-- RELEASES_END -->
 
