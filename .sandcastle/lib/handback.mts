@@ -12,14 +12,16 @@ import { handBackReport, type HandBackReport } from "./report.mts";
 // BUILD_FAILED_MARKER, so a restart can still count it (see
 // lib/github.mts#markerCommentsSince), with the attempt number and `detail`
 // (the tail of the gate output, or the role's error).
+// `detail` is trimmed to fit GitHub's comment limit: a rejected comment saves
+// no marker, so the attempt would never count and the issue never reach the cap.
 export function buildFailedComment(attempt: number, branch: string, detail: string): string {
-  return [
+  const intro = [
     BUILD_FAILED_MARKER,
     `**Failed build attempt ${attempt} of ${BUILD_FAILURE_CAP}** on \`${branch}\`. The issue stays in the queue, and the next ` +
       `round builds it again; after ${BUILD_FAILURE_CAP} failed attempts it's handed back to a person.`,
     "",
-    detail,
   ].join("\n");
+  return `${intro}\n${fit(detail, GITHUB_COMMENT_LIMIT - intro.length - 1)}`;
 }
 
 // GitHub rejects a comment body longer than this many characters.
@@ -50,26 +52,33 @@ export function needsHumanComment(branch: string, failures: readonly string[]): 
       "",
       `### Attempt ${i + 1}`,
       "",
-      fit(quote(failure.replaceAll(BUILD_FAILED_MARKER, "").trim()), share),
+      fit(quote(failure.replaceAll(BUILD_FAILED_MARKER, "").trim()), share, "> ", true),
     ]),
   ].join("\n");
 }
 
-// `quoted` cut to at most `max` characters: its first line, a note saying the
-// start was trimmed, and as much of its end as fits.
-function fit(quoted: string, max: number): string {
-  if (quoted.length <= max) return quoted;
-  const [head = "", ...rest] = quoted.split("\n");
-  const note = "> _The start of this attempt's output is trimmed to fit GitHub's comment limit._";
-  const tail = rest.join("\n").slice(-(max - head.length - note.length - 8));
-  // Resume at a line start when one is near, so the quote markers line up.
+// `text` cut to at most `max` characters: a note saying its start was
+// trimmed, then as much of its end as fits. `prefix` begins every line ("> "
+// for a block quote), and `keepHead` keeps the first line too, such as an
+// attempt's heading.
+function fit(text: string, max: number, prefix = "", keepHead = false): string {
+  if (text.length <= max) return text;
+  const lines = text.split("\n");
+  const head = keepHead ? [lines.shift() ?? ""] : [];
+  const blank = prefix.trimEnd();
+  const note = `${prefix}_The start of this attempt's output is trimmed to fit GitHub's comment limit._`;
+  const reopenLine = `${prefix}\`\`\`text`;
+  const room = max - head.join("").length - note.length - reopenLine.length - 16;
+  const tail = lines.join("\n").slice(-room);
+  // Resume at a line start when one is near, so line prefixes line up.
   const lineStart = tail.indexOf("\n");
-  const kept = lineStart !== -1 && lineStart < 200 ? tail.slice(lineStart + 1) : `> ${tail}`;
+  const kept = lineStart !== -1 && lineStart < 200 ? tail.slice(lineStart + 1) : `${prefix}${tail}`;
   // A code fence opened in the trimmed part would leave its closing line
   // opening a new block instead, so open it again before what's kept.
-  const dropped = quoted.slice(0, quoted.length - kept.length);
-  const reopen = (dropped.match(/^> ```/gm) ?? []).length % 2 === 1 ? ["> ```text"] : [];
-  return [head, ">", note, ">", ...reopen, kept].join("\n");
+  const dropped = lines.join("\n").slice(0, -kept.length);
+  const fences = dropped.split("\n").filter((line) => line.startsWith(`${prefix}\`\`\``)).length;
+  const reopen = fences % 2 === 1 ? [reopenLine] : [];
+  return [...head, ...(keepHead ? [blank] : []), note, blank, ...reopen, kept].join("\n");
 }
 
 // Markdown block quote of `text`, every line prefixed, so a fenced code block

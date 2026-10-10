@@ -26,6 +26,22 @@ describe("buildFailedComment", () => {
   });
 });
 
+describe("buildFailedComment within GitHub's comment limit", () => {
+  // A rejected comment saves no marker, so the attempt is never counted and
+  // the issue never reaches the cap.
+  it("trims a detail longer than GitHub's limit, keeping the marker and the end of the output", () => {
+    const detail = "```text\n" + Array.from({ length: 3000 }, (_, i) => `line ${i} ${"y".repeat(30)}`).join("\n") + "\nerror: the real failure\n```";
+
+    const comment = buildFailedComment(1, "feature/69-run-the-gate", detail);
+
+    assert.ok(comment.length <= 65_536, `${comment.length} characters`);
+    assert.ok(comment.startsWith(BUILD_FAILED_MARKER));
+    assert.match(comment, /error: the real failure/);
+    assert.match(comment, /trimmed/);
+    assert.equal((comment.match(/^```/gm) ?? []).length % 2, 0, "unbalanced fences");
+  });
+});
+
 describe("needsHumanComment", () => {
   it("quotes every failure, oldest first", () => {
     const comment = needsHumanComment("feature/69-run-the-gate", ["first failure detail", "second failure detail"]);
