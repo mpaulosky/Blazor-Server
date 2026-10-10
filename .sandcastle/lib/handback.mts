@@ -32,11 +32,10 @@ const GITHUB_COMMENT_LIMIT = 65_536;
 // gate outputs can't make GitHub reject the comment; a longer one keeps its
 // heading line and the end of its output, where the failure usually is.
 export function needsHumanComment(branch: string, failures: readonly string[]): string {
+  // No BUILD_FAILED_MARKER: the summary is posted before the label edit, and
+  // if that edit fails the issue stays in the queue. Its next failure then
+  // counts only the real attempts, and hands the issue back again.
   const intro = [
-    // The summary is itself a failed attempt's comment, so it carries the
-    // marker too; it's posted after the last one the count reads, so it never
-    // counts twice.
-    BUILD_FAILED_MARKER,
     `Sandcastle gave up on this issue after ${failures.length} failed build attempts, so it's handed back with ` +
       "`sandcastle:needs-human` and `sandcastle:ready` is removed. " +
       `\`${branch}\` keeps its commits. Once the cause is fixed, remove \`sandcastle:needs-human\` to put the issue back in ` +

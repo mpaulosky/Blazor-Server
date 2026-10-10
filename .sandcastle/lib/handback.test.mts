@@ -62,6 +62,15 @@ describe("needsHumanComment within GitHub's comment limit", () => {
     }
   });
 
+  // The summary goes on before the label edit. If that edit fails, the issue
+  // stays in the queue, and its next failure must count the earlier attempts,
+  // not the summary, so it hands the issue back again rather than at attempt 3.
+  it("carries no failed-attempt marker, so a summary is never counted as an attempt", () => {
+    const comment = needsHumanComment("feature/69-run-the-gate", [buildFailedComment(1, "feature/69-run-the-gate", "detail")]);
+
+    assert.equal(comment.includes(BUILD_FAILED_MARKER), false);
+  });
+
   it("quotes short failures in full", () => {
     const comment = needsHumanComment("feature/69-run-the-gate", ["first failure detail", "second failure detail"]);
 
