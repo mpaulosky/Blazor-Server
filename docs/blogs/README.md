@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [docs(claude): Add Sandcastle and Baseline rules for agents](2026-10-10-pr-207-docs-claude-add-sandcastle-and-baseline-rules-for-agents.md) | release,automation |
 | 2026-10-10 | [build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image](2026-10-10-pr-201-build-sandcastle-install-actionlint-shellcheck-and-zizmor-in-the-sandbox-image.md) | release,automation |
 | 2026-10-10 | [docs(review): Check that Sandcastle role prompts can always finish](2026-10-10-pr-200-docs-review-check-that-sandcastle-role-prompts-can-always-finish.md) | release,automation |
 | 2026-10-10 | [chore(sandcastle): Add a pnpm script to start a run](2026-10-10-pr-199-chore-sandcastle-add-a-pnpm-script-to-start-a-run.md) | release,automation |
