@@ -72,16 +72,19 @@ public sealed class WebAppFixture : IAsyncLifetime
 	/// </summary>
 	public async ValueTask InitializeAsync()
 	{
-		// Installing is a no-op when Chromium is already there, so CI, the sandbox and a fresh clone all run the same way.
-		int exitCode = Microsoft.Playwright.Program.Main(["install", "chromium"]);
+		using CancellationTokenSource startupTimeout =
+			CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+		startupTimeout.CancelAfter(s_startupTimeout);
+
+		// Installing is a no-op when Chromium is already there, so CI, the sandbox and a fresh clone all run the same
+		// way. Program.Main blocks synchronously and ignores cancellation, so run it on a pool thread and bound the
+		// wait by the startup timeout rather than letting a stalled download hang the whole test run.
+		int exitCode = await Task.Run(() => Microsoft.Playwright.Program.Main(["install", "chromium"]), startupTimeout.Token)
+			.WaitAsync(startupTimeout.Token);
 		if (exitCode != 0)
 		{
 			throw new InvalidOperationException($"Installing Chromium for Playwright failed with exit code {exitCode}.");
 		}
-
-		using CancellationTokenSource startupTimeout =
-			CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-		startupTimeout.CancelAfter(s_startupTimeout);
 
 		IDistributedApplicationTestingBuilder builder = await DistributedApplicationTestingBuilder
 			.CreateAsync<global::Projects.AppHost>(startupTimeout.Token);
@@ -100,30 +103,70 @@ public sealed class WebAppFixture : IAsyncLifetime
 	/// <summary>
 	///     Closes Chromium and the AppHost.
 	/// </summary>
+	// Suppress CA1031: this teardown is the top-level boundary for cleanup. Every disposal below must run even when
+	// an earlier one throws, or a crashed context, browser or Playwright instance leaves the AppHost's WebApp
+	// process and its port running after the test run; the collected failures surface below instead of being lost.
+#pragma warning disable CA1031 // Do not catch general exception types
 	public async ValueTask DisposeAsync()
 	{
+		List<Exception> failures = [];
+
 		foreach ((IBrowserContext context, string traceName) in _contexts)
 		{
-			if (_captureTraces)
+			try
 			{
-				await context.Tracing.StopAsync(new() { Path = Path.Combine(s_artifactsDirectory, $"{traceName}.zip") });
+				if (_captureTraces)
+				{
+					await context.Tracing.StopAsync(new() { Path = Path.Combine(s_artifactsDirectory, $"{traceName}.zip") });
+				}
+
+				await context.CloseAsync();
 			}
-
-			await context.CloseAsync();
+			catch (Exception exception)
+			{
+				failures.Add(exception);
+			}
 		}
 
-		if (_browser is not null)
+		try
 		{
-			await _browser.DisposeAsync();
+			if (_browser is not null)
+			{
+				await _browser.DisposeAsync();
+			}
+		}
+		catch (Exception exception)
+		{
+			failures.Add(exception);
 		}
 
-		_playwright?.Dispose();
-
-		if (_application is not null)
+		try
 		{
-			await _application.DisposeAsync();
+			_playwright?.Dispose();
+		}
+		catch (Exception exception)
+		{
+			failures.Add(exception);
+		}
+
+		try
+		{
+			if (_application is not null)
+			{
+				await _application.DisposeAsync();
+			}
+		}
+		catch (Exception exception)
+		{
+			failures.Add(exception);
+		}
+
+		if (failures.Count > 0)
+		{
+			throw new AggregateException("Disposing WebAppFixture failed.", failures);
 		}
 	}
+#pragma warning restore CA1031 // Do not catch general exception types
 
 	private string TraceName()
 	{
