@@ -1,0 +1,19 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.1">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<IsAspireHost>true</IsAspireHost>
+		<!-- ASPIRE010: the CLI bundle brings dashboard features this sandbox doesn't need to build or test. -->
+		<NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Aspire.Hosting.AppHost" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="../Domain/Domain.csproj" IsAspireProjectResource="false" />
+		<ProjectReference Include="../UI/UI.csproj" />
+	</ItemGroup>
+
+</Project>

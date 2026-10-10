@@ -18,18 +18,18 @@ namespace Architecture.Tests;
 public class UiTests
 {
 	[Fact]
-	public void UiAssembly_ReferencedAssemblies_HasNoProjectReferenceOtherThanDomain()
+	public void UiAssembly_ReferencedAssemblies_HasNoProjectReferenceOtherThanDomainAndServiceDefaults()
 	{
 		// Arrange
 		Assembly uiAssembly = typeof(App).Assembly;
-		HashSet<string> allowed = new(StringComparer.Ordinal) { "Domain" };
+		HashSet<string> allowed = new(StringComparer.Ordinal) { "Domain", "ServiceDefaults" };
 
 		// Act
 		IReadOnlyList<string> forbiddenReferences = ProjectReferenceRule.FindForbiddenProjectReferences(uiAssembly, allowed);
 
 		// Assert
 		forbiddenReferences.Should().BeEmpty(
-			"UI references only the Shared Kernel (see ADR-0005); any other project reference must be allowed deliberately");
+			"UI references only the Shared Kernel (see ADR-0005) and ServiceDefaults (see issue #246); any other project reference must be allowed deliberately");
 	}
 
 	[Fact]
