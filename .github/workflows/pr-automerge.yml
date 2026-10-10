@@ -21,7 +21,11 @@ name: PR Auto-Merge
 # review covering the head: the cap only stops the wait for a review that may never come
 # (#146). So a review that arrives after a cap merge comes too late: its
 # findings land on a merged PR. A re-Apply PR (chore/reapply-baseline) is
-# capped like any other (#174).
+# capped like any other (#174), though it changes this gate itself: with
+# Claude reviewing every re-Apply commit in every repo, the exemption let a
+# round chase reviews without end, and a finding on one is fixed in the
+# Template, where its own PR is reviewed, then arrives with the next round
+# (ADR 0002).
 # At the cap the run takes review:claude off the PR (#170), once Claude has
 # reviewed it since the label was last added: Claude Review reviews every
 # push while it's on, and each review can open threads that hold the merge,
@@ -131,6 +135,24 @@ jobs:
             const NEEDS_HUMAN = "sandcastle:needs-human";
             // The label that has Claude Review review a PR (claude-review.yml).
             const CLAUDE_LABEL = "review:claude";
+
+            // A push, schedule or manual run sweeps every open PR. Each update
+            // reruns CI, and only the first PR to finish can merge: that merge
+            // leaves the rest BEHIND again, so updating them all at once costs
+            // on the order of N² CI runs (#155). A sweep updates one ready
+            // BEHIND PR, the oldest, and only after evaluating every PR and
+            // merging none: a merge later in the sweep would leave that PR
+            // BEHIND again, and its push sweeps anyway.
+            const sweeping = !context.payload.pull_request && !context.payload.workflow_run;
+            // While a sweep evaluates its PRs, a ready BEHIND one is only
+            // noted as a candidate; the sweep ends by evaluating those again,
+            // with this off, to make its update.
+            let collectingCandidates = sweeping;
+            // The ready BEHIND PRs a sweep found, oldest first; the PR this
+            // run merged and the one it brought up to date, if any.
+            const sweepCandidates = [];
+            let mergedThisSweep = null;
+            let updatedThisSweep = null;
 
             // Review rounds, Copilot's and Claude's together, after which the
             // merge stops waiting for a review of the head. Their threads
@@ -492,6 +514,19 @@ jobs:
                 );
                 return;
               }
+              if (collectingCandidates) {
+                sweepCandidates.push(pullNumber);
+                return;
+              }
+              if (await updateBranchOf(pullNumber, pr)) {
+                updatedThisSweep = pullNumber;
+              }
+            }
+
+            // Updates a PR checked by bringUpToDate. Returns whether it asked
+            // for an update: false when Dependabot was already asked for this
+            // head, or on a 422 or another error.
+            async function updateBranchOf(pullNumber, pr) {
               try {
                 if (DEPENDABOT_PR_AUTHORS.includes(pr.author?.login)) {
                   const commits = await github.paginate(github.rest.pulls.listCommits, {
@@ -503,8 +538,7 @@ jobs:
                   // A merge or a fix someone else pushed would be lost on a
                   // rebase, and Dependabot stops rebasing such a PR anyway.
                   if (commits.length > 0 && commits.every((commit) => commit.author?.login === DEPENDABOT_COMMIT_AUTHOR)) {
-                    await askDependabotToRebase(pullNumber, pr);
-                    return;
+                    return await askDependabotToRebase(pullNumber, pr);
                   }
                 }
                 // expected_head_sha pins the update to the head checked above:
@@ -517,14 +551,16 @@ jobs:
                   expected_head_sha: pr.headRefOid
                 });
                 core.info(`Bringing PR #${pullNumber} up to date with main from ${pr.headRefOid}.`);
+                return true;
               } catch (error) {
                 // 422: already up to date, or the head moved. A later event
                 // re-evaluates the new head.
                 if (error.status === 422) {
                   core.info(`Not updating PR #${pullNumber}: ${error.message}`);
-                  return;
+                  return false;
                 }
                 core.warning(`Couldn't bring PR #${pullNumber} up to date with main: ${error.message}`);
+                return false;
               }
             }
 
@@ -540,7 +576,8 @@ jobs:
             // one that someone else updated. Asked once per head: the marker
             // in the comment says which head it was asked for. Only a marker
             // this workflow posted counts: anyone can comment one on a public
-            // repo, which would otherwise stop the request.
+            // repo, which would otherwise stop the request. Returns whether it
+            // asked now.
             async function askDependabotToRebase(pullNumber, pr) {
               const marker = rebaseMarker(pr.headRefOid);
               const login = await posterLogin();
@@ -552,7 +589,7 @@ jobs:
               });
               if (comments.some((comment) => comment.user?.login === login && comment.body?.includes(marker))) {
                 core.info(`Waiting on PR #${pullNumber}: Dependabot was already asked to rebase ${pr.headRefOid}.`);
-                return;
+                return false;
               }
               await github.rest.issues.createComment({
                 owner,
@@ -561,6 +598,7 @@ jobs:
                 body: `@dependabot rebase\n\n${marker}`
               });
               core.info(`Asked Dependabot to rebase PR #${pullNumber} onto main.`);
+              return true;
             }
 
             const commitCache = new Map();
@@ -916,6 +954,7 @@ jobs:
               }
 
               core.info(`Squash-merged PR #${pullNumber} at ${pr.headRefOid}.`);
+              mergedThisSweep ??= pullNumber;
             }
 
             // pull_request_target events carry the PR;
@@ -939,11 +978,15 @@ jobs:
                 .filter((pr) => pr.state === "open" && (workflowRun.name === "Claude Review" || pr.head?.sha === workflowRun.head_sha))
                 .map((pr) => pr.number);
             } else {
+              // Oldest first, so the one update a sweep makes goes to the PR
+              // that has waited longest.
               const open = await github.paginate(github.rest.pulls.list, {
                 owner,
                 repo,
                 state: "open",
                 base: "main",
+                sort: "created",
+                direction: "asc",
                 per_page: 100
               });
               pullNumbers = open.map((pr) => pr.number);
@@ -954,6 +997,60 @@ jobs:
               return;
             }
 
+            // One PR's error (a 5xx on one read) doesn't stop the sweep short
+            // of its update; the run still fails once it's done. An error
+            // that holds for the whole run (a bad token, a rate limit) ends
+            // it at once, since every later call would fail the same way and
+            // GitHub asks callers to stop on a rate limit.
+            const failed = [];
+            // A 403 ends it only as a rate limit: most 403s are one PR's
+            // (a locked PR, a branch restriction).
+            function endsRun(error) {
+              const headers = error.response?.headers ?? {};
+              const rateLimited = headers["x-ratelimit-remaining"] === "0" ||
+                headers["retry-after"] !== undefined ||
+                /rate limit/i.test(error.message ?? "");
+              return error.status === 401 || error.status === 429 ||
+                (error.status === 403 && rateLimited) ||
+                Boolean(error.errors?.some((e) => e.type === "RATE_LIMITED"));
+            }
+            async function evaluate(pullNumber) {
+              try {
+                await mergeIfReady(pullNumber);
+              } catch (error) {
+                if (endsRun(error)) {
+                  throw error;
+                }
+                core.warning(`Couldn't evaluate PR #${pullNumber}: ${error.message}`);
+                failed.push(pullNumber);
+              }
+            }
+
             for (const pullNumber of pullNumbers) {
-              await mergeIfReady(pullNumber);
+              await evaluate(pullNumber);
+            }
+
+            // The sweep's one update, made last (see sweeping), and only if
+            // it merged nothing. Each candidate is evaluated again, since the
+            // sweep took a while: one no longer ready or BEHIND is skipped
+            // (or merged, if it's now CLEAN), and the next is tried.
+            collectingCandidates = false;
+            for (const pullNumber of sweepCandidates) {
+              if (mergedThisSweep !== null) {
+                core.info(
+                  `Waiting on PR #${pullNumber}: BEHIND main, but this sweep merged PR #${mergedThisSweep}, ` +
+                  "whose push sweeps again."
+                );
+              } else if (updatedThisSweep !== null) {
+                core.info(
+                  `Waiting on PR #${pullNumber}: BEHIND main, but this sweep already brought PR #${updatedThisSweep} ` +
+                  "up to date, and a sweep updates one PR at a time."
+                );
+              } else {
+                await evaluate(pullNumber);
+              }
+            }
+
+            if (failed.length > 0) {
+              core.setFailed(`Couldn't evaluate PR(s) ${failed.map((n) => `#${n}`).join(", ")}; see the warnings above.`);
             }
