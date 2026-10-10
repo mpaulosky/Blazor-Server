@@ -435,9 +435,10 @@ describe("intakeRound", () => {
     assert.deepEqual(sent, [issues.slice(0, INTAKE_BATCH_SIZE).map((i) => i.number), [INTAKE_BATCH_SIZE + 1, INTAKE_BATCH_SIZE + 2]]);
   });
 
-  // Otherwise a batch that fails every time would starve the issues behind it
-  // (#227).
-  it("logs a batch whose intake run fails, and still judges the next batch", async () => {
+  // Otherwise a batch that fails every time would starve the issues behind
+  // it (#227). When both halves of the batch fail too, the trouble isn't one
+  // issue, so intake gives up on the batch for this round.
+  it("logs a batch whose intake run fails in both halves, and still judges the next batch", async () => {
     const issues = Array.from({ length: INTAKE_BATCH_SIZE + 1 }, (_, i) => issue(i + 1));
     const last = INTAKE_BATCH_SIZE + 1;
     const gh = recordingGh();
@@ -447,9 +448,10 @@ describe("intakeRound", () => {
     await intakeRound(
       issues,
       [],
-      async () => {
+      async (promptArgs) => {
         runs += 1;
-        if (runs === 1) throw new Error("no <intake> block");
+        const sent: number[] = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        if (!sent.includes(last)) throw new Error("no <intake> block");
         return [verdict(last, { reason: "clear and checkable" })];
       },
       gh.run,
@@ -459,11 +461,43 @@ describe("intakeRound", () => {
       (message) => warnings.push(message),
     );
 
+    assert.equal(runs, 4, "the batch, its two halves and the next batch");
     assert.equal(warnings.length, 1, warnings.join("\n"));
-    assert.match(warnings[0]!, /#1, /);
+    assert.match(warnings[0]!, /#1, .*#10,/);
     assert.match(warnings[0]!, /no <intake> block/);
     assert.match(warnings[0]!, /a later round or run/);
     assert.ok(gh.calls.some((call) => call.args.includes("edit") && call.args.includes(String(last))), JSON.stringify(gh.calls));
+  });
+
+  // Batches are slices of the unjudged issues, so a failed batch re-forms
+  // with the same issues every round: without splitting, one bad issue would
+  // keep its batch-mates unjudged for good.
+  it("splits a batch whose intake run fails until only the issue that breaks it is left unjudged", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE }, (_, i) => issue(i + 1));
+    const bad = 3;
+    const gh = recordingGh();
+    const warnings: string[] = [];
+
+    await intakeRound(
+      issues,
+      [],
+      async (promptArgs) => {
+        const sent: number[] = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        if (sent.includes(bad)) throw new Error("truncated <intake> block");
+        return sent.map((number) => verdict(number, { reason: "clear and checkable" }));
+      },
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+      () => {},
+      (message) => warnings.push(message),
+    );
+
+    const edited = issues
+      .map((i) => i.number)
+      .filter((number) => gh.calls.some((call) => call.args.includes("edit") && call.args.includes(String(number))));
+    assert.deepEqual(edited, issues.map((i) => i.number).filter((number) => number !== bad));
+    assert.ok(warnings.some((warning) => /Intake failed on #3,/.test(warning) && /a later round or run/.test(warning)), warnings.join("\n"));
   });
 
   // A usage limit or time budget ends the whole run, not just one batch.

@@ -265,11 +265,14 @@ export function needsInfoComment(verdict: IntakeVerdict): string {
 // intake leaves alone (see needsIntake).
 //
 // Intake runs once per batch of INTAKE_BATCH_SIZE issues, so a malformed or
-// truncated answer costs only its batch (#224). A batch whose run fails is
-// logged and judged again in a later round or run, and the next batch is
-// still judged, so one that fails every time can't starve the issues behind
-// it (#227). An UncountedStopError (a usage limit or time budget) still ends
-// the run.
+// truncated answer costs only its batch (#224), and the next batch is still
+// judged (#227). A batch whose run fails is tried again in halves, and the
+// half that fails again in halves, so one issue that always breaks intake's
+// answer is left unjudged on its own rather than with its batch-mates: they'd
+// otherwise re-form the same batch every round (#229). When both halves fail,
+// the trouble isn't one issue, so the splitting stops there. Whatever is left
+// unjudged is logged and judged again in a later round or run. An
+// UncountedStopError (a usage limit or time budget) still ends the run.
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
   openPrs: readonly OpenPullRequest[],
@@ -280,18 +283,51 @@ export async function intakeRound(
   log: (line: string) => void = console.log,
   warn: (message: string) => void = console.error,
 ): Promise<void> {
+  const refs = (batch: readonly SandcastleIssue[]) => batch.map((issue) => `#${issue.number}`).join(", ");
+
+  // Runs intake over `batch` and applies its verdicts. Returns the run's
+  // error when it failed, or undefined. A failure applying the verdicts is
+  // the host's, not the batch's, so it's logged here and not split on.
+  async function judge(batch: SandcastleIssue[]): Promise<unknown> {
+    log(`Intake is judging ${batch.length} issue(s) against the Definition of Ready: ${refs(batch)}`);
+    let verdicts: IntakeVerdict[];
+    try {
+      verdicts = await run(intakePromptArgs(batch));
+    } catch (error) {
+      if (error instanceof UncountedStopError) throw error;
+      return error ?? new Error("intake failed");
+    }
+    try {
+      applyVerdicts(batch, verdicts, gh, repo, report, log);
+    } catch (error) {
+      warn(`  ✗ Applying intake's verdicts on ${refs(batch)} failed, so any left unjudged are judged again in a later round or run: ${error}`);
+    }
+    return undefined;
+  }
+
+  // Narrows a batch whose run failed with `error` down to the issue that
+  // breaks it (see above).
+  async function narrow(batch: SandcastleIssue[], error: unknown): Promise<void> {
+    if (batch.length > 1) {
+      log(`  Intake failed on ${refs(batch)}, so it's trying them in halves: ${error}`);
+      const middle = Math.ceil(batch.length / 2);
+      const halves = [batch.slice(0, middle), batch.slice(middle)];
+      const failed: { half: SandcastleIssue[]; error: unknown }[] = [];
+      for (const half of halves) {
+        const halfError = await judge(half);
+        if (halfError !== undefined) failed.push({ half, error: halfError });
+      }
+      if (failed.length === 1) return narrow(failed[0]!.half, failed[0]!.error);
+      if (failed.length === 0) return;
+    }
+    warn(`  ✗ Intake failed on ${refs(batch)}, so they're judged again in a later round or run: ${error}`);
+  }
+
   const unjudged = needsIntake(issues, openPrs);
   for (let start = 0; start < unjudged.length; start += INTAKE_BATCH_SIZE) {
     const batch = unjudged.slice(start, start + INTAKE_BATCH_SIZE);
-    const refs = batch.map((issue) => `#${issue.number}`).join(", ");
-    log(`Intake is judging ${batch.length} issue(s) against the Definition of Ready: ${refs}`);
-    try {
-      const verdicts = await run(intakePromptArgs(batch));
-      applyVerdicts(batch, verdicts, gh, repo, report, log);
-    } catch (error) {
-      if (error instanceof UncountedStopError) throw error;
-      warn(`  ✗ Intake failed on ${refs}, so they're judged again in a later round or run: ${error}`);
-    }
+    const error = await judge(batch);
+    if (error !== undefined) await narrow(batch, error);
   }
 }
 
