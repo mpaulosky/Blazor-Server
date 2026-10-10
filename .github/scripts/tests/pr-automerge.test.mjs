@@ -195,7 +195,15 @@ async function evaluate(pr, events = [], options = {}) {
     workflowRun,
     associated = [],
     removeLabelError,
-    eventsError
+    eventsError,
+    // The open PRs a sweep lists, oldest first.
+    openPrs = [7],
+    // Snapshots per PR number ({ 7: [...], 8: [...] }), each read in turn
+    // and the last repeated; overrides pr for the numbers it names. An
+    // Error in place of a snapshot is thrown by that read.
+    byNumber = {},
+    // PR numbers whose read throws.
+    readErrors = []
   } = options;
   const rulesRequests = [];
   const updates = [];
@@ -206,8 +214,10 @@ async function evaluate(pr, events = [], options = {}) {
   const queries = [];
   const eventTokens = [];
   const removedLabels = [];
+  const listRequests = [];
   let graphqlRequests = 0;
   const pullRequests = Array.isArray(pr) ? [...pr] : [pr];
+  const reads = {};
   const eventSets = Array.isArray(events[0]) ? [...events] : [events];
   const rest = {
     pulls: {
@@ -254,7 +264,11 @@ async function evaluate(pr, events = [], options = {}) {
       getTree: async ({ tree_sha: treeSha, recursive }) => {
         assert.equal(recursive, "true");
         const commit = commits[treeSha.slice("tree:".length)];
-        const files = Object.entries(commit.files).map(([path, sha]) => ({ path, mode: "100644", type: "blob", sha }));
+        // A file is a blob sha, or { sha, mode } for another mode (an executable, a symlink).
+        const files = Object.entries(commit.files).map(([path, file]) => {
+          const { sha, mode = "100644" } = typeof file === "string" ? { sha: file } : file;
+          return { path, mode, type: "blob", sha };
+        });
         // A directory entry, which the comparison has to leave out.
         return { data: { truncated: commit.truncated ?? false, tree: [{ path: "src", mode: "040000", type: "tree", sha: "t" }, ...files] } };
       }
@@ -288,8 +302,23 @@ async function evaluate(pr, events = [], options = {}) {
   };
   const github = {
     rest,
-    graphql: async (query) => {
+    graphql: async (query, variables = {}) => {
       queries.push(query);
+      const number = variables.number;
+      if (readErrors.includes(number)) {
+        graphqlRequests++;
+        throw new Error(`Server error reading PR #${number}`);
+      }
+      if (byNumber[number]) {
+        graphqlRequests++;
+        const snapshots = byNumber[number];
+        reads[number] = (reads[number] ?? 0) + 1;
+        const snapshot = snapshots[Math.min(reads[number] - 1, snapshots.length - 1)];
+        if (snapshot instanceof Error) {
+          throw snapshot;
+        }
+        return { repository: { pullRequest: snapshot } };
+      }
       return { repository: { pullRequest: pullRequests[Math.min(graphqlRequests++, pullRequests.length - 1)] } };
     },
     paginate: async (method, params) => {
@@ -298,7 +327,8 @@ async function evaluate(pr, events = [], options = {}) {
         return prCommits;
       }
       if (method === rest.pulls.list) {
-        return [{ number: 7 }];
+        listRequests.push(params);
+        return openPrs.map((number) => ({ number }));
       }
       if (method === rest.repos.getBranchRules) {
         rulesRequests.push(params);
@@ -349,7 +379,8 @@ async function evaluate(pr, events = [], options = {}) {
   const core = {
     info: (message) => logs.push(message),
     notice: (message) => logs.push("notice: " + message),
-    warning: (message) => logs.push("warning: " + message)
+    warning: (message) => logs.push("warning: " + message),
+    setFailed: (message) => logs.push("failed: " + message)
   };
   const context = {
     repo: { owner: OWNER, repo: "demo" },
@@ -359,8 +390,14 @@ async function evaluate(pr, events = [], options = {}) {
   process.env.HAS_RELEASE_PR_PAT = pat ? "true" : "false";
   process.env.EVENTS_TOKEN = "github-token";
   process.env.MERGE_STATE_RETRY_MS = "0";
-  await run(github, context, core, getOctokit);
-  return { merges, updates, posted, logs, eventRequests, queries, eventTokens, graphqlRequests, rulesRequests, removedLabels };
+  try {
+    await run(github, context, core, getOctokit);
+  } catch (error) {
+    // What the run did before it threw, for tests of a run that ends early.
+    error.observed = { updates, reads, logs };
+    throw error;
+  }
+  return { merges, updates, posted, logs, eventRequests, queries, eventTokens, graphqlRequests, rulesRequests, removedLabels, listRequests };
 }
 
 test("merges a ready PR at the head it checked", async () => {
@@ -657,6 +694,34 @@ test("leaves review:claude on past the cap until Claude has reviewed since it wa
   assert.deepEqual(removedLabels, []);
 });
 
+test("measures from the last time review:claude was added, not the first", async () => {
+  // Added at T1, reviewed at T2, added again at T3: the T2 review doesn't count.
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two"),
+    claudeReviews: claudeReviewsOf({ oid: HEAD, at: "2026-01-02T00:00:00Z" }),
+    labels: labelled(CLAUDE_LABEL)
+  });
+  const { removedLabels } = await evaluate(pr, [claudeLabelled("2026-01-01T00:00:00Z"), claudeLabelled("2026-01-03T00:00:00Z")]);
+
+  assert.deepEqual(removedLabels, []);
+});
+
+test("ignores unlabeled events and other labels when measuring since review:claude was added", async () => {
+  const pr = readyPr({
+    copilotReviews: copilotReviewsOf("one", "two"),
+    claudeReviews: claudeReviewsOf({ oid: HEAD, at: "2026-01-02T00:00:00Z" }),
+    labels: labelled(CLAUDE_LABEL)
+  });
+  const events = [
+    claudeLabelled("2026-01-01T00:00:00Z"),
+    { event: "unlabeled", label: { name: CLAUDE_LABEL }, created_at: "2026-01-03T00:00:00Z", actor: { login: OWNER } },
+    { event: "labeled", label: { name: "enhancement" }, created_at: "2026-01-04T00:00:00Z", actor: { login: OWNER } }
+  ];
+  const { removedLabels } = await evaluate(pr, events);
+
+  assert.deepEqual(removedLabels.map((params) => params.name), [CLAUDE_LABEL]);
+});
+
 test("takes review:claude off past the cap once Claude has reviewed since it was last added", async () => {
   const pr = readyPr({
     copilotReviews: copilotReviewsOf("one", "two"),
@@ -943,6 +1008,26 @@ test("counts a file main deleted as clean", async () => {
 test("waits on a merge from main that also changes a file", async () => {
   const commits = graph({ merge1: { parents: ["rev", "main1"], files: { app: "app2", lib: "lib1" } } });
   assertWaitsForReview(await evaluate(mergedPr("merge1"), [], { commits }), "merge1");
+});
+
+test("waits on a merge from main that only changes a file's mode (#155)", async () => {
+  const commits = graph({ merge1: { parents: ["rev", "main1"], files: { app: { sha: "app1", mode: "100755" }, lib: "lib1" } } });
+  assertWaitsForReview(await evaluate(mergedPr("merge1"), [], { commits }), "merge1");
+});
+
+test("waits on a merge from main that swaps a file for a symlink with the same blob (#155)", async () => {
+  const commits = graph({ merge1: { parents: ["rev", "main1"], files: { app: "app1", lib: { sha: "lib1", mode: "120000" } } } });
+  assertWaitsForReview(await evaluate(mergedPr("merge1"), [], { commits }), "merge1");
+});
+
+test("counts a mode change main made as clean", async () => {
+  const commits = graph({
+    main1: { parents: ["base0"], files: { app: "app0", lib: { sha: "lib1", mode: "100755" } } },
+    merge1: { parents: ["rev", "main1"], files: { app: "app1", lib: { sha: "lib1", mode: "100755" } } }
+  });
+  const { merges } = await evaluate(mergedPr("merge1"), [], { commits });
+
+  assert.equal(merges.length, 1);
 });
 
 test("waits on a merge from main that adds a file neither side has", async () => {
@@ -1397,7 +1482,135 @@ test("gives up on an UNKNOWN merge state after a few tries", async () => {
 });
 
 test("a push to main sweeps the open PRs and brings the ready ones up to date", async () => {
-  const { updates } = await evaluate(readyPr({ mergeStateStatus: "BEHIND" }), [], { push: true });
+  const { updates, listRequests } = await evaluate(readyPr({ mergeStateStatus: "BEHIND" }), [], { push: true });
+
+  assert.equal(updates.length, 1);
+  assert.deepEqual(
+    listRequests.map(({ sort, direction }) => ({ sort, direction })),
+    [{ sort: "created", direction: "asc" }],
+    "the sweep lists open PRs oldest first"
+  );
+});
+
+test("a sweep brings only one ready BEHIND PR up to date, the first listed (#155)", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const { updates, logs } = await evaluate(behind, [], { push: true, openPrs: [7, 8, 9] });
+
+  assert.deepEqual(updates.map((update) => update.pull_number), [7]);
+  assert.ok(logs.some((line) => line.includes("Waiting on PR #8") && line.includes("already brought PR #7 up to date")), logs.join("\n"));
+  assert.ok(logs.some((line) => line.includes("Waiting on PR #9")), logs.join("\n"));
+});
+
+test("a sweep that asks Dependabot to rebase the first BEHIND PR leaves the next one waiting", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const byNumber = { 7: [dependabotPr()], 8: [behind] };
+  const { updates, posted, logs } = await evaluate(behind, [], { push: true, openPrs: [7, 8], prCommits: DEPENDABOT_COMMITS, byNumber });
+
+  assert.equal(posted.length, 1);
+  assert.deepEqual(updates, []);
+  assert.ok(logs.some((line) => line.includes("Waiting on PR #8") && line.includes("already brought PR #7 up to date")), logs.join("\n"));
+});
+
+test("a sweep moves on to the next BEHIND PR when Dependabot was already asked for the first's head", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const byNumber = { 7: [dependabotPr()], 8: [behind] };
+  const asked = [{ user: { login: POSTER }, body: `@dependabot rebase\n\n<!-- pr-automerge:dependabot-rebase ${HEAD} -->` }];
+  const { updates, posted } = await evaluate(behind, [], { push: true, openPrs: [7, 8], prCommits: DEPENDABOT_COMMITS, comments: asked, byNumber });
+
+  assert.deepEqual(posted, []);
+  assert.deepEqual(updates.map((update) => update.pull_number), [8]);
+});
+
+test("a sweep tries the next BEHIND PR when updating the first fails with a 422", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const { updates } = await evaluate(behind, [], { push: true, openPrs: [7, 8], updateError: Object.assign(new Error("head moved"), { status: 422 }) });
+
+  assert.deepEqual(updates.map((update) => update.pull_number), [7, 8]);
+});
+
+test("a sweep that merges a later PR leaves the earlier BEHIND one for the merge's push", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const byNumber = { 7: [behind], 8: [readyPr()] };
+  const { updates, merges, logs } = await evaluate(behind, [], { push: true, openPrs: [7, 8], byNumber });
+
+  assert.deepEqual(merges.map((merge) => merge.pull_number), [8]);
+  assert.deepEqual(updates, []);
+  assert.ok(logs.some((line) => line.includes("Waiting on PR #7") && line.includes("this sweep merged PR #8")), logs.join("\n"));
+});
+
+test("a sweep reads a candidate again before its update, and skips one no longer ready", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const handedBack = readyPr({ mergeStateStatus: "BEHIND", labels: labelled(NEEDS_HUMAN) });
+  // PR 7 is read twice while the sweep evaluates it, then picks up the hand-back label.
+  const byNumber = { 7: [behind, behind, handedBack], 8: [behind] };
+  const { updates } = await evaluate(behind, [], { push: true, openPrs: [7, 8], byNumber });
+
+  assert.deepEqual(updates.map((update) => update.pull_number), [8]);
+});
+
+test("a sweep merges a candidate that is CLEAN when read again, and updates no other", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  // PR 7 is read twice while the sweep evaluates it, then is CLEAN (someone brought it up to date).
+  const byNumber = { 7: [behind, behind, readyPr()], 8: [behind] };
+  const { merges, updates, logs } = await evaluate(behind, [], { push: true, openPrs: [7, 8], byNumber });
+
+  assert.deepEqual(merges.map((merge) => merge.pull_number), [7]);
+  assert.deepEqual(updates, []);
+  assert.ok(logs.some((line) => line.includes("Waiting on PR #8") && line.includes("this sweep merged PR #7")), logs.join("\n"));
+});
+
+test("a sweep updates the next candidate when reading one again throws, then fails the run", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const byNumber = { 7: [behind, behind, new Error("Server error reading PR #7")], 8: [behind] };
+  const { updates, logs } = await evaluate(behind, [], { push: true, openPrs: [7, 8], byNumber });
+
+  assert.deepEqual(updates.map((update) => update.pull_number), [8]);
+  assert.ok(logs.some((line) => line.startsWith("failed: ") && line.includes("#7")), logs.join("\n"));
+});
+
+test("a sweep still makes its update when evaluating another PR throws, then fails the run", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const { updates, logs } = await evaluate(behind, [], { push: true, openPrs: [7, 8], readErrors: [8] });
+
+  assert.deepEqual(updates.map((update) => update.pull_number), [7]);
+  assert.ok(logs.some((line) => line.startsWith("warning: ") && line.includes("PR #8") && line.includes("Server error")), logs.join("\n"));
+  assert.ok(logs.some((line) => line.startsWith("failed: ") && line.includes("#8")), logs.join("\n"));
+});
+
+for (const [name, error] of [
+  ["a 401", Object.assign(new Error("Bad credentials"), { status: 401 })],
+  [
+    "a 403 rate limit",
+    Object.assign(new Error("You have exceeded a secondary rate limit"), { status: 403, response: { headers: { "retry-after": "60" } } })
+  ],
+  ["a 403 with no requests left", Object.assign(new Error("Forbidden"), { status: 403, response: { headers: { "x-ratelimit-remaining": "0" } } })],
+  ["a 429", Object.assign(new Error("Too many requests"), { status: 429 })],
+  ["a GraphQL RATE_LIMITED error", Object.assign(new Error("rate limited"), { errors: [{ type: "RATE_LIMITED" }] })]
+]) {
+  test(`a sweep stops at ${name}, which holds for the whole run`, async () => {
+    const behind = readyPr({ mergeStateStatus: "BEHIND" });
+    const byNumber = { 7: [behind], 8: [error], 9: [behind] };
+
+    const thrown = await evaluate(behind, [], { push: true, openPrs: [7, 8, 9], byNumber }).then(() => null, (e) => e);
+
+    assert.equal(thrown, error);
+    assert.equal(thrown.observed.reads[9], undefined, "PR 9 is never read");
+    assert.deepEqual(thrown.observed.updates, [], "no update is made");
+  });
+}
+
+test("a sweep treats a 403 that isn't a rate limit as one PR's error, and still makes its update", async () => {
+  const behind = readyPr({ mergeStateStatus: "BEHIND" });
+  const forbidden = Object.assign(new Error("Resource not accessible by integration"), { status: 403, response: { headers: {} } });
+  const byNumber = { 7: [behind], 8: [forbidden] };
+  const { updates, logs } = await evaluate(behind, [], { push: true, openPrs: [7, 8], byNumber });
+
+  assert.deepEqual(updates.map((update) => update.pull_number), [7]);
+  assert.ok(logs.some((line) => line.startsWith("failed: ") && line.includes("#8")), logs.join("\n"));
+});
+
+test("a PR event still brings its own PR up to date", async () => {
+  const { updates } = await evaluate(readyPr({ mergeStateStatus: "BEHIND" }));
 
   assert.equal(updates.length, 1);
 });
