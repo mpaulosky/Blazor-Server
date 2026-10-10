@@ -15,8 +15,13 @@
 		<TailwindMinify Condition="'$(Configuration)' == 'Release'"> --minify</TailwindMinify>
 	</PropertyGroup>
 
+	<!-- `@import "tailwindcss" source("..")` makes the CLI scan every non-gitignored file under src/UI, not just
+	     .razor and .razor.cs, so these inputs mirror that scan: a plain .cs class-map helper, a *.razor.js, or an
+	     .html file can all contribute a utility class the CLI must pick up. -->
 	<ItemGroup>
-		<TailwindInput Include="**/*.razor;**/*.razor.cs;Styles/**" Exclude="node_modules/**;bin/**;obj/**" />
+		<TailwindInput
+			Include="**/*.razor;**/*.cs;**/*.js;**/*.html;Styles/**"
+			Exclude="node_modules/**;bin/**;obj/**;wwwroot/css/app.css" />
 	</ItemGroup>
 
 	<!-- The CLI writes into obj/<Configuration>/, so Debug and Release each keep their own up-to-date check and
@@ -26,7 +31,7 @@
 		Name="BuildTailwindCss"
 		BeforeTargets="BeforeBuild"
 		Condition="'$(DesignTimeBuild)' != 'true'"
-		Inputs="@(TailwindInput);package.json"
+		Inputs="@(TailwindInput);package.json;$(MSBuildThisFileDirectory)../../pnpm-lock.yaml"
 		Outputs="$(IntermediateOutputPath)tailwind/app.css">
 		<Error
 			Condition="!Exists('$(MSBuildProjectDirectory)/node_modules/@tailwindcss/cli/package.json')"
@@ -44,7 +49,7 @@
 	     Debug then Release could leave wwwroot/css/app.css holding the other configuration's CSS, because both
 	     configurations share that one output path. -->
 	<Target Name="CopyTailwindCss" AfterTargets="BuildTailwindCss" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
-		<Copy SourceFiles="$(IntermediateOutputPath)tailwind/app.css" DestinationFiles="$(TailwindOutput)" />
+		<Copy SourceFiles="$(IntermediateOutputPath)tailwind/app.css" DestinationFiles="$(TailwindOutput)" SkipUnchangedFiles="true" />
 		<!-- Static web assets read Content at evaluation time, before this target writes the file, so a clean
 		     build would leave app.css out of its endpoints. Re-adding it here puts it in the first build too. -->
 		<ItemGroup>
