@@ -40,9 +40,10 @@ else
 fi
 
 # branches.test.mts checks Sandcastle's branch names against the branch
-# standard, and dockerfile.test.mts checks the sandbox image's linters against
-# the versions gate.sh pins, so a change to either reruns them.
-if changed .sandcastle package.json ':(glob)pnpm-*.yaml' scripts/check-branch-name.sh scripts/gate.sh; then
+# standard, code-review-skill.test.mts checks the code-review skill, and
+# dockerfile.test.mts checks the sandbox image's linters against the versions
+# gate.sh pins, so a change to any of them reruns them.
+if changed .sandcastle package.json ':(glob)pnpm-*.yaml' scripts/check-branch-name.sh .claude/skills/code-review scripts/gate.sh; then
   echo -e "${CYAN}🏰 Sandcastle TypeScript check...${RESET}"
   run_clean pnpm run check:sandcastle
 else
