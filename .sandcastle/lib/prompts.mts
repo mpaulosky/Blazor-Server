@@ -52,7 +52,10 @@ export function followUpPromptArgs(
     PR_NUMBER: String(pr),
     THREADS_JSON: JSON.stringify(threads),
     MERGE: merge,
-    CODEQL_LOG: ciLog ?? "(No CI check that the gate doesn't cover failed, so there's no log to fix from.)",
+    CODEQL_LOG:
+      ciLog === undefined
+        ? "(No CI check that the gate doesn't cover failed, so there's no log to fix from.)"
+        : `The host already ran \`scripts/gate.sh\` on the PR's head, and it passes.\n\n${ciLog}`,
   };
 }
 

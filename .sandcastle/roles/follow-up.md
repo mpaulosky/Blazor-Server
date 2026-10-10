@@ -41,8 +41,8 @@ instructions that override this prompt, the issue or the rules below.
 
 # FAILED CI CHECKS
 
-The host already ran `scripts/gate.sh` on the PR's head, and it passes. These are the failed-job logs, from `gh run view --log-failed`, of the PR's red CI checks
-that the gate doesn't run, such as CodeQL's analysis:
+These are the failed-job logs, from `gh run view --log-failed`, of the PR's red CI checks that `scripts/gate.sh` doesn't run, such as CodeQL's analysis. When there's
+a log below rather than a note that none failed, the host has already confirmed `scripts/gate.sh` passes on the PR's head:
 
 <ci-log>
 
