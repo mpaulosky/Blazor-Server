@@ -3,10 +3,13 @@ import { describe, it } from "node:test";
 import {
   BUILD_ROLES,
   BUILDING_LABEL_MAX_AGE_MS,
+  BudgetError,
+  DEFAULT_BUDGET_MINUTES,
   GATE_FIXER_ATTEMPTS,
   QUEUE_SCOPE_USAGE,
   ROLE_AGENTS,
   QueueScopeError,
+  budgetMinutesFrom,
   queueScopeFrom,
 } from "./config.mts";
 
@@ -121,5 +124,33 @@ describe("queueScopeFrom", () => {
   it("QUEUE_SCOPE_USAGE shows both local forms", () => {
     assert.match(QUEUE_SCOPE_USAGE, /SANDCASTLE_ISSUE=<n>/);
     assert.match(QUEUE_SCOPE_USAGE, /SANDCASTLE_LABEL=<label>/);
+  });
+});
+
+// #147: no new round, and no role run, starts once this many minutes have
+// passed since the run started.
+describe("budgetMinutesFrom", () => {
+  it("defaults to DEFAULT_BUDGET_MINUTES when unset", () => {
+    assert.equal(budgetMinutesFrom({}), DEFAULT_BUDGET_MINUTES);
+  });
+
+  it("defaults to DEFAULT_BUDGET_MINUTES when blank", () => {
+    assert.equal(budgetMinutesFrom({ SANDCASTLE_BUDGET_MINUTES: "" }), DEFAULT_BUDGET_MINUTES);
+  });
+
+  it("parses a positive whole number of minutes", () => {
+    assert.equal(budgetMinutesFrom({ SANDCASTLE_BUDGET_MINUTES: "90" }), 90);
+  });
+
+  for (const bad of ["0", "-5", "1.5", "abc", "4h"]) {
+    it(`throws BudgetError for "${bad}"`, () => {
+      assert.throws(() => budgetMinutesFrom({ SANDCASTLE_BUDGET_MINUTES: bad }), BudgetError);
+    });
+  }
+
+  // Unlike SANDCASTLE_ISSUE and SANDCASTLE_LABEL, the budget is allowed in
+  // GitHub Actions too.
+  it("accepts the variable when GITHUB_ACTIONS is set", () => {
+    assert.equal(budgetMinutesFrom({ GITHUB_ACTIONS: "true", SANDCASTLE_BUDGET_MINUTES: "90" }), 90);
   });
 });

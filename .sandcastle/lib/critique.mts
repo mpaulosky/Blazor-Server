@@ -13,6 +13,7 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { hooks } from "./config.mts";
+import { UncountedStopError } from "./errors.mts";
 import { bodyBlockers, liveGitHub as gateGitHub, type Blocker } from "./gate.mts";
 import {
   addBlockedBy,
@@ -241,6 +242,9 @@ export async function critiqueRound(
     const missing = unjudged(picks, verdicts);
     if (missing.length > 0) throw new Error(`it gave no verdict on ${missing.join(", ")}`);
   } catch (error) {
+    // Out of usage or time, the critique didn't fail: the run is stopping,
+    // so building even the first pick would start a role it can't finish.
+    if (error instanceof UncountedStopError) throw error;
     log(`  ⚠ The plan critique failed (${error}). Building only the planner's first pick, #${firstPick.number}.`);
     return [firstPick];
   }

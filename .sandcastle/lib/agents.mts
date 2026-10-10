@@ -3,11 +3,15 @@
 // role's model, effort, iteration cap and timeout from ROLE_AGENTS and record
 // the run's token usage. The role is recorded before the run starts, so one
 // that times out or fails still appears in the end-of-run report. Every role's
-// prompt file also gets the shared role rules as {{SHARED_RULES}}.
+// prompt file also gets the shared role rules as {{SHARED_RULES}}. No role
+// starts once the run's limits (lib/limits.mts) say stop, and a run that hits
+// Claude's usage limit ends in an UncountedStopError (#147).
 
 import { readFileSync } from "node:fs";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { ROLE_AGENTS, type Role } from "./config.mts";
+import { UncountedStopError } from "./errors.mts";
+import { RunLimits, runLimits, usageLimitLine } from "./limits.mts";
 import { usageReport } from "./report.mts";
 
 // The options a role fixes; callers supply everything else.
@@ -38,11 +42,24 @@ export function withSharedRules<T extends { prompt?: string; promptFile?: string
 export function runRole<T>(
   role: Role,
   options: Omit<sandcastle.RunOptions, RoleFixed | "output"> & { output: sandcastle.OutputObjectDefinition<T> },
+  limits?: RunLimits,
 ): Promise<sandcastle.RunResult & { output: T }>;
-export function runRole(role: Role, options: Omit<sandcastle.RunOptions, RoleFixed>): Promise<sandcastle.RunResult>;
-export async function runRole(role: Role, options: Omit<sandcastle.RunOptions, RoleFixed>): Promise<sandcastle.RunResult> {
+export function runRole(
+  role: Role,
+  options: Omit<sandcastle.RunOptions, RoleFixed>,
+  limits?: RunLimits,
+): Promise<sandcastle.RunResult>;
+export async function runRole(
+  role: Role,
+  options: Omit<sandcastle.RunOptions, RoleFixed>,
+  limits: RunLimits = runLimits,
+): Promise<sandcastle.RunResult> {
   usageReport.record(role, []);
-  const result = await sandcastle.run({ ...withSharedRules(options), ...roleOptions(role) });
+  const result = await runWithinLimits(
+    role,
+    () => sandcastle.run({ ...withSharedRules(options), ...roleOptions(role) }),
+    limits,
+  );
   usageReport.record(role, result.iterations);
   return result;
 }
@@ -51,9 +68,34 @@ export async function runRoleInSandbox(
   sandbox: sandcastle.Sandbox,
   role: Role,
   options: Omit<sandcastle.SandboxRunOptions, RoleFixed>,
+  limits: RunLimits = runLimits,
 ): Promise<sandcastle.SandboxRunResult> {
   usageReport.record(role, []);
-  const result = await sandbox.run({ ...withSharedRules(options), ...roleOptions(role) });
+  const result = await runWithinLimits(
+    role,
+    () => sandbox.run({ ...withSharedRules(options), ...roleOptions(role) }),
+    limits,
+  );
   usageReport.record(role, result.iterations);
   return result;
+}
+
+// Runs one role through `start`, refusing to start once `limits` say stop. A
+// run that fails on Claude's usage limit (lib/limits.mts#usageLimitLine)
+// records the stop, so no later role starts or publishes, and rejects with an
+// UncountedStopError naming the role and the limit's line, with the original
+// error as its cause. Any other error is rethrown unchanged.
+export async function runWithinLimits<R>(role: Role, start: () => Promise<R>, limits: RunLimits = runLimits): Promise<R> {
+  limits.throwIfStopped();
+  try {
+    return await start();
+  } catch (error) {
+    const line = usageLimitLine(error);
+    if (line === undefined) {
+      throw error;
+    }
+    const reason = `Claude's usage limit was hit during the ${role} run: ${line.slice(0, 200)}`;
+    limits.hitUsageLimit(reason);
+    throw new UncountedStopError(reason, { cause: error });
+  }
 }

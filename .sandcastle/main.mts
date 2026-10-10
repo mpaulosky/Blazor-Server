@@ -12,6 +12,10 @@
 //                               the host closes as completed every umbrella
 //                               (an issue intake split) whose sub-issues have
 //                               all closed as completed (lib/umbrella.mts).
+//                               Then the early exit (lib/work.mts): with no
+//                               issue for intake, no ready unblocked issue and
+//                               no PR that needs a follow-up pass, the run
+//                               exits 0 before any sandbox or agent starts.
 //   Phase 0a (Intake):          One run judges every open issue that carries
 //                               none of sandcastle:ready, sandcastle:needs-info
 //                               and sandcastle:needs-human against the
@@ -73,6 +77,15 @@
 // issues are picked up after each round. The loop stops early when a round
 // opens no pull request, but not when the critique defers every pick.
 //
+// The run also stops cleanly, exiting 0, once it can't finish more work
+// (lib/limits.mts, #147): no new round or role run starts after
+// SANDCASTLE_BUDGET_MINUTES (default 240) have passed since it started, and
+// once a role run hits Claude's usage or rate limit no role starts; a build
+// whose roles all finished still publishes, since that costs no usage.
+// Neither stop counts as a failed build attempt. A stopped build's commits
+// weren't pushed, so an ephemeral runner drops them, and the next run
+// rebuilds the issue from what GitHub has.
+//
 // Every role's model, effort, iteration cap and timeout comes from ROLE_AGENTS
 // in lib/config.mts. The sandbox gets no GitHub token: the host reads GitHub
 // with its own gh auth and passes each role what it needs through its prompt.
@@ -93,13 +106,24 @@ import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
 import { clearStaleBuildingLabels, installBuildingLabelRelease, releaseAllBuildingLabels } from "./lib/building.mts";
 import { fetchMain, prepareBranches } from "./lib/branches.mts";
-import { BUILDING_LABEL, describeQueueScope, MAX_ITERATIONS, QueueScopeError, queueScopeFrom, type QueueScope } from "./lib/config.mts";
+import {
+  BudgetError,
+  budgetMinutesFrom,
+  BUILDING_LABEL,
+  describeQueueScope,
+  MAX_ITERATIONS,
+  QueueScopeError,
+  queueScopeFrom,
+  type QueueScope,
+} from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
+import { UncountedStopError } from "./lib/errors.mts";
 import { followUpPhase } from "./lib/follow-up.mts";
 import { gateIssues } from "./lib/gate.mts";
 import { cacheHostLogin, ensureLabels, openPullRequests } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
+import { runLimits } from "./lib/limits.mts";
 import { planRound, resolveRoles } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
@@ -107,6 +131,7 @@ import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
 import { umbrellaPhase } from "./lib/umbrella.mts";
+import { findWork } from "./lib/work.mts";
 
 // The queue scope comes first, so a local run that names none exits with
 // the usage message before it touches git, gh or a sandbox (#146).
@@ -120,6 +145,19 @@ try {
 }
 useQueueScope(scope);
 console.log(`Queue: ${describeQueueScope(scope)}`);
+
+// The time budget is read just as early, so a bad value exits the same way.
+// Its clock starts here, as close to the job's own start as it gets (#147).
+let budgetMinutes: number;
+try {
+  budgetMinutes = budgetMinutesFrom(process.env);
+} catch (error) {
+  if (!(error instanceof BudgetError)) throw error;
+  console.error(error.message);
+  process.exit(2);
+}
+runLimits.start(budgetMinutes);
+console.log(`Time budget: ${budgetMinutes} minutes`);
 
 const envFile = ".sandcastle/.env";
 const leakedTokens = existsSync(envFile) ? githubTokensIn(readFileSync(envFile, "utf8")) : [];
@@ -154,8 +192,18 @@ for (const issueNumber of clearStaleBuildingLabels()) {
   console.log(`  🧹 #${issueNumber}: cleared a stale ${BUILDING_LABEL} label left by a run that didn't finish.`);
 }
 
+// An UncountedStopError from any phase (intake, the planner, the critique)
+// means the budget has passed or Claude's usage limit was hit: the catch below
+// ends the run cleanly rather than crash, since the next run picks the work up.
 try {
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+    // No new round once the budget has passed or the usage limit was hit.
+    const stopReason = runLimits.stopReason();
+    if (stopReason !== undefined) {
+      console.log(`⏹ ${stopReason}, so no new round starts.`);
+      break;
+    }
+
     console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
     // -----------------------------------------------------------------------
@@ -166,8 +214,29 @@ try {
     // Every phase below loads the queue; they share one read of each issue
     // this round.
     startQueueRound();
-    followUpPhase();
+    const { needsPass } = followUpPhase();
     umbrellaPhase();
+
+    // No build of this run is going between rounds, so any label it still
+    // holds is one whose removal failed: try again before the work check
+    // and the gate, which would otherwise hold the issue back for the rest
+    // of the run.
+    for (const issueNumber of releaseAllBuildingLabels()) {
+      console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL}, which an earlier round couldn't.`);
+    }
+
+    // The early exit: before intake, the first step that can start Claude,
+    // and before any sandbox needs the Docker image. A failed read here ends
+    // the run red, as a failed gate does.
+    const found = findWork(needsPass);
+    if (found === undefined) {
+      console.log(
+        `Nothing to do in ${describeQueueScope(scope)}: no issue for intake, no ready unblocked issue and no PR ` +
+          "that needs a follow-up pass. Exiting.",
+      );
+      break;
+    }
+    console.log(`Work found: ${found}`);
 
     // -----------------------------------------------------------------------
     // Phase 0a: Intake
@@ -179,13 +248,6 @@ try {
     // -----------------------------------------------------------------------
     // Phase 0b: Gate
     // -----------------------------------------------------------------------
-    // No build of this run is going between rounds, so any label it still
-    // holds is one whose removal failed: try again before the gate, which
-    // would otherwise hold the issue back for the rest of the run.
-    for (const issueNumber of releaseAllBuildingLabels()) {
-      console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL}, which an earlier round couldn't.`);
-    }
-
     const { ready, blocked } = gateIssues();
 
     for (const { issue, reasons } of blocked) {
@@ -264,8 +326,9 @@ try {
     );
 
     // Log any agents that threw (network error, sandbox crash, timeout, etc.).
+    // A clean stop is named in the round summary instead.
     for (const [i, outcome] of settled.entries()) {
-      if (outcome.status === "rejected") {
+      if (outcome.status === "rejected" && !(outcome.reason instanceof UncountedStopError)) {
         console.error(
           `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
         );
@@ -279,11 +342,15 @@ try {
 
     if (summary.stop !== undefined) {
       // Nothing reached a PR, so the next plan would pick the same issues and
-      // repeat the same round. Stop and let a human look.
+      // repeat the same round: stop and let a human look. Or a build stopped
+      // cleanly on the time budget or usage limit, so nothing more can start.
       console.log(summary.stop);
       break;
     }
   }
+} catch (error) {
+  if (!(error instanceof UncountedStopError)) throw error;
+  console.log(`\n⏹ Stopping the run cleanly: ${error.message}. Nothing more starts; the next run picks the work up.`);
 } finally {
   console.log("\nToken usage by role:");
   const lines = usageReport.lines();

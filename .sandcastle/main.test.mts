@@ -213,3 +213,73 @@ describe("main.mts's follow-up wiring", () => {
     );
   });
 });
+
+// #147: a local run without a queue scope must exit before touching git or
+// gh (#146's own check, above); a run with a bad SANDCASTLE_BUDGET_MINUTES
+// must exit the same way, so the budget is resolved just as early.
+describe("main.mts's budget wiring", () => {
+  it("resolves the time budget before protectHostGit()", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const budgetCall = mainMts.indexOf("budgetMinutesFrom(");
+    const protectCall = mainMts.indexOf("protectHostGit()");
+
+    assert.notEqual(budgetCall, -1, "main.mts doesn't call budgetMinutesFrom(");
+    assert.ok(budgetCall < protectCall, "main.mts doesn't resolve the time budget before protectHostGit()");
+  });
+
+  // No new round starts once the budget, or Claude's usage limit, has
+  // stopped the run (#147).
+  it("checks the run's limits at the top of each round, before starting a fresh queue round", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+    const stopReasonCall = mainMts.indexOf("runLimits.stopReason()", loop);
+    const startRound = mainMts.indexOf("startQueueRound()", loop);
+
+    assert.notEqual(stopReasonCall, -1, "main.mts doesn't call runLimits.stopReason()");
+    assert.ok(loop < stopReasonCall && stopReasonCall < startRound, "main.mts doesn't check the run's limits before starting a fresh queue round");
+  });
+
+  // Once a pipeline throws UncountedStopError (a usage-limit or budget
+  // stop from any role), the run ends cleanly rather than crashing or
+  // counting the issue as a failed build.
+  it("catches an UncountedStopError around the round loop and ends the run cleanly", () => {
+    const mainMts = read(".sandcastle/main.mts");
+
+    assert.match(mainMts, /catch[\s\S]{0,200}instanceof UncountedStopError/);
+  });
+});
+
+// #147: the early exit must check for work before the Docker image is built
+// or Claude is called, so it has to sit after the housekeeping phases and
+// before intake, the first phase that can start an agent.
+describe("main.mts's early-exit wiring", () => {
+  it("checks for work after the umbrella check and before intake", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+    const umbrellaCall = mainMts.indexOf("umbrellaPhase(", loop);
+    const findWorkCall = mainMts.indexOf("findWork(", loop);
+    const intakeCall = mainMts.indexOf("intakePhase(", loop);
+
+    assert.notEqual(findWorkCall, -1, "main.mts doesn't call findWork(");
+    assert.ok(
+      umbrellaCall < findWorkCall && findWorkCall < intakeCall,
+      "main.mts doesn't check for work after the umbrella check and before intake",
+    );
+  });
+});
+
+// #147: SANDCASTLE_BUDGET_MINUTES reaches the sandbox like every other key in
+// this file, and the host reads the budget from its own environment instead,
+// so it must stay commented out, as SANDCASTLE_ISSUE and SANDCASTLE_LABEL do.
+describe(".sandcastle/.env.example budget", () => {
+  it("mentions SANDCASTLE_BUDGET_MINUTES only on commented-out lines", () => {
+    const envExample = read(".sandcastle/.env.example");
+
+    assert.match(envExample, /SANDCASTLE_BUDGET_MINUTES/);
+    for (const line of envExample.split("\n")) {
+      if (line.includes("SANDCASTLE_BUDGET_MINUTES")) {
+        assert.match(line.trim(), /^#/, `expected "${line}" to be commented out`);
+      }
+    }
+  });
+});

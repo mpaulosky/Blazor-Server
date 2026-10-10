@@ -8,10 +8,13 @@ import {
   designNoteIn,
   latestDesignNote,
   isGitHubServerError,
+  isWorkflowPushRejection,
   publicErrorText,
   publish,
   UncountedStopError,
   type BuildHost,
+  workflowFilesFrom,
+  workflowLogArgs,
 } from "./build.mts";
 import {
   BUILD_FAILED_MARKER,
@@ -22,6 +25,7 @@ import {
   PUBLISH_RETRY_ATTEMPTS,
   type OptionalRole,
 } from "./config.mts";
+import { RunLimits } from "./limits.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [], roles: [] as OptionalRole[] };
 
@@ -134,6 +138,7 @@ function host(
   const designNoteCalls: number[] = [];
   const publishCalls: { reviewed: boolean; docsFailed: boolean }[] = [];
   const startFromMainCalls: { issueNumber: number; branch: string; base: string }[] = [];
+  const handBackWorkflowChangeCalls: { issueNumber: number; branch: string; detail: string; change: { head: string; files: string[] } }[] = [];
   const buildHost: BuildHost = {
     createSandbox: async () => {
       order.push("create");
@@ -187,10 +192,15 @@ function host(
     },
     worktreeProblems: () => worktreeProblems,
     publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), () => false),
+    limits: new RunLimits(),
+    workflowFiles: (from, to) => [`.github/workflows/${from.slice(0, 4)}-${to.slice(0, 4)}.yml`],
+    handBackWorkflowChange: (issueNumber, failureBranch, detail, change) => {
+      handBackWorkflowChangeCalls.push({ issueNumber, branch: failureBranch, detail, change });
+    },
   };
   return {
     steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
-    order, buildingCalls, designNoteCalls, publishCalls, workCommands, startFromMainCalls,
+    order, buildingCalls, designNoteCalls, publishCalls, workCommands, startFromMainCalls, handBackWorkflowChangeCalls,
   };
 }
 
@@ -532,6 +542,110 @@ describe("buildIssue publishing", () => {
     assert.ok(!steps.includes("close"));
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /no longer points at this repository/);
+  });
+});
+
+// #147: a role run that hits Claude's usage limit, or a build the time
+// budget has already stopped, must end the build uncounted rather than
+// treating it as a failed attempt or publishing unreviewed work.
+describe("buildIssue and the usage limit", () => {
+  it("rejects with UncountedStopError, without recording a failed attempt, commenting or publishing, when the tester hits Claude's usage limit", async () => {
+    const usageLimitError = new Error("claude-code exited with code 1:\nClaude AI usage limit reached|1760000000");
+    const { comments, recordBuildFailureCalls, pushed, order, buildHost } = host([], {
+      failing: ["tester"],
+      failWith: { tester: usageLimitError },
+    });
+
+    await assert.rejects(
+      () => buildIssue(issue, branch, base, buildHost),
+      (error: unknown) => error instanceof UncountedStopError,
+    );
+
+    assert.deepEqual(comments, []);
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.deepEqual(pushed, []);
+    assert.ok(order.includes("close"), order.join(", "));
+    assert.ok(order.includes("unmark"), order.join(", "));
+  });
+
+  it("rejects with UncountedStopError and doesn't publish once the run's limits have recorded a usage-limit stop", async () => {
+    const { pushed, buildHost } = host([0, 0]);
+    buildHost.limits.hitUsageLimit("usage limit reached during the reviewer run");
+
+    await assert.rejects(
+      () => buildIssue(issue, branch, base, buildHost),
+      (error: unknown) => error instanceof UncountedStopError,
+    );
+
+    assert.deepEqual(pushed, []);
+  });
+
+  // The stop above is recorded before the tester starts, so it never reaches
+  // the publish step. Here another build in the round hits the limit only
+  // after this one's reviewer has finished: the work is built, gated and
+  // reviewed, and publishing it costs no Claude usage, while an ephemeral
+  // runner would throw away anything left unpushed.
+  it("still publishes work whose roles all finished when another build hits the usage limit after this one's reviewer", async () => {
+    const { pushed, recordBuildFailureCalls, steps, buildHost } = host([0, 0]);
+    const createSandbox = buildHost.createSandbox;
+    buildHost.createSandbox = async (sandboxBranch) => {
+      const sandbox = await createSandbox(sandboxBranch);
+      return {
+        ...sandbox,
+        run: async (options: SandboxRunOptions) => {
+          const result = await sandbox.run(options);
+          if (options.name === "reviewer") buildHost.limits.hitUsageLimit("usage limit reached during #70's backend run");
+          return result;
+        },
+      } as Sandbox;
+    };
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(steps.includes("reviewer"), steps.join(", "));
+    assert.notEqual(result.prUrl, undefined);
+    assert.equal(pushed.length, 1);
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+});
+
+// #147: a push GitHub refuses because it touches .github/workflows/** without
+// Workflows permission needs a person, not a retry and not a generic
+// publish-failure comment.
+describe("buildIssue publishing a workflow file", () => {
+  const workflowRejection =
+    "git push --quiet origin abc:refs/heads/x failed:\n ! [remote rejected] abc -> x (refusing to allow a GitHub App to " +
+    "create or update workflow `.github/workflows/ci.yml` without `workflows` permission)";
+
+  it("hands the issue back instead of posting the generic publish-failure comment", async () => {
+    const { comments, recordBuildFailureCalls, handBackWorkflowChangeCalls, buildHost } = host([0, 0], {
+      publishError: workflowRejection,
+    });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(handBackWorkflowChangeCalls.length, 1);
+    assert.equal(handBackWorkflowChangeCalls[0]!.issueNumber, issue.number);
+    assert.equal(handBackWorkflowChangeCalls[0]!.branch, branch);
+    assert.match(handBackWorkflowChangeCalls[0]!.detail, /refusing to allow/);
+    // The workflow files and head are read from the base to the commit the
+    // gate passed, the one the refused push carried.
+    const { head, files } = handBackWorkflowChangeCalls[0]!.change;
+    assert.deepEqual(files, [`.github/workflows/${base.slice(0, 4)}-${head.slice(0, 4)}.yml`]);
+    assert.notEqual(head, base);
+    assert.deepEqual(comments, []);
+    assert.deepEqual(recordBuildFailureCalls, []);
+    assert.equal(result.prUrl, undefined);
+    assert.equal(result.publishFailed, true);
+  });
+
+  it("still resolves when the hand-back for a workflow-file rejection itself fails", async () => {
+    const { buildHost } = host([0, 0], { publishError: workflowRejection });
+    buildHost.handBackWorkflowChange = () => {
+      throw new Error("gh issue edit failed: HTTP 502");
+    };
+
+    await assert.doesNotReject(() => buildIssue(issue, branch, base, buildHost));
   });
 });
 
@@ -1071,6 +1185,55 @@ describe("isGitHubServerError", () => {
   });
 });
 
+// #147: a push GitHub refused because it touches .github/workflows/** without
+// Workflows permission must hand the issue back, not be treated as a
+// transient server error or a generic publish failure.
+describe("isWorkflowPushRejection", () => {
+  it("recognises git's real output for a Personal Access Token without the workflow scope", () => {
+    const output =
+      "git push --quiet origin abc:refs/heads/feature/69-run-the-gate failed:\n" +
+      " ! [remote rejected] abc -> feature/69-run-the-gate (refusing to allow a Personal Access Token to create or " +
+      "update workflow `.github/workflows/ci.yml` without `workflow` scope)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), true);
+  });
+
+  it("recognises the rejection for an OAuth App", () => {
+    const output =
+      "git push failed:\n ! [remote rejected] abc -> x (refusing to allow an OAuth App to create or update workflow " +
+      "`.github/workflows/ci.yml` without `workflow` scope)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), true);
+  });
+
+  it("recognises the rejection for a GitHub App", () => {
+    const output =
+      "git push failed:\n ! [remote rejected] abc -> x (refusing to allow a GitHub App to create or update workflow " +
+      "`.github/workflows/ci.yml` without `workflows` permission)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), true);
+  });
+
+  it("doesn't take a non-fast-forward rejection for a workflow rejection", () => {
+    const output = "git push --quiet origin abc:refs/heads/x failed:\n ! [rejected] abc -> x (non-fast-forward)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), false);
+  });
+
+  it("doesn't take a server error for a workflow rejection", () => {
+    const output = "git push failed:\nremote: Internal Server Error";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), false);
+  });
+
+  it("reads only the command's output, not a command line that names a workflow branch", () => {
+    const output =
+      "git push --quiet origin abc:refs/heads/feature/5-workflow-tweak failed:\n ! [rejected] abc -> x (non-fast-forward)";
+
+    assert.equal(isWorkflowPushRejection(new Error(output)), false);
+  });
+});
+
 describe("publicErrorText", () => {
   it("strips colour codes and the credentials in a URL", () => {
     assert.equal(
@@ -1174,5 +1337,24 @@ describe("latestDesignNote", () => {
     const run = gh([{ body: designComment("A stranger's note.", "feature/3-a", "p"), author: "stranger", createdAt: "2026-01-03T00:00:00Z" }]);
 
     assert.equal(latestDesignNote(3, "o/r", run, "host"), undefined);
+  });
+});
+
+// GitHub refuses a push when any pushed commit touches a workflow file,
+// even one a later commit reverts, so the files come from the commits, not
+// from the net diff, which would list nothing for an edit and its revert.
+describe("workflowLogArgs", () => {
+  it("lists the workflow files each commit on the branch side touches", () => {
+    assert.deepEqual(workflowLogArgs("origin/main", "abc123"), [
+      "log", "--name-only", "--format=", "origin/main..abc123", "--", ".github/workflows/",
+    ]);
+  });
+});
+
+describe("workflowFilesFrom", () => {
+  it("names each file once, in first-seen order, without blank lines", () => {
+    const output = "\n.github/workflows/ci.yml\n\n.github/workflows/release.yml\n.github/workflows/ci.yml\n";
+
+    assert.deepEqual(workflowFilesFrom(output), [".github/workflows/ci.yml", ".github/workflows/release.yml"]);
   });
 });

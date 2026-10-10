@@ -24,8 +24,9 @@ import { UncountedStopError } from "./errors.mts";
 import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, repoName, type SandcastleIssue } from "./github.mts";
-import { recordFailedAttempt } from "./handback.mts";
+import { handBackWorkflowChange, recordFailedAttempt, type WorkflowChange } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
+import { runLimits, type RunLimits } from "./limits.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
@@ -93,9 +94,7 @@ export async function publish(
 // output after "failed:" is read: the command line before it quotes branch
 // names, and could quote an issue title that mentions a server error.
 export function isGitHubServerError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const outputStart = message.indexOf("failed:\n");
-  const output = outputStart === -1 ? message : message.slice(outputStart + "failed:\n".length);
+  const output = commandOutput(error);
   return /\bHTTP(?:\/[\d.]+)? 5\d\d\b|returned error: 5\d\d\b|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Time-?out|Something went wrong while executing your query/i.test(
     output,
   );
@@ -254,6 +253,17 @@ export type BuildHost = {
   // note), made safe to post on the public issue.
   publicError(error: unknown): string;
   log(line: string): void;
+  // The run's limits (#147): buildIssue runs every role through
+  // runRoleInSandbox(..., host.limits), and checks it before publishing.
+  limits: RunLimits;
+  // The .github/workflows/ files the commits from `base` to `commit` touch,
+  // for the hand-back comment of a push GitHub refused for them.
+  workflowFiles(base: string, commit: string): string[];
+  // Hands the issue back with sandcastle:needs-human after a push GitHub
+  // refused for a .github/workflows/** change (lib/handback.mts#handBackWorkflowChange).
+  // `detail` is the publicError text of the push's error; `change` names the
+  // refused head and its workflow files.
+  handBackWorkflowChange(issueNumber: number, branch: string, detail: string, change: WorkflowChange): void;
 };
 
 // An error's text as it can go on a public issue: no colour codes, no
@@ -264,6 +274,39 @@ export function publicErrorText(text: string, holdsSecret: (text: string) => boo
     .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi, "$1***@")
     .trim();
   return holdsSecret(cleaned) ? "(This text isn't shown: it looked like it held a secret. See the run log.)" : cleaned;
+}
+
+// The git arguments listing the .github/workflows/ files each commit from
+// `from` to `to` touches. GitHub refuses a push when any pushed commit
+// creates or updates a workflow file, even one a later commit reverts, so the
+// files come from the commits (a two-dot range: the branch side only), not
+// from the net diff, which would list nothing for an edit and its revert.
+export function workflowLogArgs(from: string, to: string): string[] {
+  return ["log", "--name-only", "--format=", `${from}..${to}`, "--", ".github/workflows/"];
+}
+
+// The files in workflowLogArgs' output, each once, in first-seen order.
+export function workflowFilesFrom(output: string): string[] {
+  return [...new Set(output.split("\n").map((line) => line.trim()).filter(Boolean))];
+}
+
+// Whether a failed push was GitHub refusing a change to a workflow file
+// because the token lacks the Workflows permission. Like isGitHubServerError,
+// it reads only the output after "failed:\n". Matches "a Personal Access
+// Token", "an OAuth App" and "a GitHub App", and both the singular
+// "permission" and plural "permissions" GitHub uses.
+export function isWorkflowPushRejection(error: unknown): boolean {
+  return /refusing to allow an? [^\n]{0,40}?to create or update workflow/i.test(commandOutput(error));
+}
+
+// A failed git or gh command's output: the text after "failed:\n", or the
+// whole message when there's no such line. The command line before it quotes
+// branch names and could quote an issue title, so matching it could misread
+// a failure.
+function commandOutput(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const outputStart = message.indexOf("failed:\n");
+  return outputStart === -1 ? message : message.slice(outputStart + "failed:\n".length);
 }
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
@@ -297,6 +340,9 @@ const liveHost: BuildHost = {
   publish,
   worktreeProblems,
   log: console.log,
+  limits: runLimits,
+  workflowFiles: (from, to) => workflowFilesFrom(git(...workflowLogArgs(from, to))),
+  handBackWorkflowChange: (issueNumber, branch, detail, change) => handBackWorkflowChange(issueNumber, branch, detail, change),
 };
 
 // The branch comes from prepareBranches, which has already fetched it when it
@@ -399,10 +445,15 @@ async function buildMarkedIssue(
     const roleArgs = developerPromptArgs(role);
     let failure: string;
     try {
-      const run = await runRoleInSandbox(sandbox, role, {
-        promptFile: `./.sandcastle/roles/${role}.md`,
-        promptArgs: roleArgs,
-      });
+      const run = await runRoleInSandbox(
+        sandbox,
+        role,
+        {
+          promptFile: `./.sandcastle/roles/${role}.md`,
+          promptArgs: roleArgs,
+        },
+        host.limits,
+      );
       commits.push(...run.commits);
       if (run.completionSignal !== undefined) {
         log(`${role} finished`);
@@ -410,10 +461,6 @@ async function buildMarkedIssue(
       }
       failure = `the ${role} ran out of iterations unfinished`;
     } catch (error) {
-      // Nothing throws UncountedStopError yet: recognising a usage-limit or
-      // time-budget stop in the role runner is #147's. Until it lands, such a
-      // stop counts as a failed attempt; runs are started by hand until then,
-      // and removing sandcastle:needs-human undoes a wrong hand-back.
       if (error instanceof UncountedStopError) throw error;
       failure = `the ${role} failed: ${error}`;
     }
@@ -433,10 +480,15 @@ async function buildMarkedIssue(
       {
         gate: () => runGate(sandbox),
         fix: async (at, gateOutput) => {
-          const fixer = await runRoleInSandbox(sandbox, "gate-fixer", {
-            promptFile: "./.sandcastle/roles/gate-fixer.md",
-            promptArgs: gateFixerPromptArgs(issue, branch, at, gateOutput),
-          });
+          const fixer = await runRoleInSandbox(
+            sandbox,
+            "gate-fixer",
+            {
+              promptFile: "./.sandcastle/roles/gate-fixer.md",
+              promptArgs: gateFixerPromptArgs(issue, branch, at, gateOutput),
+            },
+            host.limits,
+          );
           commits.push(...fixer.commits);
         },
         uncounted: (error) => error instanceof UncountedStopError,
@@ -481,10 +533,15 @@ async function buildMarkedIssue(
   // later round, as the reviewer's is.
   async function scribeFinishes(): Promise<boolean> {
     try {
-      const scribe = await runRoleInSandbox(sandbox, "scribe", {
-        promptFile: "./.sandcastle/roles/scribe.md",
-        promptArgs,
-      });
+      const scribe = await runRoleInSandbox(
+        sandbox,
+        "scribe",
+        {
+          promptFile: "./.sandcastle/roles/scribe.md",
+          promptArgs,
+        },
+        host.limits,
+      );
       commits.push(...scribe.commits);
       if (scribe.completionSignal !== undefined) {
         log("scribe finished");
@@ -530,10 +587,15 @@ async function buildMarkedIssue(
 
     let reviewed = true;
     try {
-      const review = await runRoleInSandbox(sandbox, "reviewer", {
-        promptFile: "./.sandcastle/review-prompt.md",
-        promptArgs,
-      });
+      const review = await runRoleInSandbox(
+        sandbox,
+        "reviewer",
+        {
+          promptFile: "./.sandcastle/review-prompt.md",
+          promptArgs,
+        },
+        host.limits,
+      );
       commits.push(...review.commits);
       log("reviewer finished");
     } catch (error) {
@@ -563,6 +625,11 @@ async function buildMarkedIssue(
       return notPublished;
     }
 
+    // A publish already reached goes ahead even once the run has hit the time
+    // budget or Claude's usage limit (#147): every role has finished, pushing
+    // and opening the PR cost no usage, and an ephemeral runner throws away
+    // whatever isn't pushed. The limits stop roles from starting, not this.
+
     // host.publish retries a GitHub server error, but not a push that doesn't
     // fast-forward origin's branch (an agent rewrote a commit an earlier round
     // pushed) or any other git or gh failure. Whatever still fails needs a
@@ -573,6 +640,26 @@ async function buildMarkedIssue(
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);
       const detail = host.publicError(error);
+      // Sandcastle's token can't push a .github/workflows/** change, so no
+      // retry or rebuild will get it through: a person has to make it.
+      if (isWorkflowPushRejection(error)) {
+        try {
+          // A failed listing still hands back: the comment then names the
+          // directory rather than each file.
+          let files: string[] = [];
+          try {
+            files = host.workflowFiles(base, gated);
+          } catch (listError) {
+            console.error(`  ⚠ #${issue.number}: listing the workflow files ${branch} changes failed: ${listError}`);
+          }
+          host.handBackWorkflowChange(issue.number, branch, detail, { head: gated, files });
+        } catch (handBackError) {
+          console.error(
+            `  ⚠ #${issue.number}: handing it back for its workflow change failed, so the next round tries again: ${handBackError}`,
+          );
+        }
+        return { commits, prUrl: undefined, publishFailed: true };
+      }
       const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
       host.commentOnIssue(
         issue.number,

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { Blocker } from "./gate.mts";
 import type { SandcastleIssue } from "./github.mts";
 import { applyVerdicts, critiqueRound, type CritiqueGitHub, type CritiqueVerdict } from "./critique.mts";
+import { UncountedStopError } from "./errors.mts";
 import type { CritiquePromptArgs } from "./prompts.mts";
 
 const issue = (number: number): SandcastleIssue => ({
@@ -337,6 +338,26 @@ describe("critiqueRound", () => {
     );
 
     assert.deepEqual(kept.map((i) => i.number), [4]);
+  });
+
+  // #147: a critique run stopped by the time budget or Claude's usage limit
+  // must end the round uncounted, rather than falling back to the first pick
+  // as a failed critique does.
+  it("rethrows an UncountedStopError from the run instead of returning the first pick", async () => {
+    const gh = github();
+    const { log } = capture();
+    const stop = new UncountedStopError("the run's 240-minute time budget has passed");
+
+    await assert.rejects(
+      () =>
+        critiqueRound(
+          { picks: [issue(4), issue(2), issue(3)], inFlight: [], unpicked: [] },
+          () => Promise.reject(stop),
+          gh.stub,
+          log,
+        ),
+      (error: unknown) => error === stop,
+    );
   });
 
   it("treats a failure to read an in-flight PR's files as a failed critique", async () => {

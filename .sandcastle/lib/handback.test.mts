@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { execFileSync } from "node:child_process";
 import { BUILD_FAILED_MARKER, BUILD_FAILURE_CAP } from "./config.mts";
-import { buildFailedComment, needsHumanComment, recordFailedAttempt } from "./handback.mts";
+import { buildFailedComment, handBackWorkflowChange, needsHumanComment, recordFailedAttempt, workflowHandBackComment } from "./handback.mts";
 import { HandBackReport } from "./report.mts";
 
 // A gh stub recording every call's args and stdin input.
@@ -134,5 +134,95 @@ describe("recordFailedAttempt", () => {
     assert.equal(report.items()[0]!.target, "issue #69");
     assert.equal(report.items()[0]!.label, "sandcastle:needs-human");
     assert.match(report.items()[0]!.reason, /feature\/69-run-the-gate/);
+  });
+});
+
+// #147: a push GitHub rejected because it touches .github/workflows/**
+// without Workflows permission must hand the issue back, not be treated as a
+// failed build attempt.
+describe("workflowHandBackComment", () => {
+  const change = { head: "abc1234def5678abc1234def5678abc1234def56", files: [".github/workflows/ci.yml", ".github/workflows/release.yml"] };
+  const detail =
+    "! [remote rejected] abc -> feature/69-run-the-gate (refusing to allow a GitHub App to create or update workflow `.github/workflows/ci.yml` without `workflows` permission)";
+
+  it("names the branch, each workflow file and the head commit, says a person must make the change, and fences the detail", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, change);
+
+    assert.match(comment, /`feature\/69-run-the-gate`/);
+    assert.match(comment, /`\.github\/workflows\/ci\.yml`/);
+    assert.match(comment, /`\.github\/workflows\/release\.yml`/);
+    assert.match(comment, /abc1234def5678abc1234def5678abc1234def56/);
+    assert.match(comment, /a person/i);
+    assert.match(comment, /```\n[\s\S]*refusing to allow[\s\S]*\n```/);
+  });
+
+  // GitHub refused the push, so origin's branch doesn't hold the commits: the
+  // comment mustn't send a person to edit a branch that lacks them.
+  it("says GitHub doesn't have the commits, rather than that the branch keeps them or asking to edit it", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, change);
+
+    assert.match(comment, /GitHub doesn't have/);
+    assert.doesNotMatch(comment, /keeps its commits/);
+    assert.doesNotMatch(comment, /drop it from/);
+    assert.match(comment, /once it has merged, remove `sandcastle:needs-human`/);
+  });
+
+  // The names come from the sandboxed agent's commits, and the comment is
+  // public: a backtick in a name mustn't end its code span and let the rest
+  // render as Markdown, a link or an @mention.
+  it("keeps a file name with backticks inside its code span", () => {
+    const hostile = ".github/workflows/x` @org/team [link](https://example.com) `.yml";
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, { head: change.head, files: [hostile] });
+
+    assert.ok(comment.includes(`\`\` ${hostile} \`\``), comment);
+  });
+
+  it("puts a file name with a newline on one line", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, {
+      head: change.head,
+      files: [".github/workflows/a\n@org/team.yml"],
+    });
+
+    assert.ok(comment.includes("`.github/workflows/a @org/team.yml`"), comment);
+  });
+
+  it("still reads when the workflow files couldn't be listed", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, { head: change.head, files: [] });
+
+    assert.match(comment, /a file under `\.github\/workflows\/`/);
+  });
+
+  it("carries no BUILD_FAILED_MARKER, since this isn't a failed attempt", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", "refusing to allow", change);
+
+    assert.equal(comment.includes(BUILD_FAILED_MARKER), false);
+  });
+});
+
+describe("handBackWorkflowChange", () => {
+  it("comments on the issue, hands it back with sandcastle:needs-human, and records the hand-back", () => {
+    const { calls, run } = recordingGh();
+    const report = new HandBackReport();
+
+    handBackWorkflowChange(
+      69,
+      "feature/69-run-the-gate",
+      "refusing to allow a GitHub App to create or update workflow without `workflows` permission",
+      { head: "a".repeat(40), files: [".github/workflows/ci.yml"] },
+      run,
+      "o/r",
+      report,
+    );
+
+    const comments = calls.filter((call) => call.args[1] === "comment");
+    const edits = calls.filter((call) => call.args[1] === "edit");
+    assert.equal(comments.length, 1);
+    assert.deepEqual(edits[0]!.args, [
+      "issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-human", "--remove-label", "sandcastle:ready",
+    ]);
+    assert.equal(report.items().length, 1);
+    assert.equal(report.items()[0]!.target, "issue #69");
+    assert.equal(report.items()[0]!.label, "sandcastle:needs-human");
+    assert.match(report.items()[0]!.reason, /\.github\/workflows/);
   });
 });
