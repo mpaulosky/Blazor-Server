@@ -15,7 +15,7 @@ namespace UI.Tests.E2E;
 public class HomeStylingTests(WebAppFixture fixture)
 {
 	[Fact]
-	public async Task Home_FontBoldHeading_ComputesBoldFontWeight()
+	public async Task Home_TextFourXlHeading_ComputesLargeFontSize()
 	{
 		// Arrange
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -25,6 +25,8 @@ public class HomeStylingTests(WebAppFixture fixture)
 
 		// Act
 		// Assert
-		await Expect(heading).ToHaveCSSAsync("font-weight", "700");
+		// text-4xl computes to 36px. Chromium's default h1 font-size is 32px (2em), so this fails without
+		// Tailwind applied, unlike font-weight, where the browser default and font-bold both compute to 700.
+		await Expect(heading).ToHaveCSSAsync("font-size", "36px");
 	}
 }
