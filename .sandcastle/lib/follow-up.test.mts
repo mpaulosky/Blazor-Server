@@ -240,7 +240,42 @@ describe("decide", () => {
       NOW,
     );
 
-    assert.equal(result.action, "wait");
+    assert.deepEqual(result, {
+      action: "wait",
+      reason: "Copilot hasn't reviewed the head since the one re-request, so a person needs to ask it",
+    });
+  });
+
+  // GitHub can drop the one re-request (Copilot's review budget, ADR 0004),
+  // and a PR that waits on a review that never comes would otherwise hide a
+  // conflict or a red check for good.
+  it("flags a dirty PR as needing a follow-up pass even when Copilot never reviewed its head", () => {
+    const completedAt = new Date(NOW - 61 * 60 * 1000).toISOString();
+    const requestedAt = new Date(NOW - 30 * 60 * 1000).toISOString();
+    const result = decide(
+      pr({
+        mergeStateStatus: "DIRTY",
+        reviews: [],
+        checks: [{ name: "build", completed: true, green: true, completedAt }],
+        copilotRequestedAt: [requestedAt],
+      }),
+      NOW,
+    );
+
+    assert.deepEqual(result, { action: "needs-pass", reasons: ["it has merge conflicts"] });
+  });
+
+  it("flags a red check as needing a follow-up pass while Copilot's review is still pending", () => {
+    const result = decide(
+      pr({
+        reviews: [],
+        reviewRequests: [COPILOT_REVIEWER],
+        checks: [{ name: "lint", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z" }],
+      }),
+      NOW,
+    );
+
+    assert.deepEqual(result, { action: "needs-pass", reasons: ["check lint is red"] });
   });
 
   it("updates a settled PR that's only behind main", () => {

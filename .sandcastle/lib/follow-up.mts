@@ -116,13 +116,25 @@ export type SweepDecision =
   | { action: "leave"; reason: string };
 
 // What the sweep does about a PR that isn't skipped (see sweepSkipReason):
-// wait while CI or Copilot's review is still in flight, ask Copilot again
+// wait while CI is still running, flag one with conflicts or a red check for
+// a later pass, wait while Copilot's review is in flight, ask Copilot again
 // once CI has been done for a while with no review or pending request,
-// update a settled PR that's only behind main, flag one that needs more than
-// that for a later pass, or leave a clean or merge-blocked one alone.
+// update a settled PR that's only behind main, flag one with an unresolved
+// bot thread, or leave a clean or merge-blocked one alone.
 export function decide(pr: SweepPullRequest, now: number): SweepDecision {
   if (pr.checks.length === 0) return { action: "wait", reason: "no checks have reported" };
   if (pr.checks.some((check) => !check.completed)) return { action: "wait", reason: "checks are still running" };
+
+  // Conflicts and red checks don't depend on Copilot's review, so they're
+  // flagged before waiting on it: GitHub can drop the one re-request
+  // (Copilot's review budget, ADR 0004), and a PR waiting on a review that
+  // never comes would otherwise hide them for good.
+  const reasons: string[] = [];
+  if (pr.mergeStateStatus === "DIRTY") reasons.push("it has merge conflicts");
+  for (const check of pr.checks) {
+    if (!check.green) reasons.push(`check ${check.name} is red`);
+  }
+  if (reasons.length > 0) return { action: "needs-pass", reasons };
 
   // A completed check with no time can't say when CI finished, so it leaves
   // ciDoneAt NaN and the PR is never re-requested on a guess.
@@ -132,21 +144,18 @@ export function decide(pr: SweepPullRequest, now: number): SweepDecision {
 
   if (!reviewed) {
     // A request recorded after CI finished means this head was already asked
-    // about, whether or not GitHub kept the request (Copilot's review budget
-    // can drop it, ADR 0004): that's what makes it once per head.
+    // about, whether or not GitHub kept the request: that's what makes it
+    // once per head, and why the log then says a person has to step in.
     const askedSince = pr.copilotRequestedAt.some((requestedAt) => timestamp(requestedAt) >= ciDoneAt);
-    if (now - ciDoneAt > COPILOT_REREQUEST_AFTER_MS && !askedSince) return { action: "request-review" };
+    if (askedSince) {
+      return { action: "wait", reason: "Copilot hasn't reviewed the head since the one re-request, so a person needs to ask it" };
+    }
+    if (now - ciDoneAt > COPILOT_REREQUEST_AFTER_MS) return { action: "request-review" };
     return { action: "wait", reason: "Copilot hasn't reviewed the head yet" };
   }
 
-  const reasons: string[] = [];
-  if (pr.mergeStateStatus === "DIRTY") reasons.push("it has merge conflicts");
-  for (const check of pr.checks) {
-    if (!check.green) reasons.push(`check ${check.name} is red`);
-  }
   const botThreads = pr.threads.filter((thread) => !thread.resolved && thread.byBot).length;
-  if (botThreads > 0) reasons.push(`${botThreads} unresolved bot thread(s)`);
-  if (reasons.length > 0) return { action: "needs-pass", reasons };
+  if (botThreads > 0) return { action: "needs-pass", reasons: [`${botThreads} unresolved bot thread(s)`] };
 
   if (pr.mergeStateStatus === "BEHIND") return { action: "update-branch" };
   return { action: "leave", reason: `it's settled and ${pr.mergeStateStatus}` };
