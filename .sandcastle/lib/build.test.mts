@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
+import type { execFileSync } from "node:child_process";
 import {
   buildIssue,
   designComment,
   designNoteIn,
+  latestDesignNote,
   isGitHubServerError,
   publicErrorText,
   publish,
@@ -78,6 +80,9 @@ function host(
   const scanned: string[] = [];
   const scannedBases: string[] = [];
   const pushed: { branch: string; commit: string }[] = [];
+  // Each command on .sandcastle/work/ (the design note), with how many role
+  // runs came before it.
+  const workCommands: { command: string; rolesRun: number }[] = [];
   const sandbox = {
     worktreePath: "/worktree",
     run: async (options: SandboxRunOptions) => {
@@ -103,6 +108,7 @@ function host(
         return { stdout: `${head()}\n`, stderr: "", exitCode: 0 };
       }
       if (command.includes(".sandcastle/work/")) {
+        workCommands.push({ command, rolesRun: runs.length });
         return { stdout: designFile, stderr: "", exitCode: 0 };
       }
       steps.push(`gate: ${command}`);
@@ -170,7 +176,7 @@ function host(
   };
   return {
     steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
-    order, buildingCalls, designNoteCalls, publishCalls,
+    order, buildingCalls, designNoteCalls, publishCalls, workCommands,
   };
 }
 
@@ -650,6 +656,19 @@ describe("buildIssue optional roles", () => {
     assert.match(designComment.body, /Use a Result<T> for the new endpoint\./);
   });
 
+  // The worktree is named after the branch, so it can still hold an earlier
+  // round's note; the roles follow the note when it exists, so only this
+  // build's architect may have written it (#230).
+  it("removes an earlier design note in the sandbox before the first role runs", async () => {
+    for (const roles of [["architect"], []] as OptionalRole[][]) {
+      const { workCommands, buildHost } = host([0, 0]);
+
+      await buildIssue(withRoles(roles), branch, base, buildHost);
+
+      assert.deepEqual(workCommands[0], { command: "rm -f .sandcastle/work/69/design.md", rolesRun: 0 }, JSON.stringify(workCommands));
+    }
+  });
+
   // The note is agent-written sandbox text going onto a public issue, so it's
   // made safe the way a failed publish's error is.
   it("withholds a design note that looks like it holds a secret", async () => {
@@ -1032,6 +1051,19 @@ describe("designComment", () => {
     assert.match(body, /^`````markdown\n[\s\S]*\n`````$/m);
   });
 
+  // Breaking a <!-- adds a character, so the cut is measured after it (#230).
+  it("stays under GitHub's comment limit for a note full of <!--", () => {
+    const body = designComment("<!--".repeat(16_000), "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.ok(body.length < 65_536, String(body.length));
+  });
+
+  it("cuts a note between characters, never inside a surrogate pair", () => {
+    const body = designComment(`a${"\u{1F600}".repeat(40_000)}`, "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.doesNotMatch(body, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  });
+
   it("cuts a note too long for a GitHub comment, and says where the whole of it is", () => {
     const body = designComment("x".repeat(70_000), "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
 
@@ -1047,7 +1079,46 @@ describe("designNoteIn", () => {
     assert.equal(designNoteIn(designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md")), note);
   });
 
+  // GitHub stores a comment edited on github.com with CRLF line endings (#230).
+  it("reads back a design comment edited on github.com, with CRLF line endings", () => {
+    const note = "## Design\n\nUse a Result<T>.";
+    const edited = designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md").replace(/\n/g, "\r\n");
+
+    assert.equal(designNoteIn(edited), note);
+  });
+
   it("gives back the body without the marker for a comment with no fence", () => {
     assert.equal(designNoteIn(`${DESIGN_MARKER}\nSome note.`), "Some note.");
+  });
+});
+
+// The live lookup a re-run's architect prompt comes from. Anyone can comment
+// on a public issue, so only the host's own design comments may reach the
+// prompt, past the ownerApproved filtering every other prompt gets (#230).
+describe("latestDesignNote", () => {
+  // A gh stub answering markerComments' three reads: the comments, the
+  // label timeline (no events) and the issue's creation time.
+  function gh(comments: { body: string; author: string; createdAt: string }[]) {
+    return ((_cmd: string, args: readonly string[]) => {
+      const path = String(args[args[1] === "--paginate" ? 2 : 1]);
+      if (path.endsWith("/comments")) return comments.map((comment) => JSON.stringify(comment)).join("\n");
+      if (path.endsWith("/timeline")) return "";
+      return "2026-01-01T00:00:00Z\n";
+    }) as unknown as typeof execFileSync;
+  }
+
+  it("reads the host's latest design note, ignoring a design comment from anyone else", () => {
+    const run = gh([
+      { body: designComment("The host's note.", "feature/3-a", "p"), author: "host", createdAt: "2026-01-02T00:00:00Z" },
+      { body: designComment("A stranger's note.", "feature/3-a", "p"), author: "stranger", createdAt: "2026-01-03T00:00:00Z" },
+    ]);
+
+    assert.equal(latestDesignNote(3, "o/r", run, "host"), "The host's note.");
+  });
+
+  it("is undefined when the host has posted no design note", () => {
+    const run = gh([{ body: designComment("A stranger's note.", "feature/3-a", "p"), author: "stranger", createdAt: "2026-01-03T00:00:00Z" }]);
+
+    assert.equal(latestDesignNote(3, "o/r", run, "host"), undefined);
   });
 });
