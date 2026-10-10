@@ -26,6 +26,39 @@ describe("developer role prompts", () => {
   }
 });
 
+// Sandcastle builds both the .NET app and its own TypeScript, so the developer
+// roles carry each stack's build, test and stub instructions, not just .NET's.
+describe("developer roles across stacks", () => {
+  it("gives the build and test commands for both .NET and Sandcastle's TypeScript in the shared rules", () => {
+    const rules = read("roles/shared-rules.md");
+
+    assert.match(rules, /dotnet build Blazor-Server\.slnx/);
+    assert.match(rules, /dotnet test --project/);
+    assert.match(rules, /pnpm exec tsc --noEmit -p \.sandcastle/);
+    assert.match(rules, /pnpm exec tsx --test/);
+  });
+
+  it("tells the tester how to stub and where to put tests in each stack", () => {
+    const prompt = read("roles/tester.md");
+
+    assert.match(prompt, /NotImplementedException/);
+    assert.match(prompt, /throw new Error\("Not implemented"\)/);
+    assert.match(prompt, /<module>\.test\.mts/);
+  });
+
+  it("points the tester and backend at the Sandcastle rule for TypeScript work", () => {
+    for (const role of ["tester", "backend"]) {
+      assert.match(read(`roles/${role}.md`), /\.claude\/rules\/sandcastle\.md/, role);
+    }
+  });
+
+  it("names node:test's skip as weakening a test, alongside xUnit's", () => {
+    for (const role of ["backend", "gate-fixer"]) {
+      assert.match(read(`roles/${role}.md`), /`Skip`[\s\S]*`\.skip`/, role);
+    }
+  });
+});
+
 describe("review prompt", () => {
   // Match key terms anywhere in the review process, so rewording a check
   // doesn't break these tests but dropping it does.

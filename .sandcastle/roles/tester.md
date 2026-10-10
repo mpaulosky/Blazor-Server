@@ -36,13 +36,14 @@ Here are the last 10 commits:
 
 Explore the repo and fill your context window with relevant information that will allow you to complete the task.
 
-Read `CONTEXT.md` for the domain language, `docs/adr/` for recorded decisions, and `docs/CODING_STANDARDS.md` for the rules the code must follow, including its Testing section.
+Read `CONTEXT.md` for the domain language, `docs/adr/` for recorded decisions, and the standards for the stack the issue touches: `docs/CODING_STANDARDS.md`, including its
+Testing section, for .NET, and `.claude/rules/sandcastle.md` for Sandcastle's TypeScript in `.sandcastle/`.
 
 Pay extra attention to existing test files near the code the issue touches, and follow their layout and naming.
 
 # SKILLS
 
-These .NET skills are mounted into the sandbox from the host's `~/.claude/skills/`. Use them where they apply:
+For .NET work, these skills are mounted into the sandbox from the host's `~/.claude/skills/`. Use them where they apply:
 
 - `dotnet-tdd`: the red-green-refactor loop with xUnit v3
 - `dotnet-add-testing`: scaffolding a new test project
@@ -54,10 +55,13 @@ These .NET skills are mounted into the sandbox from the host's `~/.claude/skills
 # EXECUTION
 
 1. List the issue's acceptance criteria. Each one needs at least one test, and the name of each test should make it clear which criterion it checks.
-2. Write the tests through the public API the issue describes, in the test project that mirrors the code under test.
-3. Add the smallest stubs that let the tests compile: the types and members they call, with bodies that `throw new NotImplementedException()`. Write no real behaviour.
-4. Build with `dotnet build Blazor-Server.slnx`, and fix every error and warning.
-5. Run the tests you wrote and confirm each one fails for the reason you expect: the stub throwing or an assertion failing, not a compile error or a broken setup.
+2. Write the tests through the public API the issue describes: for .NET, in the test project that mirrors the code under test; for Sandcastle, in `<module>.test.mts` beside
+   the module.
+3. Add the smallest stubs that let the tests compile: the types and members they call, with bodies that throw. For .NET, `throw new NotImplementedException()`; for
+   TypeScript, `throw new Error("Not implemented")`. Write no real behaviour.
+4. Build with the stack's build command from the rules below, and fix every error and warning.
+5. Run the tests you wrote with the stack's test command, and confirm each one fails for the reason you expect: the stub throwing or an assertion failing, not a compile or type
+   error or a broken setup.
 6. Lint the files you changed: `pnpm exec markdownlint-cli2 <file>` for Markdown and `yamllint -c .yamllint.yml <file>` for YAML.
 7. Commit the tests and stubs red, with `test(<scope>): <Summary>`. Say in the body which test covers which criterion.
 

@@ -2,8 +2,15 @@
 
 ## Build and tests
 
-- Every commit must pass `dotnet build Blazor-Server.slnx` with no warnings (`TreatWarningsAsErrors` is on).
+An issue changes one stack or both. Use the commands for each stack the issue touches:
+
+| Stack | Where | Build (every commit passes it) | Run tests |
+| --- | --- | --- | --- |
+| .NET | `src/`, `tests/` | `dotnet build Blazor-Server.slnx`, with no warnings (`TreatWarningsAsErrors` is on) | `dotnet test --project tests/<Project>/<Project>.csproj` |
+| Sandcastle's TypeScript | `.sandcastle/`, `package.json` | `pnpm exec tsc --noEmit -p .sandcastle`, with no errors | `pnpm exec tsx --test <file>.test.mts` |
+
 - Tests must pass by the end of the last developer run, not on every commit.
+- The standards for each stack: `docs/CODING_STANDARDS.md` for .NET, and `.claude/rules/sandcastle.md` for `.sandcastle/`.
 
 ## The gate
 

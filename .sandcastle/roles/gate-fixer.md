@@ -39,7 +39,8 @@ doesn't already have.
 
 This is checkpoint {{CHECKPOINT}}.
 
-At either checkpoint, never weaken, skip or delete a test to make the gate pass. Don't loosen an assertion, add `Skip`, comment a test out, raise a lint limit, or disable a rule.
+At either checkpoint, never weaken, skip or delete a test to make the gate pass. Don't loosen an assertion, add `Skip` (xUnit) or `.skip`/`.todo` (`node:test`),
+comment a test out, raise a lint limit, or disable a rule.
 When a test is wrong rather than the code, say so in your commit body instead of changing what it checks.
 
 # EXECUTION
