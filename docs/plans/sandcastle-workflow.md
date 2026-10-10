@@ -379,6 +379,10 @@ The file names are a proposal; the first implementation issue settles them.
 Filed with native "blocked by" links, so the blocker gate builds them in order and the trigger lands last. Three are manual and aren't labelled `Sandcastle`: the secrets, and the
 two `.github/workflows/**` changes the PAT can't push (see **Workflow files**). A human builds the trigger once its blockers have landed.
 
+[#80](https://github.com/mpaulosky/Blazor-Server/issues/80), making runs safe to start unattended, was split into #146 and #147.
+Issues #149 and #150 were filed after the plan, from problems seen in runs. The critique added #149 as a blocker of #72 and #73, since all three change
+`buildIssue`'s failure and publish paths.
+
 | Issue | Blocked by |
 | --- | --- |
 | [Split main.mts into modules and configure every role from one ROLE_AGENTS map](https://github.com/mpaulosky/Blazor-Server/issues/66) | [#65](https://github.com/mpaulosky/Blazor-Server/pull/65) (this spec) |
@@ -387,8 +391,8 @@ two `.github/workflows/**` changes the PAT can't push (see **Workflow files**). 
 | [Run the gate at two checkpoints with a gate-fixer role](https://github.com/mpaulosky/Blazor-Server/issues/69) | #66, #67 |
 | [Skip the pre-push hook's gate for commits the sandbox already gated](https://github.com/mpaulosky/Blazor-Server/issues/70) | #69 |
 | [Replace the implementer with a tester and a backend developer](https://github.com/mpaulosky/Blazor-Server/issues/71) | #69 |
-| [Add architect, UI developer and scribe roles picked by the planner](https://github.com/mpaulosky/Blazor-Server/issues/72) | #68, #71 |
-| [Hand an issue back to a human after two failed builds](https://github.com/mpaulosky/Blazor-Server/issues/73) | #69 |
+| [Add architect, UI developer and scribe roles picked by the planner](https://github.com/mpaulosky/Blazor-Server/issues/72) | #68, #71, #149 |
+| [Hand an issue back to a human after two failed builds](https://github.com/mpaulosky/Blazor-Server/issues/73) | #69, #149 |
 | [Intake judges each issue against the Definition of Ready](https://github.com/mpaulosky/Blazor-Server/issues/74) | #68, #73 |
 | [Intake splits oversized issues into blocked child issues](https://github.com/mpaulosky/Blazor-Server/issues/75) | #74 |
 | [Critique each round's plan and defer picks that aren't safe in parallel](https://github.com/mpaulosky/Blazor-Server/issues/76) | #68 |
@@ -396,7 +400,10 @@ two `.github/workflows/**` changes the PAT can't push (see **Workflow files**). 
 | [Keep pr-automerge.yml from merging PRs handed back to a human (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/84) | none |
 | [Follow-up passes resolve review threads and merge conflicts](https://github.com/mpaulosky/Blazor-Server/issues/78) | #69, #77, #84 |
 | [Follow-up passes fix red CI on Sandcastle PRs](https://github.com/mpaulosky/Blazor-Server/issues/79) | #78 |
-| [Make Sandcastle runs safe to start unattended](https://github.com/mpaulosky/Blazor-Server/issues/80) | #74, #77 |
-| [Write a run report with outcomes, hand-backs and token usage](https://github.com/mpaulosky/Blazor-Server/issues/81) | #73 |
+| [Scope the queue to work the repository owner approved](https://github.com/mpaulosky/Blazor-Server/issues/146) | #74, #77 |
+| [Stop unattended runs cleanly when there's no work, time or usage left](https://github.com/mpaulosky/Blazor-Server/issues/147) | #146 |
+| [Write a run report with outcomes, hand-backs and token usage](https://github.com/mpaulosky/Blazor-Server/issues/81) | #73, #77, #78 |
 | [Create the secrets Sandcastle needs to run from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/83) | none |
-| [Trigger Sandcastle automatically from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/82) | #70, #72, #75, #76, #79, #80, #81, #83 |
+| [Retry a publish that fails on a GitHub server error](https://github.com/mpaulosky/Blazor-Server/issues/149) | none |
+| [Mark an issue while Sandcastle builds it](https://github.com/mpaulosky/Blazor-Server/issues/150) | #73 |
+| [Trigger Sandcastle automatically from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/82) | #70, #72, #75, #76, #79, #81, #83, #146, #147 |
