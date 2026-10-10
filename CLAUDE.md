@@ -62,5 +62,8 @@ worktree (see `docs/PROCESS.md`). To push a branch that has none, check it out i
 Branches, worktrees, commits, PR titles and descriptions, merging and releases follow
 [docs/PROCESS.md](docs/PROCESS.md). Commit messages follow `.github/instructions/git-commit-instructions.md`.
 
+Don't start work on an issue labelled `sandcastle:building`: a Sandcastle run is building it, and the label clears when
+that build ends. Check before running `/implement-spec` or opening a branch for an issue.
+
 Claude reviews a PR only when it has the `review:claude` label. Add the label to every PR you open, and to every PR a
 Sandcastle run opens that you're watching, as soon as it exists.

@@ -148,6 +148,8 @@ Please provide as much detail as possible, including steps to reproduce, expecte
 
 [Fork the Repository to your account](https://github.com/mpaulosky/Blazor-Server/fork).
 
+1. Leave an issue labelled `sandcastle:building` alone: Sandcastle is building it right now, and two people or agents editing the same files would race to publish.
+   The label clears when the build ends.
 1. Create a branch in its own worktree, named for the existing Issue number (`feature/{issue}-{slug}` or `fix/{issue}-{slug}`); see [PROCESS.md](PROCESS.md#branches-and-worktrees).
 1. Work on the issue.
 1. Create Unit, Integration tests for any code that require them. We use xUnit v3, FluentAssertions, NSubstitute, bUnit, and Playwright to test our code and components.
