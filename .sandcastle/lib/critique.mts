@@ -113,10 +113,11 @@ function wouldCycle(id: number, blocker: number, blockersOf: (number: number) =>
 
 // Apply the critique's verdicts and return the picks still to build this
 // round. Each applied defer adds a native link and one comment on the deferred
-// issue; keeps are only logged. A verdict is ignored, with a log line, when its
-// issue wasn't picked or already has a verdict, or when its blocker is missing,
-// closed, a pull request, or would create a cycle. A defer GitHub won't link is
-// ignored too: without the link the deferral wouldn't outlast the round.
+// issue, and reaches the run report as "deferred"; keeps are only logged. A
+// verdict is ignored, with a log line, when its issue wasn't picked or already
+// has a verdict, or when its blocker is missing, closed, a pull request, or
+// would create a cycle. A defer GitHub won't link is ignored too: without the
+// link the deferral wouldn't outlast the round.
 export function applyVerdicts(
   picks: SandcastleIssue[],
   verdicts: CritiqueVerdict[],
@@ -198,6 +199,7 @@ export function applyVerdicts(
     added.set(id, [...(added.get(id) ?? []), blocker]);
     judged.add(verdict.id);
     deferred.add(id);
+    report.record({ kind: "issue", number: id, outcome: "deferred", detail: `behind #${blocker}` });
     log(`  ⏸ The critique defers ${ref} behind #${blocker}: ${verdict.reason}`);
 
     try {
