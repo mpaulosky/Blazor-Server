@@ -177,47 +177,26 @@ describe("gateIssues", () => {
     assert.deepEqual(gh.lookedUp, [68]);
   });
 
-  it("holds back an issue without sandcastle:ready, names the reason, and skips its blocker lookup", () => {
-    const gh = github({
-      sandcastleIssues: () => [sandcastleIssue(67, "", ["Sandcastle"]), sandcastleIssue(68)],
+  for (const [label, labels] of [
+    ["sandcastle:ready", ["Sandcastle"]],
+    ["sandcastle:needs-info", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-info"]],
+    ["sandcastle:needs-human", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-human"]],
+  ] as const) {
+    const relation = label === "sandcastle:ready" ? "without" : "labelled";
+    it(`holds back an issue ${relation} ${label}, names the reason, and skips its blocker lookup`, () => {
+      const gh = github({
+        sandcastleIssues: () => [sandcastleIssue(67, "", [...labels]), sandcastleIssue(68)],
+      });
+
+      const { ready, blocked } = gateIssues(gh);
+
+      assert.deepEqual(ready.map((i) => i.number), [68]);
+      assert.equal(blocked.length, 1);
+      assert.equal(blocked[0]!.issue.number, 67);
+      assert.match(blocked[0]!.reasons[0]!, new RegExp(label));
+      assert.deepEqual(gh.lookedUp, [68]);
     });
-
-    const { ready, blocked } = gateIssues(gh);
-
-    assert.deepEqual(ready.map((i) => i.number), [68]);
-    assert.equal(blocked.length, 1);
-    assert.equal(blocked[0]!.issue.number, 67);
-    assert.match(blocked[0]!.reasons[0]!, /sandcastle:ready/);
-    assert.deepEqual(gh.lookedUp, [68]);
-  });
-
-  it("holds back an issue labelled sandcastle:needs-info, names the reason, and skips its blocker lookup", () => {
-    const gh = github({
-      sandcastleIssues: () => [sandcastleIssue(67, "", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-info"]), sandcastleIssue(68)],
-    });
-
-    const { ready, blocked } = gateIssues(gh);
-
-    assert.deepEqual(ready.map((i) => i.number), [68]);
-    assert.equal(blocked.length, 1);
-    assert.equal(blocked[0]!.issue.number, 67);
-    assert.match(blocked[0]!.reasons[0]!, /sandcastle:needs-info/);
-    assert.deepEqual(gh.lookedUp, [68]);
-  });
-
-  it("holds back an issue labelled sandcastle:needs-human, names the reason, and skips its blocker lookup", () => {
-    const gh = github({
-      sandcastleIssues: () => [sandcastleIssue(67, "", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-human"]), sandcastleIssue(68)],
-    });
-
-    const { ready, blocked } = gateIssues(gh);
-
-    assert.deepEqual(ready.map((i) => i.number), [68]);
-    assert.equal(blocked.length, 1);
-    assert.equal(blocked[0]!.issue.number, 67);
-    assert.match(blocked[0]!.reasons[0]!, /sandcastle:needs-human/);
-    assert.deepEqual(gh.lookedUp, [68]);
-  });
+  }
 
   it("holds back an issue whose body blocker is still open", () => {
     const gh = github({

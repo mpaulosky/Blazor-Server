@@ -57,7 +57,7 @@ describe("needsIntake", () => {
   });
 
   it("sends a blocked issue too, so questions reach the human while a blocker is still in flight", () => {
-    const sent = needsIntake([issue(1, ["Sandcastle"])]);
+    const sent = needsIntake([{ ...issue(1, ["Sandcastle"]), body: "Blocked by #2" }]);
 
     assert.deepEqual(sent.map((i) => i.number), [1]);
   });
