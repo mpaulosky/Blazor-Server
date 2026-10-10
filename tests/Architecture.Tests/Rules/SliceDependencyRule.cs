@@ -15,12 +15,20 @@ internal static class SliceDependencyRule
 {
 	public static IReadOnlyList<string> FindSliceNames(Assembly assembly, string featuresNamespace)
 	{
-		return GetSliceNames(assembly, featuresNamespace);
+		string prefix = featuresNamespace + ".";
+
+		return assembly.GetTypes()
+			.Select(type => type.Namespace)
+			.OfType<string>()
+			.Where(ns => ns.StartsWith(prefix, StringComparison.Ordinal))
+			.Select(ns => ns[prefix.Length..].Split('.')[0])
+			.Distinct(StringComparer.Ordinal)
+			.ToArray();
 	}
 
 	public static IReadOnlyList<string> FindCrossSliceDependencies(Assembly assembly, string featuresNamespace)
 	{
-		IReadOnlyList<string> slices = GetSliceNames(assembly, featuresNamespace);
+		IReadOnlyList<string> slices = FindSliceNames(assembly, featuresNamespace);
 
 		List<string> failingTypeNames = [];
 
@@ -36,6 +44,8 @@ internal static class SliceDependencyRule
 				continue;
 			}
 
+			// ResideInNamespace matches by string prefix, so the trailing dot keeps "Home" from selecting "HomeOffice".
+			// HaveDependencyOnAny matches whole namespace segments and matches nothing when given a trailing dot.
 			NetArchTest.Rules.TestResult result = Types.InAssembly(assembly)
 				.That()
 				.ResideInNamespace($"{featuresNamespace}.{slice}.")
@@ -47,17 +57,5 @@ internal static class SliceDependencyRule
 		}
 
 		return failingTypeNames;
-	}
-
-	private static string[] GetSliceNames(Assembly assembly, string featuresNamespace)
-	{
-		string prefix = featuresNamespace + ".";
-
-		return assembly.GetTypes()
-			.Select(type => type.Namespace)
-			.Where(ns => (ns is not null) && ns.StartsWith(prefix, StringComparison.Ordinal))
-			.Select(ns => ns![prefix.Length..].Split('.')[0])
-			.Distinct(StringComparer.Ordinal)
-			.ToArray();
 	}
 }

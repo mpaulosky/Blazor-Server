@@ -30,9 +30,8 @@ internal static class ProjectReferenceRule
 		string sourceDirectory = Path.Combine(FindRepositoryRoot(), "src");
 
 		return Directory.EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.AllDirectories)
-			.Select(Path.GetFileNameWithoutExtension)
-			.Where(name => !string.IsNullOrEmpty(name))
-			.Select(name => name!)
+			.Select(path => Path.GetFileNameWithoutExtension(path))
+			.Where(name => name.Length > 0)
 			.ToHashSet(StringComparer.Ordinal);
 	}
 

@@ -29,7 +29,7 @@ public class UiTests
 
 		// Assert
 		forbiddenReferences.Should().BeEmpty(
-			"UI references only the Shared Kernel (see ADR-0001); any other project reference is a slice boundary violation");
+			"UI references only the Shared Kernel (see ADR-0005); any other project reference must be allowed deliberately");
 	}
 
 	[Fact]

@@ -50,7 +50,7 @@ public partial class AppTests : IClassFixture<WebApplicationFactory<Program>>
 		string html = await homeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 		Match match = StylesheetHrefPattern().Match(html);
 		match.Success.Should().BeTrue();
-		Uri requestUri = new("/" + match.Groups[1].Value.TrimStart('/'), UriKind.Relative);
+		Uri requestUri = new("/" + match.Groups[1].Value, UriKind.Relative);
 
 		// Act
 		HttpResponseMessage response = await _client.GetAsync(requestUri, TestContext.Current.CancellationToken);
