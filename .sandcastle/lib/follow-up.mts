@@ -36,7 +36,7 @@ import {
   type TimelineLabelEvent,
 } from "./github.mts";
 import { labelOriginFixes, loadQueue, ownerCheck, type IsOwner } from "./queue.mts";
-import { outcomeReport, waitingPrReport, type OutcomeReport, type WaitingPrReport } from "./report.mts";
+import { outcomeReport, waitingPrReport, type OutcomeReport, type WaitingPrEntry, type WaitingPrReport } from "./report.mts";
 
 // One check run or status on a PR's head commit, normalised from either
 // GraphQL shape (CheckRun or StatusContext) by lib/github.mts#openPullRequestsForSweep.
@@ -269,7 +269,9 @@ export type SweepResult = { needsPass: number[]; passes: PassTarget[] };
 // what happened. A PR whose sandcastle:needs-human someone other than the
 // repository owner removed gets it back instead, and is left alone (#146).
 // Each PR runs in its own try/catch, so one failure doesn't stop the rest.
-// Once that's done, hands back any in-scope issue, not labelled
+// An updated PR reaches `outcomes` as "updated", and every PR that reached
+// `decide` with unresolved threads a person opened replaces `waiting`'s list,
+// so the run report shows the latest sweep's view. Once that's done, hands back any in-scope issue, not labelled
 // sandcastle:needs-human and with no open PR, whose latest Sandcastle PR
 // closed without merging (closedWithoutMerging), each in its own try/catch
 // too.
@@ -286,6 +288,7 @@ export function sweepPullRequests(
   const openPrs = github.openPullRequests();
   const needsPass: number[] = [];
   const passes: PassTarget[] = [];
+  const waitingPrs: WaitingPrEntry[] = [];
 
   for (const pr of openPrs) {
     try {
@@ -307,8 +310,10 @@ export function sweepPullRequests(
         log(`  ✋ PR #${pr.number}: ${restore.reason}, so it isn't swept.`);
         continue;
       }
+      const humanThreads = pr.threads.filter((thread) => !thread.resolved && !thread.byBot).length;
+      if (humanThreads > 0) waitingPrs.push({ pr: pr.number, threads: humanThreads });
       const decision = decide(pr, now);
-      followUp(pr, decision, github, log);
+      followUp(pr, decision, github, log, outcomes);
       if (decision.action === "needs-pass") {
         needsPass.push(pr.number);
         passes.push(passTarget(pr, decision.reasons));
@@ -317,6 +322,7 @@ export function sweepPullRequests(
       log(`  ⚠ Couldn't follow up PR #${pr.number}, so it's swept again next round: ${error}`);
     }
   }
+  waiting.replace(waitingPrs);
 
   // Any same-repo open PR on an issue's branch, the host's or not, means the
   // issue isn't waiting on a closed one.
@@ -373,8 +379,15 @@ function passTarget(pr: SweepPullRequest, reasons: string[]): PassTarget {
   };
 }
 
-// Carries out one PR's decision and logs it.
-function followUp(pr: SweepPullRequest, decision: SweepDecision, github: FollowUpGitHub, log: (line: string) => void): void {
+// Carries out one PR's decision and logs it, recording an updated branch in
+// the run report once GitHub has accepted the update.
+function followUp(
+  pr: SweepPullRequest,
+  decision: SweepDecision,
+  github: FollowUpGitHub,
+  log: (line: string) => void,
+  outcomes: OutcomeReport,
+): void {
   switch (decision.action) {
     case "request-review":
       github.requestCopilotReview(pr.id);
@@ -382,6 +395,7 @@ function followUp(pr: SweepPullRequest, decision: SweepDecision, github: FollowU
       return;
     case "update-branch":
       github.updateBranch(pr.number, pr.headRefOid);
+      outcomes.record({ kind: "pr", number: pr.number, outcome: "updated", detail: "was only behind main" });
       log(`  ⤴ PR #${pr.number} (${pr.headRefName}) was only behind main: updated it on GitHub`);
       return;
     case "needs-pass":
