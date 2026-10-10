@@ -515,6 +515,24 @@ describe("passSummaryComment", () => {
   it("lists the threads whose \"fixed\" verdict named no commit the pass added", () => {
     assert.match(passSummaryComment({ ...report, unverified: ["RT_bot"] }, publicError), /no commit this pass added[^\n]*RT_bot/);
   });
+
+  it("says the gate was red on the PR's head when the pass fixed it", () => {
+    const comment = passSummaryComment({ ...report, redCi: { fix: true, rerun: [], forward: [] } }, publicError);
+
+    assert.match(comment, /`scripts\/gate\.sh` was red on the PR's head/);
+  });
+
+  it("names the checks whose failed-job logs went to the follow-up role", () => {
+    const comment = passSummaryComment({ ...report, redCi: { fix: false, rerun: [], forward: ["Analyze (csharp)"] } }, publicError);
+
+    assert.match(comment, /failed-job logs[^\n]*Analyze \(csharp\)/);
+  });
+
+  it("says nothing about red CI when no check was red", () => {
+    const comment = passSummaryComment({ ...report, redCi: { fix: false, rerun: [], forward: [] } }, publicError);
+
+    assert.equal(comment, passSummaryComment(report, publicError));
+  });
 });
 
 describe("giveUpComment", () => {
