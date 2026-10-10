@@ -269,6 +269,58 @@ describe("discardClosedWork", () => {
   });
 });
 
+// BranchRefs over a small commit graph: `parents` maps each commit to its
+// parents, and contains() walks it, so a test states the history rather than
+// each answer. Every ref exists; deletes are recorded.
+function graphRefs(parents: Record<string, string[]>, heads: { local: string; tracking: string; remote: string }) {
+  const deletes: string[] = [];
+  const reaches = (commit: string, ancestor: string): boolean =>
+    commit === ancestor || (parents[commit] ?? []).some((parent) => reaches(parent, ancestor));
+  const refs: BranchRefs = {
+    remoteHead: () => heads.remote,
+    localHead: (ref) => (ref.startsWith("refs/heads/") ? heads.local : heads.tracking),
+    contains: (commit, ancestor) => reaches(commit, ancestor),
+    deleteLocalBranch: (branch) => void deletes.push(`refs/heads/${branch}`),
+    deleteRef: (ref) => void deletes.push(ref),
+    deleteRemote: (branch) => void deletes.push(`origin/${branch}`),
+  };
+  return { refs, deletes };
+}
+
+describe("discardClosedWork over a commit history", () => {
+  const branch = "feature/42-add-search";
+
+  // main is M; the sandbox built B on it and pushed; the sweep's
+  // update-branch then merged main's newer M2 into the PR on GitHub, giving
+  // the closed head U, which the local branch never got.
+  const history = { B: ["M"], M2: ["M"], U: ["B", "M2"] };
+
+  it("deletes a local branch that lags the closed head, so the rebuild doesn't continue the closed PR's work", () => {
+    const { refs, deletes } = graphRefs(history, { local: "B", tracking: "U", remote: "U" });
+
+    const deleted = discardClosedWork(branch, "U", "M2", refs);
+
+    assert.deepEqual(deleted, [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`, `origin/${branch}`]);
+    assert.deepEqual(deletes, deleted);
+  });
+
+  it("keeps a local branch at a commit main already has, since it holds none of the closed PR's work", () => {
+    const { refs } = graphRefs(history, { local: "M", tracking: "U", remote: "U" });
+
+    const deleted = discardClosedWork(branch, "U", "M2", refs);
+
+    assert.ok(!deleted.includes(`refs/heads/${branch}`));
+  });
+
+  it("keeps a fresh attempt's local branch, which starts from main and isn't related to the closed head", () => {
+    const { refs } = graphRefs({ ...history, F: ["M2"] }, { local: "F", tracking: "U", remote: "U" });
+
+    const deleted = discardClosedWork(branch, "U", "M2", refs);
+
+    assert.ok(!deleted.includes(`refs/heads/${branch}`));
+  });
+});
+
 describe("prepareBranches", () => {
   it("names every issue's branch and fetches only the ones that exist on origin", () => {
     const fetched: string[] = [];

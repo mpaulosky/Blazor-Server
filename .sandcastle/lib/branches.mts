@@ -149,37 +149,42 @@ const originRefs: BranchRefs = {
     void git("push", "--quiet", `--force-with-lease=refs/heads/${branch}:${expectedSha}`, "origin", `:refs/heads/${branch}`),
 };
 
-// Deletes each ref of `branch` that still holds `closedHead`, the head of an
-// issue's Sandcastle PR that closed without merging, and returns the refs it
-// deleted: refs/heads/<branch>, refs/remotes/origin/<branch> and
+// Deletes each ref of `branch` that holds the work of `closedHead`, the head
+// of an issue's Sandcastle PR that closed without merging, and returns the
+// refs it deleted: refs/heads/<branch>, refs/remotes/origin/<branch> and
 // origin/<branch>, in that order (lib/follow-up.mts#startFromMain). Leaves
-// everything alone when `base` already contains closedHead. A ref that
-// doesn't contain closedHead is left alone too, so a fresh attempt's commits,
-// which start from main, survive. All three go because Sandcastle's
+// everything alone when `base` already contains closedHead. A ref holds the
+// closed PR's work when it contains closedHead, or when it lags behind it at
+// a commit `base` doesn't have: the local branch sits where the sandbox
+// pushed, and an update-branch or a commit made on GitHub moves the PR past
+// it. Any other ref is left alone, so a fresh attempt's commits, which start
+// from main, survive. All three go because Sandcastle's
 // `git worktree add` checks out a local branch if there is one, else DWIMs
 // from origin/<branch>, and starts fresh from main only when neither exists.
 // Every call goes through `refs` (live: git(), hooks off, main checkout), so a
 // test can stub it.
 export function discardClosedWork(branch: string, closedHead: string, base: string, refs: BranchRefs = originRefs): string[] {
   if (refs.contains(base, closedHead)) return [];
+  const holdsClosedWork = (commit: string): boolean =>
+    refs.contains(commit, closedHead) || (refs.contains(closedHead, commit) && !refs.contains(base, commit));
   const deleted: string[] = [];
   // The local branch goes first: it's the one git can refuse to delete (a
   // worktree still has it checked out), and failing there leaves origin's
   // branch untouched.
   const localRef = `refs/heads/${branch}`;
   const local = refs.localHead(localRef);
-  if (local !== undefined && refs.contains(local, closedHead)) {
+  if (local !== undefined && holdsClosedWork(local)) {
     refs.deleteLocalBranch(branch);
     deleted.push(localRef);
   }
   const trackingRef = `refs/remotes/origin/${branch}`;
   const tracking = refs.localHead(trackingRef);
-  if (tracking !== undefined && refs.contains(tracking, closedHead)) {
+  if (tracking !== undefined && holdsClosedWork(tracking)) {
     refs.deleteRef(trackingRef);
     deleted.push(trackingRef);
   }
   const remote = refs.remoteHead(branch);
-  if (remote !== undefined && refs.contains(remote, closedHead)) {
+  if (remote !== undefined && holdsClosedWork(remote)) {
     refs.deleteRemote(branch, remote);
     deleted.push(`origin/${branch}`);
   }
