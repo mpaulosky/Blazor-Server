@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [chore: Re-apply the repo-ci-baseline Template](2026-10-10-pr-253-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-10 | [chore: Re-apply the repo-ci-baseline Template](2026-10-10-pr-251-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Follow-up passes resolve review threads and merge conflicts](2026-10-10-pr-243-feat-sandcastle-follow-up-passes-resolve-review-threads-and-merge-conflicts.md) | release,automation |
 | 2026-10-10 | [chore(sandcastle): Install Chromium's system libraries in the sandbox image](2026-10-10-pr-248-chore-sandcastle-install-chromium-s-system-libraries-in-the-sandbox-image.md) | release,automation |
