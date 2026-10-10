@@ -11,7 +11,8 @@ itself is on the README roadmap.
 ## Coding standards
 
 `docs/CODING_STANDARDS.md` wins when any rule file disagrees with it. Path-scoped rules in `.claude/rules/` add
-guidance for Blazor, .NET, Markdown and blog posts, and load when you work on matching files.
+guidance for Blazor, .NET, Markdown, blog posts, Sandcastle and the Baseline's CI files, and load when you work on
+matching files.
 
 @docs/CODING_STANDARDS.md
 
