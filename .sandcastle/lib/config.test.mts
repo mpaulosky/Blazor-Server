@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ROLE_AGENTS } from "./config.mts";
+import { BUILD_ROLES, BUILDING_LABEL_MAX_AGE_MS, GATE_FIXER_ATTEMPTS, ROLE_AGENTS } from "./config.mts";
 
 const opus = "claude-opus-5-5";
 const sonnet = "claude-sonnet-5";
@@ -20,5 +20,25 @@ describe("ROLE_AGENTS", () => {
       "gate-fixer": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 20 },
       "follow-up": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 30 },
     });
+  });
+});
+
+describe("BUILDING_LABEL_MAX_AGE_MS", () => {
+  // A startup clears a sandcastle:building label older than this as a crashed
+  // run's, so it must outlast the longest build a live run can make, or a
+  // second run would clear a live build's label and build the issue too.
+  // BUILD_ROLES, each once, plus the gate-fixer's attempts at both
+  // checkpoints. build.test.mts checks buildIssue runs no other role.
+  it("outlasts the longest build the role timeouts allow, with an hour for gates, sandboxes and publishing", () => {
+    const checkpoints = 2;
+    const minutes =
+      BUILD_ROLES.reduce((sum, role) => sum + ROLE_AGENTS[role].timeoutMinutes, 0) +
+      checkpoints * GATE_FIXER_ATTEMPTS * ROLE_AGENTS["gate-fixer"].timeoutMinutes;
+    const hour = 60;
+
+    assert.ok(
+      (minutes + hour) * 60_000 <= BUILDING_LABEL_MAX_AGE_MS,
+      `the longest build takes ${minutes} minutes plus an hour, past BUILDING_LABEL_MAX_AGE_MS`,
+    );
   });
 });

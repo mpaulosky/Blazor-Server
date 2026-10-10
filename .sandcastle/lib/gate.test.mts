@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { BUILDING_LABEL } from "./config.mts";
 import { bodyBlockers, gateIssues, openPrReason, unfinishedReason, type Blocker, type GateGitHub } from "./gate.mts";
 
 describe("bodyBlockers", () => {
@@ -85,7 +86,13 @@ describe("openPrReason", () => {
 });
 
 describe("gateIssues", () => {
-  const sandcastleIssue = (number: number, body = "") => ({ number, title: `Issue ${number}`, body, labels: ["Sandcastle"], comments: [] });
+  const sandcastleIssue = (number: number, body = "", labels: string[] = ["Sandcastle"]) => ({
+    number,
+    title: `Issue ${number}`,
+    body,
+    labels,
+    comments: [],
+  });
 
   const github = (overrides: Partial<GateGitHub>): GateGitHub & { lookedUp: number[] } => {
     const lookedUp: number[] = [];
@@ -130,6 +137,18 @@ describe("gateIssues", () => {
       [67, { number: 89, headRefName: "feature/67-one-gate-script" }],
       [70, undefined],
     ]);
+  });
+
+  it("holds back an issue carrying sandcastle:building, names it in the reason, and skips its blocker lookup", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(67, "", ["Sandcastle", BUILDING_LABEL]), sandcastleIssue(68)],
+    });
+
+    const { ready, blocked } = gateIssues(gh);
+
+    assert.deepEqual(ready.map((i) => i.number), [68]);
+    assert.deepEqual(blocked.map((b) => [b.issue.number, b.reasons]), [[67, ["it's already being built"]]]);
+    assert.deepEqual(gh.lookedUp, [68]);
   });
 
   it("holds back an issue whose body blocker is still open", () => {

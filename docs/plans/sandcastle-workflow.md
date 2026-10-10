@@ -30,11 +30,22 @@ so Sandcastle builds its own upgrade.
 | --- | --- | --- | --- |
 | `Sandcastle` | Human, or the host on the child issues intake creates when it splits an issue | The issue is in the queue. | Human, or intake when it splits the issue into children |
 | `sandcastle:ready` | Host (intake) | The issue passed the Definition of Ready and isn't re-checked. | Human (forces a re-check), or the host when it applies an issue-level `sandcastle:needs-human` |
+| `sandcastle:building` | Host, when a build starts | Sandcastle is building the issue right now. People and other agents leave it alone, and a second Sandcastle run's gate holds it back. | Host, when the build ends however it ends, or at a later run's startup once the label is more than 6 hours old |
 | `sandcastle:needs-info` | Host (intake) | The issue's text is the problem: answer the questions and edit the issue. | Human, which re-queues the issue |
 | `sandcastle:needs-human` | Host | Sandcastle tried and couldn't. On an issue: two failed builds, a PR closed without merging, or a push touching `.github/workflows/**`. On a PR: follow-up gave up. | Human, which re-queues the issue or PR |
 | `bug` | Human or host (intake) | The issue is a fix, so its branch is `fix/`. | Human |
 
 The host creates any missing `sandcastle:*` label at startup. The wayfinder map and its tickets must never carry `Sandcastle`.
+
+`sandcastle:building` exists because a manual `/implement-spec #71` started on 2026-10-07 while Sandcastle was already building #71, and only the run log showed it (#150).
+`buildIssue` adds it before creating the issue's sandbox and removes it after the sandbox closes, in a `finally`, so a pass, a failure or a thrown error all clear it.
+Two runs can both pass the gate before either adds the label, so `buildIssue` reads the issue's labels again just before adding it, and leaves an issue that already carries it to the
+run that marked it, without creating a sandbox or counting an attempt. Only the run that added the label removes it, and an add that fails is undone at once.
+A removal that fails is tried again at the start of the run's next round, so it doesn't hold the issue back for the rest of the run.
+A run stopped with Ctrl-C or SIGTERM, or one that crashes, removes the labels it still holds as the process exits.
+A run never removes a label it claimed more than 6 hours ago: by then another run may have cleared it as stale and claimed the issue.
+Only a killed process (SIGKILL) leaves one behind, so at startup the host removes the label from any issue whose most recent `labeled` event for it is more than 6 hours old
+(`BUILDING_LABEL_MAX_AGE_MS`), longer than any build runs. A newer label belongs to a run that's still going, and stays. To free an issue sooner, remove the label by hand.
 
 **Only the repository owner queues work, and only what they approved reaches an agent.** Anyone with triage access can add a label or edit an issue, anyone can comment on a public
 repository, and an agent holding a write token acts on what it reads. So when the host loads the queue, before intake and the early exit, it keeps an issue only when:
@@ -158,7 +169,8 @@ concerns belong to the critique.
 ## Phase 3: Blocker gate
 
 Unchanged: an issue is blocked while any issue it depends on (native "blocked by" links and `Blocked by #N` / `Depends on #N` lines) hasn't closed as completed or merged. It now also
-drops, in code, issues labelled `sandcastle:needs-info` or `sandcastle:needs-human`, issues without `sandcastle:ready`, and issues with an open PR (labelled or not), logging each reason.
+drops, in code, issues labelled `sandcastle:needs-info`, `sandcastle:needs-human` or `sandcastle:building`, issues without `sandcastle:ready`, and issues with an open PR (labelled or not),
+logging each reason.
 Issues the owner didn't approve never get this far: the host drops them when it loads the queue.
 The "skip issues with an open PR" rule moves out of `plan-prompt.md` into this gate, so the planner never sees such an issue.
 

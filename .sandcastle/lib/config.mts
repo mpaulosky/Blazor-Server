@@ -34,6 +34,14 @@ export const ROLE_AGENTS = {
 
 export type Role = keyof typeof ROLE_AGENTS;
 
+// The roles lib/build.mts#buildIssue runs, each at most once per build,
+// besides the gate-fixer, which runs up to GATE_FIXER_ATTEMPTS times at each
+// checkpoint. #72's architect, UI developer and scribe are counted ahead of
+// time. BUILDING_LABEL_MAX_AGE_MS is sized from these roles' timeouts:
+// config.test.mts checks the sum fits, and build.test.mts that buildIssue runs
+// no role outside the list.
+export const BUILD_ROLES = ["architect", "tester", "backend", "ui", "scribe", "reviewer"] as const satisfies readonly Role[];
+
 // The ref each issue branch is compared with: every issue PR targets main,
 // and fetchMain() refreshes origin/main before each round. The sandbox mounts
 // the host's .git, so the ref resolves there too.
@@ -58,10 +66,28 @@ export const PUBLISH_RETRY_ATTEMPTS = 4;
 // have it yet (see docs/plans/sandcastle-workflow.md, "Labels").
 export type SandcastleLabel = { name: string; color: string; description: string };
 
+// Marks an issue while a sandbox is building it (see lib/build.mts#buildIssue
+// and lib/gate.mts), so a second Sandcastle run doesn't start building the
+// same issue too (#150, a near-miss on #71).
+export const BUILDING_LABEL = "sandcastle:building";
+
+// How old a sandcastle:building label must be before startup clears it as a
+// crashed run's (see lib/building.mts#clearStaleBuildingLabels). It outlasts
+// any real build: every role's timeoutMinutes, even with two gate-fixer
+// attempts at each of the two checkpoints, adds up to well under 6 hours.
+// config.test.mts checks that sum (see BUILD_ROLES), with an hour to spare,
+// stays below it.
+export const BUILDING_LABEL_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
 // Every label from the Labels table that the host, not a human, is
 // responsible for creating. `Sandcastle` and `bug` are a human's to add.
 export const SANDCASTLE_LABELS: readonly SandcastleLabel[] = [
   { name: "sandcastle:ready", color: "0E8A16", description: "The issue passed the Definition of Ready and isn't re-checked." },
+  {
+    name: BUILDING_LABEL,
+    color: "1D76DB",
+    description: "Sandcastle is building this issue right now. Leave it alone until the label clears.",
+  },
   {
     name: "sandcastle:needs-info",
     color: "FBCA04",

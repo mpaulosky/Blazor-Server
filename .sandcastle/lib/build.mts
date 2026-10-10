@@ -8,8 +8,9 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
-import { BASE_BRANCH, BUILD_FAILED_MARKER, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import { BASE_BRANCH, BUILD_FAILED_MARKER, BUILDING_LABEL, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
+import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
@@ -115,6 +116,16 @@ export type BuildHost = {
   // (see lib/handback.mts#recordFailedAttempt). Never called for a role run
   // that threw UncountedStopError.
   recordBuildFailure(issueNumber: number, branch: string, detail: string): void;
+  // Adds sandcastle:building to the issue, so the gate (lib/gate.mts) holds it
+  // back for a second Sandcastle run while this one builds it (#150). Returns
+  // false, without adding it, when the issue already carries the label:
+  // another run marked it after this round's gate read the labels.
+  markBuilding(issueNumber: number): boolean;
+  // Removes sandcastle:building, however the build stopped: called from
+  // buildIssue's finally, only when markBuilding added it, so a failed,
+  // red-gated or thrown-out build doesn't leave the issue held back forever,
+  // and a build that stood aside never removes another run's label.
+  unmarkBuilding(issueNumber: number): void;
   // Whether what the commits from `base` to `commit` publish (see
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
   leaksSecret(base: string, commit: string): boolean;
@@ -159,6 +170,8 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
+  markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
+  unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
@@ -179,12 +192,52 @@ const liveHost: BuildHost = {
 // stayed red. `publishFailed` is true only when the branch passed both
 // checkpoints but publishing it still failed, so the caller's round summary can
 // tell that apart from a round that built nothing.
+//
+// The issue carries sandcastle:building from before its sandbox is created
+// until after it closes (#150), so a second Sandcastle run's gate holds it
+// back, and a run that finds another already marked it never creates or
+// closes a sandbox on the worktree that run is using (worktreePathFor names
+// it after the branch alone).
 export async function buildIssue(
   issue: SandcastleIssue,
   branch: string,
   base: string,
   host: BuildHost = liveHost,
-): Promise<{ commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean }> {
+): Promise<BuildResult> {
+  // A label that can't be added stops the build: building unmarked is how two
+  // runs end up on one issue. The throw reaches main.mts's allSettled, so it
+  // skips this issue for the round without counting an attempt.
+  if (!host.markBuilding(issue.number)) {
+    console.error(`  ⏸ #${issue.number}: another run marked it ${BUILDING_LABEL} after this round's gate, so this run leaves it alone.`);
+    return { commits: [], prUrl: undefined, publishFailed: false };
+  }
+  try {
+    return await buildMarkedIssue(issue, branch, base, host);
+  } finally {
+    // A label that can't be removed mustn't replace the build's own outcome.
+    // The issue stays remembered, so this run's exit tries again (see
+    // main.mts), and failing that a later startup clears the label as stale
+    // (lib/building.mts).
+    try {
+      host.unmarkBuilding(issue.number);
+    } catch (error) {
+      console.error(
+        `  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so it's tried again when this run exits: ${error}`,
+      );
+    }
+  }
+}
+
+type BuildResult = { commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean };
+
+// buildIssue's work once the issue is marked: everything from creating the
+// sandbox to closing it.
+async function buildMarkedIssue(
+  issue: SandcastleIssue,
+  branch: string,
+  base: string,
+  host: BuildHost,
+): Promise<BuildResult> {
   const sandbox = await host.createSandbox(branch);
 
   const promptArgs = issuePromptArgs(issue, branch);
