@@ -2,7 +2,8 @@
   "name": "blazor-server",
   "private": true,
   "scripts": {
-    "check:sandcastle": "tsc --noEmit -p .sandcastle && tsx --test \".sandcastle/**/*.test.mts\""
+    "check:sandcastle": "tsc --noEmit -p .sandcastle && tsx --test \".sandcastle/**/*.test.mts\"",
+    "sandcastle": "tsx .sandcastle/main.mts"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.12.0",

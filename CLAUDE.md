@@ -38,6 +38,7 @@ scripts/gate.sh                                       # the full check; needs a 
 dotnet build Blazor-Server.slnx                       # quick build while iterating
 dotnet test --project tests/<Project>/<Project>.csproj  # one test project while iterating
 pnpm run check:sandcastle                             # type-check and test .sandcastle/
+pnpm run sandcastle                                   # start a Sandcastle run
 ```
 
 `scripts/gate.sh` is the definition of "ready to push": lint of the changed YAML, Markdown, workflows and shell
@@ -59,3 +60,6 @@ worktree (see `docs/PROCESS.md`). To push a branch that has none, check it out i
 
 Branches, worktrees, commits, PR titles and descriptions, merging and releases follow
 [docs/PROCESS.md](docs/PROCESS.md). Commit messages follow `.github/instructions/git-commit-instructions.md`.
+
+Claude reviews a PR only when it has the `review:claude` label. Add the label to every PR you open, and to every PR a
+Sandcastle run opens that you're watching, as soon as it exists.

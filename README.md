@@ -40,6 +40,8 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.94](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.94) | 2026-10-10 | chore(sandcastle): Add a pnpm script to start a run | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-199-chore-sandcastle-add-a-pnpm-script-to-start-a-run.md) |
+| [v0.0.93](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.93) | 2026-10-10 | docs(claude): Label every PR review:claude so Claude reviews it | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-197-docs-claude-label-every-pr-review-claude-so-claude-reviews-it.md) |
 | [v0.0.92](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.92) | 2026-10-10 | fix(sandcastle): Mount the .git config and hooks through the provider's create() | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-195-fix-sandcastle-mount-the-git-config-and-hooks-through-the-provider-s-create.md) |
 | [v0.0.91](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.91) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-192-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.90](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.90) | 2026-10-09 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-09-pr-190-chore-re-apply-the-repo-ci-baseline-template.md) |
@@ -48,8 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.87](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.87) | 2026-10-08 | fix(sandcastle): Name bug branches fix/ rather than hotfix/ | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md) |
 | [v0.0.86](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.86) | 2026-10-08 | fix(sandcastle): Diff the reviewer's branch against origin/main | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-182-fix-sandcastle-diff-the-reviewer-s-branch-against-origin-main.md) |
 | [v0.0.85](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.85) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-178-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.84](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.84) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-176-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.83](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.83) | 2026-10-08 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-174-chore-re-apply-the-repo-ci-baseline-template.md) |
 
 <!-- RELEASES_END -->
 

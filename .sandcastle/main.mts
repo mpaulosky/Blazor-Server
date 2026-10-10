@@ -42,9 +42,7 @@
 // with its own gh auth and passes each role what it needs through its prompt.
 //
 // Usage:
-//   pnpm exec tsx .sandcastle/main.mts
-// Or add to package.json:
-//   "scripts": { "sandcastle": "tsx .sandcastle/main.mts" }
+//   pnpm run sandcastle
 
 import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
