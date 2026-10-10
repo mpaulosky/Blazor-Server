@@ -73,6 +73,11 @@ export type SplitGitHub = {
   // Removes Sandcastle from the original issue, which has become an umbrella.
   removeSandcastle(issue: number): void;
   comment(issue: number, body: string): void;
+  // Adds and removes the mark (sandcastle:needs-human) that keeps the issue
+  // out of intake while it's being split, so neither a concurrent run nor a
+  // later round splits it a second time (see applySplit).
+  markSplitting(issue: number): void;
+  unmarkSplitting(issue: number): void;
 };
 
 export const liveSplitGitHub: SplitGitHub = {
@@ -81,6 +86,8 @@ export const liveSplitGitHub: SplitGitHub = {
   addBlockedBy,
   removeSandcastle: (issue) => removeIssueLabel(issue, "Sandcastle"),
   comment: commentOnIssue,
+  markSplitting: (issue) => addIssueLabel(issue, "sandcastle:needs-human"),
+  unmarkSplitting: (issue) => removeIssueLabel(issue, "sandcastle:needs-human"),
 };
 
 // The labels that mean intake has judged the issue, or a person has to act
@@ -239,16 +246,23 @@ function applyVerdict(
 // sub-issue of the original, and links it as blocked by the child before it.
 // Only then does the original lose Sandcastle and get the umbrella comment
 // listing its children, which lib/umbrella.mts finds it by in later rounds.
-// The children go through intake on their own in the next round.
+// The children go through intake on their own in the next round. Their title
+// and body are model text posted from the host's account, so mentions and
+// cross-references in them are broken (see withoutReferences).
 //
 // A split with no children, or a child without a title or acceptance
 // criteria, is malformed: nothing is created, and the issue is handed back
 // with sandcastle:needs-info and a question asking a human to split it.
 //
-// A failure before the first child exists leaves the issue unjudged, so it's
-// judged again later. A failure after it hands the issue back with
-// sandcastle:needs-human instead: judging it again would split it again,
-// creating a second set of children every round.
+// Before the first child is created, the issue is marked with
+// sandcastle:needs-human, which intake and the gate leave alone, so neither a
+// concurrent run nor a later round splits it a second time; the mark comes off
+// once the umbrella comment is posted. A failure marking it leaves the issue
+// unjudged, with nothing created, so it's judged again later. Any failure
+// after that hands it back with sandcastle:needs-human, even before the first
+// child exists: a create that GitHub answered with an error may still have
+// created the child. When the hand-back fails too, the mark still keeps the
+// issue out of intake (#234).
 function applySplit(
   number: number,
   verdict: IntakeVerdict,
@@ -274,32 +288,48 @@ function applySplit(
     return `✋ Intake hands #${number} back with sandcastle:needs-info: it couldn't split it, since ${problem}.`;
   }
 
+  splitGithub.markSplitting(number);
   const labels = verdict.bug ? ["Sandcastle", "bug"] : ["Sandcastle"];
   const children: SplitChild[] = [];
+  let sandcastleRemoved = false;
+  // The title of the child being created, while its create call runs.
+  let creating: string | undefined;
   try {
     for (const draft of drafted) {
-      const title = draft.title.trim();
-      const child = { number: splitGithub.createChild(title, draft.body, labels), title };
+      const title = withoutReferences(draft.title.trim());
+      creating = title;
+      const child = { number: splitGithub.createChild(title, withoutReferences(draft.body), labels), title };
+      creating = undefined;
       const previous = children.at(-1);
       children.push(child);
       splitGithub.addSubIssue(number, child.number);
       if (previous) splitGithub.addBlockedBy(child.number, previous.number);
     }
     splitGithub.removeSandcastle(number);
+    sandcastleRemoved = true;
     splitGithub.comment(number, umbrellaComment(verdict, children));
   } catch (error) {
-    if (children.length === 0) throw error;
-    log(`  ⚠ Splitting #${number} failed after creating ${issueRefs(children)}: ${error}`);
-    handBack(
-      { kind: "issue", number },
-      "sandcastle:needs-human",
-      "splitting it into child issues failed partway",
-      partialSplitComment(children),
-      run,
-      repo,
-      report,
-    );
+    const created = children.length > 0 ? `after creating ${issueRefs(children)}` : "before creating any child";
+    log(`  ⚠ Splitting #${number} failed ${created}: ${error}`);
+    try {
+      handBack(
+        { kind: "issue", number },
+        "sandcastle:needs-human",
+        "splitting it into child issues failed partway",
+        partialSplitComment(children, creating, sandcastleRemoved),
+        run,
+        repo,
+        report,
+      );
+    } catch (handBackError) {
+      log(`  ⚠ Splitting #${number} failed, and handing it back failed too; it keeps sandcastle:needs-human, so intake leaves it alone: ${handBackError}`);
+    }
     return `🛑 Intake's split of #${number} failed partway, so it's handed back with sandcastle:needs-human.`;
+  }
+  try {
+    splitGithub.unmarkSplitting(number);
+  } catch (error) {
+    log(`  ⚠ #${number} is an umbrella now, but removing its sandcastle:needs-human mark failed, so a person has to: ${error}`);
   }
   const bugNote = verdict.bug ? " (a bug)" : "";
   return `✂ Intake splits #${number} into ${issueRefs(children)}${bugNote}: ${verdict.reason}`;
@@ -319,7 +349,7 @@ function splitProblem(drafted: readonly { title: string; body: string }[]): stri
   const untitled = drafted.findIndex((draft) => draft.title.trim() === "");
   if (untitled !== -1) return `its drafted child ${untitled + 1} has no title`;
   const withoutCriteria = drafted.find((draft) => !hasAcceptanceCriteria(draft.body));
-  if (withoutCriteria) return `its drafted child "${withoutCriteria.title.trim()}" has no acceptance criteria`;
+  if (withoutCriteria) return `its drafted child "${plainText(withoutCriteria.title)}" has no acceptance criteria`;
   return undefined;
 }
 
@@ -364,15 +394,25 @@ function malformedSplitComment(verdict: IntakeVerdict, problem: string): string 
 }
 
 // The comment on an issue whose split failed partway: which children exist,
-// and what a human has to do. The error itself is only logged, since this is
-// a public issue.
-function partialSplitComment(children: readonly SplitChild[]): string {
+// which one may exist without the host knowing (`unconfirmed`, the title of
+// the child whose create call failed, if one did), and how a
+// person recovers, which depends on whether the split had already removed
+// Sandcastle. The error itself is only logged, since this is a public issue.
+function partialSplitComment(children: readonly SplitChild[], unconfirmed: string | undefined, sandcastleRemoved: boolean): string {
+  const created = children.length > 0
+    ? `These sub-issues were created:\n\n${children.map((child) => `- #${child.number} ${plainText(child.title)}`).join("\n")}`
+    : "No sub-issue was confirmed created.";
+  const requeue = sandcastleRemoved
+    ? "close the sub-issues, add `Sandcastle` back (the split had already removed it), and remove `sandcastle:needs-human`"
+    : "close the sub-issues and remove `sandcastle:needs-human`";
   return [
     "Sandcastle's intake started splitting this issue into sub-issues, but a GitHub call failed partway, so it's handed back with `sandcastle:needs-human` " +
       "rather than split a second time. The run log has the error.",
-    `These sub-issues were created:\n\n${children.map((child) => `- #${child.number} ${plainText(child.title)}`).join("\n")}`,
-    "Please finish the split by hand (each sub-issue linked to this one, and blocked by the one before it), or close the sub-issues and remove " +
-      "`sandcastle:needs-human` to have intake judge this issue again.",
+    created +
+      (unconfirmed === undefined ? "" : ` The call that failed may still have created one titled "${plainText(unconfirmed)}", so check the issue list for it too.`),
+    `To have intake judge this issue again, ${requeue}.`,
+    "Or finish the split by hand: link each sub-issue to this one, each blocked by the one before it" +
+      `${sandcastleRemoved ? "" : ", and remove `Sandcastle` from this issue"}. Sandcastle doesn't close an umbrella finished by hand, so close this issue yourself once every sub-issue is done.`,
   ].join("\n\n");
 }
 
@@ -398,20 +438,38 @@ function questionsOf(verdict: IntakeVerdict): string[] {
     .map(plainText);
 }
 
+// `text` from intake with every mention and cross-reference broken (see
+// plainText), but its Markdown kept: for a split's child issues, which need
+// their headings and checkboxes. A character reference is escaped, since
+// &#64; would otherwise render as an @ these rules never saw (#234).
+export function withoutReferences(text: string): string {
+  return breakReferences(text.replace(/&(?=#?[A-Za-z0-9]+;)/g, "&amp;"));
+}
+
+// A zero-width space after @, a # or GH- before digits, and the dot of
+// github.com, so none mentions anyone or links another issue or PR.
+function breakReferences(text: string): string {
+  return text
+    .replace(/@(?=[A-Za-z0-9])/g, "@\u200B")
+    .replace(/#(?=\d)/g, "#\u200B")
+    .replace(/\b(GH)-(?=\d)/gi, "$1-\u200B")
+    .replace(/\b(github)\.(com)\b/gi, "$1\u200B.$2");
+}
+
 // `text` from intake, as plain text for an issue comment. Intake read
 // untrusted issue text, and its words go to the issue's author, so nothing in
 // them may restructure the comment or reach anyone else (#224): it's kept to
 // one line, backslashes and backticks are escaped (no code span or fence to
-// swallow the re-queue instructions), a zero-width space after @ and # stops
-// a mention or a cross-reference, and a leading Markdown marker is escaped so
+// swallow the re-queue instructions), mentions and cross-references are
+// broken (see breakReferences), and a leading Markdown marker is escaped so
 // it can't start a list, heading or quote.
 export function plainText(text: string): string {
-  return text
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/[\\`]/g, "\\$&")
-    .replace(/@(?=[A-Za-z0-9])/g, "@\u200B")
-    .replace(/#(?=\d)/g, "#\u200B")
+  return breakReferences(
+    text
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[\\`]/g, "\\$&"),
+  )
     .replace(/^[-+*#>]/, "\\$&")
     .replace(/^(\d+)([.)])(?=\s)/, "$1\\$2");
 }

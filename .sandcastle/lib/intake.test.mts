@@ -93,6 +93,12 @@ function recordingSplitGithub(firstChildNumber: number = 101) {
     comment: (issueNumber, body) => {
       calls.push({ fn: "comment", args: [issueNumber, body] });
     },
+    markSplitting: (issueNumber) => {
+      calls.push({ fn: "markSplitting", args: [issueNumber] });
+    },
+    unmarkSplitting: (issueNumber) => {
+      calls.push({ fn: "unmarkSplitting", args: [issueNumber] });
+    },
   };
   return { calls, github };
 }
@@ -352,20 +358,135 @@ describe("applyVerdicts for a split verdict beyond the acceptance criteria", () 
     assert.ok(body.indexOf("#101") < body.indexOf("#102") && body.indexOf("#102") < body.indexOf("#103"), body);
   });
 
-  it("leaves the issue unjudged, with nothing handed back, when creating the first child fails", () => {
+  // Marked before the first child is created, so neither a concurrent run
+  // nor a later round splits it again (#234).
+  it("marks the issue with sandcastle:needs-human before creating any child, and removes the mark once it's an umbrella", () => {
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], recordingGh().run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const fns = split.calls.map((call) => call.fn);
+    assert.equal(fns[0], "markSplitting", fns.join(", "));
+    assert.equal(fns.at(-1), "unmarkSplitting", fns.join(", "));
+    assert.ok(fns.indexOf("comment") < fns.indexOf("unmarkSplitting"), fns.join(", "));
+  });
+
+  it("leaves the issue unjudged, with nothing created, when marking it fails", () => {
     const gh = recordingGh();
     const report = new HandBackReport();
     const split = recordingSplitGithub();
-    split.github.createChild = () => {
+    split.github.markSplitting = () => {
       throw new Error("HTTP 502");
     };
     const lines: string[] = [];
 
     applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", report, (line) => lines.push(line), split.github);
 
+    assert.deepEqual(split.calls, []);
     assert.deepEqual(gh.calls.filter((call) => call.args[1] !== "view"), []);
     assert.equal(report.items().length, 0);
     assert.ok(lines.some((line) => line.includes("judged again")), lines.join("\n"));
+  });
+
+  // A create that fails may still have created the issue on GitHub (a 502
+  // after the write), so the split can't safely be tried again (#234).
+  it("hands the issue back with sandcastle:needs-human when creating the first child fails, naming the child it may have created", () => {
+    const gh = recordingGh();
+    const report = new HandBackReport();
+    const split = recordingSplitGithub();
+    split.github.createChild = () => {
+      throw new Error("HTTP 502");
+    };
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", report, () => {}, split.github);
+
+    assert.deepEqual(report.items().map((item) => item.label), ["sandcastle:needs-human"]);
+    const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.match(comment, new RegExp(wellFormedChildren[0]!.title));
+    assert.ok(!split.calls.some((call) => call.fn === "unmarkSplitting"), "the mark stays, keeping the issue out of intake");
+  });
+
+  // The issue is already marked, so a hand-back that fails too still keeps
+  // it out of intake (#234).
+  it("logs a hand-back that fails after a partial split, and keeps the mark", () => {
+    const split = recordingSplitGithub();
+    const createChild = split.github.createChild;
+    let created = 0;
+    split.github.createChild = (title, body, labels) => {
+      if (++created === 2) throw new Error("HTTP 502");
+      return createChild(title, body, labels);
+    };
+    const failingGh = recordingGh(["Sandcastle"], (args) => (args[1] === "comment" || args[1] === "edit" ? new Error("HTTP 503") : undefined));
+    const lines: string[] = [];
+
+    assert.doesNotThrow(() =>
+      applyVerdicts([issue(10)], [splitVerdict(10)], failingGh.run, "o/r", new HandBackReport(), (line) => lines.push(line), split.github),
+    );
+
+    assert.ok(!split.calls.some((call) => call.fn === "unmarkSplitting"));
+    assert.ok(lines.some((line) => /handing it back failed/.test(line) && /sandcastle:needs-human/.test(line)), lines.join("\n"));
+    assert.ok(!lines.some((line) => /judged again/.test(line)), lines.join("\n"));
+  });
+
+  // Recovery depends on how far the split got (#234).
+  it("tells a person to add Sandcastle back when the split had already removed it", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    split.github.comment = () => {
+      throw new Error("HTTP 502");
+    };
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.match(comment, /add `Sandcastle` back/);
+    assert.match(comment, /close this issue yourself/);
+    assert.doesNotMatch(comment, /may still have created/, "every child's create call succeeded");
+  });
+
+  it("doesn't tell a person to add Sandcastle back when the split never removed it", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    split.github.addBlockedBy = () => {
+      throw new Error("HTTP 502");
+    };
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.doesNotMatch(comment, /add `Sandcastle` back/);
+    assert.match(comment, /close this issue yourself/);
+  });
+
+  // The children's bodies are model text posted from the host's account, so
+  // a mention or cross-reference copied from the original would fire again
+  // (#234). They keep their Markdown, which the build needs.
+  it("posts each child without a working mention or cross-reference, keeping its Markdown", () => {
+    const split = recordingSplitGithub();
+    const hostileChild = {
+      title: "Fix #12 for @someone",
+      body: "## Summary\n\ncc @someone, see #123, GH-4, https://github.com/o/r/issues/5, &#64;other and &commat;another.\n\n## Acceptance criteria\n\n- [ ] One.",
+    };
+
+    applyVerdicts([issue(10)], [splitVerdict(10, [hostileChild])], recordingGh().run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const [title, body] = split.calls.find((call) => call.fn === "createChild")!.args as [string, string];
+    for (const text of [title, body]) {
+      assert.doesNotMatch(text, /@someone|#12\b|#123|GH-4|github\.com|&#64;|(?<!&amp;)&commat;/);
+    }
+    assert.match(body, /^## Acceptance criteria$/m);
+    assert.match(body, /^- \[ \] One\.$/m);
+  });
+
+  // The malformed-split comment names the child at fault (#234).
+  it("posts a malformed split's child title as plain text", () => {
+    const gh = recordingGh();
+    const hostile = { title: "Use ``` here, cc @someone, see #123", body: "## Summary\n\nNo criteria." };
+
+    applyVerdicts([issue(12)], [splitVerdict(12, [hostile])], gh.run, "o/r", new HandBackReport(), () => {}, recordingSplitGithub().github);
+
+    const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.doesNotMatch(comment, /@someone|#123|(^|[^\\])```/m);
   });
 
   // Judging it again would split it again, creating a second set of children.
@@ -383,6 +504,7 @@ describe("applyVerdicts for a split verdict beyond the acceptance criteria", () 
     applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", report, () => {}, split.github);
 
     assert.equal(split.calls.filter((call) => call.fn === "removeSandcastle" || call.fn === "comment").length, 0);
+    assert.ok(!split.calls.some((call) => call.fn === "unmarkSplitting"));
     const edits = gh.calls.filter((call) => call.args[1] === "edit");
     assert.deepEqual(edits.map((call) => call.args.slice(0, 7)), [["issue", "edit", "10", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]]);
     const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
