@@ -34,10 +34,23 @@ export const ROLE_AGENTS = {
 
 export type Role = keyof typeof ROLE_AGENTS;
 
+// The roles the planner may pick per issue, besides the tester, backend
+// developer and reviewer, which always run (see "Phase 4: Plan" and
+// "Phase 6: Build" in docs/plans/sandcastle-workflow.md). lib/plan.mts#resolveRoles
+// validates the planner's roles field against this list, falling back to
+// every one of them when the field is missing or invalid.
+export const OPTIONAL_ROLES = ["architect", "ui", "scribe"] as const satisfies readonly Role[];
+
+export type OptionalRole = (typeof OPTIONAL_ROLES)[number];
+
+// Marks an issue comment as the architect's design note (lib/build.mts), so
+// a re-run can find its own latest one and keep building on the same design
+// rather than starting blind.
+export const DESIGN_MARKER = "<!-- sandcastle:design -->";
+
 // The roles lib/build.mts#buildIssue runs, each at most once per build,
 // besides the gate-fixer, which runs up to GATE_FIXER_ATTEMPTS times at each
-// checkpoint. #72's architect, UI developer and scribe are counted ahead of
-// time. BUILDING_LABEL_MAX_AGE_MS is sized from these roles' timeouts:
+// checkpoint. BUILDING_LABEL_MAX_AGE_MS is sized from these roles' timeouts:
 // config.test.mts checks the sum fits, and build.test.mts that buildIssue runs
 // no role outside the list.
 export const BUILD_ROLES = ["architect", "tester", "backend", "ui", "scribe", "reviewer"] as const satisfies readonly Role[];
@@ -50,6 +63,12 @@ export const BASE_BRANCH = "origin/main";
 // Maximum number of plan→execute→merge cycles before stopping.
 // Raise this if your backlog is large; lower it for a quick smoke-test run.
 export const MAX_ITERATIONS = 10;
+
+// How many issues one intake run judges. A malformed or truncated <intake>
+// block costs every verdict in it, so a large backlog is judged a batch per
+// round rather than in one answer (#224); the rest wait for a later round or
+// run.
+export const INTAKE_BATCH_SIZE = 10;
 
 // Gate-fixer runs allowed at each gate checkpoint before the issue's round is
 // given up, and how much of the final gate output the issue comment quotes.

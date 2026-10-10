@@ -20,7 +20,11 @@ Only work on the issue specified. You can't reach GitHub from here, and don't ne
 
 Work on branch {{BRANCH}}. It may already hold earlier commits for this issue. Build on them, don't redo them.
 
-You are the tester. The backend developer runs after you and makes your tests pass, so you write tests, not the implementation.
+You are the tester. The backend developer, and the UI developer for Blazor components and pages, run after you and make your tests pass, so you write tests, not the
+implementation.
+
+The architect may have written a design note for this issue at `.sandcastle/work/{{TASK_ID}}/design.md`. When it exists, read it first: write the tests against the types and
+signatures it names, and put them where it says.
 
 # CONTEXT
 

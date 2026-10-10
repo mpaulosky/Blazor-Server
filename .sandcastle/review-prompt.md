@@ -52,6 +52,8 @@ Comments on the issue from the repository owner:
      checks. A criterion that can't be tested automatically, such as one about docs or a manual step, needs no test: check it against the change directly.
    - Did the developers weaken the tester's tests to make them pass? Compare each acceptance test with the tester's commit: look for removed or loosened assertions, tests that
      were skipped, commented out or deleted, and expected values changed to match the code.
+   - When `.sandcastle/work/{{TASK_ID}}/design.md` exists, was the architect's design note followed? Where the code departs from it, is the difference explained in a commit
+     body? Name any unexplained difference in your final message rather than change the code to match the note.
    - Does the change introduce injection vulnerabilities, credential leaks, or other security issues?
 
 4. **Maintain balance**: Avoid over-simplification that could:

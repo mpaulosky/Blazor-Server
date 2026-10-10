@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { BUILDING_LABEL, hooks, UMBRELLA_MARKER } from "./config.mts";
+import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, UMBRELLA_MARKER } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { openPrReason } from "./gate.mts";
 import {
@@ -38,17 +38,20 @@ import { intakePromptArgs } from "./prompts.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
+// Lenient where a slip is harmless, because one verdict that fails the schema
+// costs every verdict in the block (#224): the issue JSON gives `number` as a
+// number, so a numeric id is taken as a string, and a missing bug means false.
 const intakeSchema = z.object({
   verdicts: z.array(
     z.object({
-      id: z.string(),
+      id: z.union([z.string(), z.number()]).transform(String),
       verdict: z.enum(["ready", "needs-info", "split"]),
       questions: z.array(z.string()).optional(),
       // Only for a split verdict: the drafted child issues, in build order.
       // Whether it's well-formed (at least one child, each carrying
       // acceptance criteria) is checked when the verdict is applied, not here.
       children: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
-      bug: z.boolean(),
+      bug: z.boolean().default(false),
       reason: z.string(),
     }),
   ),
@@ -154,14 +157,15 @@ export function applyVerdicts(
       log(`  ⚠ Ignoring another intake verdict on ${ref}: it already has a verdict.`);
       continue;
     }
-    judged.add(verdict.id);
 
     // Handing an issue back with no questions would leave its author nothing
-    // to answer, so such a verdict counts as none.
+    // to answer, so such a verdict counts as none: checked before the issue
+    // counts as judged, so a valid verdict after it still applies (#224).
     if (verdict.verdict === "needs-info" && questionsOf(verdict).length === 0) {
-      log(`  ⚠ Ignoring intake's needs-info verdict on ${ref}: it has no questions, so it's judged again in a later round or run.`);
+      log(`  ⚠ Ignoring intake's needs-info verdict on ${ref}: it has no questions.`);
       continue;
     }
+    judged.add(verdict.id);
 
     // A failed gh call before the verdict's labels land leaves the issue
     // unjudged, so the gate holds it back and intake judges it again in a
@@ -338,8 +342,8 @@ export function umbrellaComment(verdict: IntakeVerdict, children: readonly Split
     UMBRELLA_MARKER,
     "Sandcastle's intake found this issue meets the Definition of Ready but is too big for one pull request, " +
       `so it split it into these sub-issues${bugNote}. They're built in this order, each blocked by the one before it:`,
-    children.map((child, i) => `${i + 1}. #${child.number} ${child.title}`).join("\n"),
-    `**Reason:** ${verdict.reason}`,
+    children.map((child, i) => `${i + 1}. #${child.number} ${plainText(child.title)}`).join("\n"),
+    `**Reason:** ${plainText(verdict.reason)}`,
     "This issue no longer carries `Sandcastle`, so it isn't built itself. Sandcastle closes it as completed once every sub-issue has closed as completed.",
   ].join("\n\n");
 }
@@ -366,7 +370,7 @@ function partialSplitComment(children: readonly SplitChild[]): string {
   return [
     "Sandcastle's intake started splitting this issue into sub-issues, but a GitHub call failed partway, so it's handed back with `sandcastle:needs-human` " +
       "rather than split a second time. The run log has the error.",
-    `These sub-issues were created:\n\n${children.map((child) => `- #${child.number} ${child.title}`).join("\n")}`,
+    `These sub-issues were created:\n\n${children.map((child) => `- #${child.number} ${plainText(child.title)}`).join("\n")}`,
     "Please finish the split by hand (each sub-issue linked to this one, and blocked by the one before it), or close the sub-issues and remove " +
       "`sandcastle:needs-human` to have intake judge this issue again.",
   ].join("\n\n");
@@ -377,19 +381,39 @@ export function readyComment(verdict: IntakeVerdict): string {
   const labels = verdict.bug ? "`sandcastle:ready` and `bug` (so its branch is `fix/`)" : "`sandcastle:ready`";
   return [
     `Sandcastle's intake found this issue meets the Definition of Ready, so it added ${labels}. It's built once its blockers, if any, have landed.`,
-    `**Reason:** ${verdict.reason}`,
+    `**Reason:** ${plainText(verdict.reason)}`,
     "To have intake judge it again, remove `sandcastle:ready`.",
   ].join("\n\n");
 }
 
 // The verdict's questions as one line each, ready to number: trimmed, with
 // internal line breaks collapsed (a blank line would end the Markdown list
-// and restart its numbering), any numbering intake added itself removed, and
-// blank ones dropped.
+// and restart its numbering), any numbering intake added itself (a number,
+// then . or ), then a space) removed, blank ones dropped, and the rest made
+// plain text (see plainText).
 function questionsOf(verdict: IntakeVerdict): string[] {
   return (verdict.questions ?? [])
     .map((question) => question.replace(/\s+/g, " ").trim().replace(/^\d+[.)]\s+/, ""))
-    .filter((question) => question !== "");
+    .filter((question) => question !== "")
+    .map(plainText);
+}
+
+// `text` from intake, as plain text for an issue comment. Intake read
+// untrusted issue text, and its words go to the issue's author, so nothing in
+// them may restructure the comment or reach anyone else (#224): it's kept to
+// one line, backslashes and backticks are escaped (no code span or fence to
+// swallow the re-queue instructions), a zero-width space after @ and # stops
+// a mention or a cross-reference, and a leading Markdown marker is escaped so
+// it can't start a list, heading or quote.
+export function plainText(text: string): string {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[\\`]/g, "\\$&")
+    .replace(/@(?=[A-Za-z0-9])/g, "@\u200B")
+    .replace(/#(?=\d)/g, "#\u200B")
+    .replace(/^[-+*#>]/, "\\$&")
+    .replace(/^(\d+)([.)])(?=\s)/, "$1\\$2");
 }
 
 // The one comment on an issue intake handed back: why, the numbered
@@ -409,7 +433,7 @@ export function needsInfoComment(verdict: IntakeVerdict): string {
 function handBackComment(lead: string, reason: string, questions: readonly string[]): string {
   return [
     lead,
-    `**Reason:** ${reason}`,
+    `**Reason:** ${plainText(reason)}`,
     ...(questions.length > 0
       ? ["Please answer these questions by editing the issue:", questions.map((question, i) => `${i + 1}. ${question}`).join("\n")]
       : []),
@@ -431,9 +455,14 @@ export async function intakeRound(
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
 ): Promise<void> {
-  const toJudge = needsIntake(issues, openPrs);
-  if (toJudge.length === 0) return;
+  const unjudged = needsIntake(issues, openPrs);
+  if (unjudged.length === 0) return;
+  // A batch at a time: a malformed or truncated answer costs every verdict in
+  // it (#224).
+  const toJudge = unjudged.slice(0, INTAKE_BATCH_SIZE);
   log(`Intake is judging ${toJudge.length} issue(s) against the Definition of Ready: ${toJudge.map((issue) => `#${issue.number}`).join(", ")}`);
+  const waiting = unjudged.length - toJudge.length;
+  if (waiting > 0) log(`  ${waiting} more wait for intake in a later round or run.`);
   const verdicts = await run(intakePromptArgs(toJudge));
   applyVerdicts(toJudge, verdicts, gh, repo, report, log);
 }

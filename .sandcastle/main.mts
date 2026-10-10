@@ -34,20 +34,25 @@
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
 //                               createSandbox(), and the issue carries
 //                               sandcastle:building until its build ends,
-//                               however it ends. The tester commits failing
-//                               tests, then the backend developer makes them
-//                               pass; if either fails, the issue stops for the
+//                               however it ends. The architect, when the
+//                               planner picked it, writes a design note the
+//                               host posts on the issue. The tester commits
+//                               failing tests, then the backend developer and,
+//                               when picked, the UI developer make them pass;
+//                               if any of these fails, the issue stops for the
 //                               round. If the branch is then ahead of main (this
 //                               run's commits or earlier ones), the host runs
 //                               scripts/gate.sh in the sandbox (checkpoint 1),
+//                               the scribe (when picked) documents the change,
 //                               a reviewer runs, and the gate runs again
 //                               (checkpoint 2). A red gate gets two gate-fixer
 //                               attempts per checkpoint; past that nothing is
-//                               pushed. A red checkpoint or a failed tester or
-//                               backend run is a failed build attempt: the
-//                               first gets a comment, the second hands the
-//                               issue back with sandcastle:needs-human
-//                               (lib/handback.mts).
+//                               pushed. A red checkpoint or a failed architect,
+//                               tester, backend or UI run is a failed build
+//                               attempt: the first gets a comment, the second
+//                               hands the issue back with sandcastle:needs-human
+//                               (lib/handback.mts). A failed scribe or reviewer
+//                               still publishes, with a note in the PR.
 //                               Otherwise the host scans the commits for the
 //                               sandbox's secrets, pushes the commit the gate
 //                               passed on from the main checkout with git hooks
@@ -77,7 +82,7 @@ import { gateIssues } from "./lib/gate.mts";
 import { cacheHostLogin, ensureLabels, listSandcastleIssues, openPullRequests } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
-import { planRound } from "./lib/plan.mts";
+import { planRound, resolveRoles } from "./lib/plan.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
@@ -171,18 +176,28 @@ try {
     }
 
     // planRound keeps only ids from the ready list, so the lookup can't miss.
+    // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
+    // planner's raw roles field, resolved to a safe list by resolveRoles
+    // (lib/plan.mts), which falls back to every optional role when it's
+    // missing or invalid.
     const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
-    const picks = planned.map((issue) => readyById.get(issue.id)!);
+    const picks = planned.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
 
     // -----------------------------------------------------------------------
     // Phase 1b: Critique
     // -----------------------------------------------------------------------
+    // critiqueRound only filters the picks, so its SandcastleIssue[] return
+    // type is narrower than what it's given; put each kept pick's roles back
+    // by issue number rather than widen the critique's own types for a field
+    // it never reads.
+    const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
     const pickedNumbers = new Set(picks.map((issue) => issue.number));
-    const issues = await critiqueRound({
+    const critiqued = await critiqueRound({
       picks,
       inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
       unpicked: ready.filter((issue) => !pickedNumbers.has(issue.number)),
     });
+    const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
 
     if (issues.length === 0) {
       // Each deferral added a "blocked by" link, so the next round's gate
@@ -203,7 +218,8 @@ try {
       `Planning complete. ${work.length} issue(s) to work in parallel:`,
     );
     for (const { issue, branch } of work) {
-      console.log(`  #${issue.number}: ${issue.title} → ${branch}`);
+      const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
+      console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
     }
 
     const settled = await Promise.allSettled(
