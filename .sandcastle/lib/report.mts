@@ -107,7 +107,9 @@ export class HandBackReport {
 export const handBackReport = new HandBackReport();
 
 // An open Sandcastle PR the latest sweep found with unresolved review threads
-// a person opened (first comment not by a bot).
+// opened by someone other than the repository owner or a bot (the same test
+// lib/follow-up-pass.mts#threadsForRole uses for "leftForHuman"): an owner's
+// own thread is the follow-up role's to answer, not a person's to wait on.
 export type WaitingPrEntry = { pr: number; threads: number };
 
 // Every PR the latest follow-up sweep found waiting on a person, replaced
@@ -294,9 +296,12 @@ const CELL_LIMIT = 300;
 // agent (intake's needs-info reason), so nothing in it may break the table or
 // inject HTML into the job summary.
 function cell(text: string): string {
-  const flat = text.replace(/\r?\n/g, " ");
+  const flat = text.replace(/\r\n?|\n/g, " ");
   const cut = flat.length > CELL_LIMIT ? `${flat.slice(0, CELL_LIMIT - 1)}…` : flat;
-  return cut.replace(/\|/g, "\\|").replace(/</g, "&lt;");
+  // Backslashes first: CommonMark reads "\\|" as an escaped backslash followed
+  // by a real "|", so a reason already containing "\|" would otherwise still
+  // split the row once its own backslash was doubled.
+  return cut.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/</g, "&lt;");
 }
 
 // handbacks.json: an array of `{ kind, number, label, reason, url }`, one per

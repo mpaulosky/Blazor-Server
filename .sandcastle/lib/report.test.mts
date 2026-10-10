@@ -244,6 +244,33 @@ describe("renderSummary", () => {
     assert.ok(summary.includes("…"));
     assert.ok(!summary.includes("x".repeat(310)));
   });
+
+  it("doubles a backslash before escaping a pipe, so the backslash can't turn the escape into a real delimiter", () => {
+    const detail = `a${"\\"}${"|"}b`; // one backslash, then a pipe: a\|b
+    const summary = renderSummary({
+      ...fullInput,
+      outcomes: [{ kind: "issue", number: 1, outcome: "published", detail }],
+      handBacks: [],
+      waitingPrs: [],
+      humanThreads: [],
+    });
+
+    // The backslash doubled, then the pipe escaped: three backslashes, then the pipe.
+    assert.ok(summary.includes(`a${"\\".repeat(3)}|b`));
+  });
+
+  it("flattens a lone carriage return, not only a CRLF or LF pair", () => {
+    const summary = renderSummary({
+      ...fullInput,
+      outcomes: [{ kind: "issue", number: 1, outcome: "published", detail: "before\rafter" }],
+      handBacks: [],
+      waitingPrs: [],
+      humanThreads: [],
+    });
+
+    assert.ok(summary.includes("before after"));
+    assert.ok(!summary.includes("before\rafter"));
+  });
 });
 
 // AC: "handbacks.json: an array of { kind, number, label, reason, url },
