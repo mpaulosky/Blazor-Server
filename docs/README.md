@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.116](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.116) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-251-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.115](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.115) | 2026-10-10 | feat(sandcastle): Follow-up passes resolve review threads and merge conflicts | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-243-feat-sandcastle-follow-up-passes-resolve-review-threads-and-merge-conflicts.md) |
 | [v0.0.114](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.114) | 2026-10-10 | chore(sandcastle): Install Chromium's system libraries in the sandbox image | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-248-chore-sandcastle-install-chromium-s-system-libraries-in-the-sandbox-image.md) |
 | [v0.0.113](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.113) | 2026-10-10 | feat(sandcastle): Stop unattended runs cleanly when there's no work, time or usage left | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-241-feat-sandcastle-stop-unattended-runs-cleanly-when-there-s-no-work-time-or-usage-left.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.109](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.109) | 2026-10-10 | fix(sandcastle): Judge every intake batch each round, and keep intake's text from hiding or cross-referencing | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-229-fix-sandcastle-judge-every-intake-batch-each-round-and-keep-intake-s-text-from-hiding-or-cross-referencing.md) |
 | [v0.0.108](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.108) | 2026-10-10 | fix(sandcastle): Close the design note's edge cases from #228's review | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-232-fix-sandcastle-close-the-design-note-s-edge-cases-from-228-s-review.md) |
 | [v0.0.107](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.107) | 2026-10-10 | feat(sandcastle): Add architect, UI developer and scribe roles picked by the planner | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-228-feat-sandcastle-add-architect-ui-developer-and-scribe-roles-picked-by-the-planner.md) |
-| [v0.0.106](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.106) | 2026-10-10 | fix(sandcastle): Keep one bad intake verdict from costing the batch, and post intake's text as plain text | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-225-fix-sandcastle-keep-one-bad-intake-verdict-from-costing-the-batch-and-post-intake-s-text-as-plain-text.md) |
 
 <!-- RELEASES_END -->
 
