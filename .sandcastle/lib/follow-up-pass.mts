@@ -50,6 +50,7 @@ import {
   resolveReviewThread,
   reviewThreadsOf,
   signedInHostLogin,
+  type HeadCheck,
   type ReviewThread,
   type SandcastleIssue,
 } from "./github.mts";
@@ -392,9 +393,11 @@ function endOf(text: string, limit: number): string {
 // Re-runs the failed jobs of `names` (planRedCi's `rerun`) once as flaky,
 // and returns the ones still red: red after a re-run that already happened,
 // or left out of the host's answer, since a check missing from it isn't
-// known to have passed.
-function stillRedAfterRerun(pr: number, names: readonly string[], host: PassHost): string[] {
-  const after = new Map(host.rerunFailedChecks(pr, names).map((check) => [check.name, check]));
+// known to have passed. `expectedHead` is the commit the pass gated
+// (target.headRefOid): the host refuses when the PR's head has moved past it,
+// rather than re-run jobs for a commit the pass never judged (#79).
+function stillRedAfterRerun(pr: number, names: readonly string[], host: PassHost, expectedHead: string): string[] {
+  const after = new Map(host.rerunFailedChecks(pr, names, expectedHead).map((check) => [check.name, check]));
   return names.filter((name) => {
     const check = after.get(name);
     return check === undefined || (check.completed && !check.green);
@@ -403,10 +406,11 @@ function stillRedAfterRerun(pr: number, names: readonly string[], host: PassHost
 
 // The failed-job logs of `names`, which stayed red after their re-run, for
 // the hand-back comment to quote. Undefined when they can't be read: the
-// hand-back goes ahead without them.
-function rerunLog(pr: number, names: readonly string[], host: PassHost, log: (line: string) => void): string | undefined {
+// hand-back goes ahead without them. `expectedHead` is threaded through to
+// the host the same way stillRedAfterRerun's is.
+function rerunLog(pr: number, names: readonly string[], host: PassHost, log: (line: string) => void, expectedHead: string): string | undefined {
   try {
-    return host.failedCheckLog(pr, names);
+    return host.failedCheckLog(pr, names, expectedHead);
   } catch (error) {
     log(`reading the failed-job logs of ${names.join(", ")} failed, so the hand-back doesn't quote them: ${error}`);
     return undefined;
@@ -488,19 +492,26 @@ export type PassHost = {
   remoteHead(branch: string): string | undefined;
   // A fresh read of the PR's current checks on its head, since the ones the
   // sweep read (lib/follow-up.mts#SweepPullRequest.checks) may be stale by
-  // the time a pass claims the PR (lib/github.mts#headChecksOf).
-  checks(pr: number): CheckState[];
+  // the time a pass claims the PR (lib/github.mts#headChecksOf). The head the
+  // checks were read from travels with them, so a caller can tell a race from
+  // a settled read (#79) rather than decide red CI from a commit it never
+  // gated.
+  checks(pr: number): { headRefOid: string; checks: HeadCheck[] };
   // `gh run rerun --failed` for the run(s) backing each of `checkNames`
   // (planRedCi's `rerun`), then the state of exactly those checks: running
   // for a run it re-ran, or as they stand for a run already re-run once,
   // where a red one means the re-run failed too. It doesn't wait for a re-run
   // to finish, since that would hold the issue's building label, and the
   // whole host, for as long as CI takes (lib/github.mts#rerunFailedChecksOnce).
-  rerunFailedChecks(pr: number, checkNames: readonly string[]): CheckState[];
+  // `expectedHead` is the commit the pass gated: the host refuses when the
+  // PR's head has moved past it (#79), rather than re-run a commit the pass
+  // never judged.
+  rerunFailedChecks(pr: number, checkNames: readonly string[], expectedHead: string): CheckState[];
   // `gh run view --log-failed` for the run(s) backing each of `checkNames`
   // (planRedCi's `forward`), concatenated: the text the follow-up role gets
   // to fix what the gate doesn't cover (lib/github.mts#failedCheckLogs).
-  failedCheckLog(pr: number, checkNames: readonly string[]): string;
+  // `expectedHead` is checked the same way rerunFailedChecks' is.
+  failedCheckLog(pr: number, checkNames: readonly string[], expectedHead: string): string;
   // lib/github.mts#replyToReviewThread.
   replyToThread(threadId: string, body: string): void;
   // lib/github.mts#resolveReviewThread.
@@ -541,9 +552,9 @@ export const livePassHost: PassHost = {
       (ms) => sleep(ms),
     ),
   remoteHead: (branch) => originRefs.remoteHead(branch),
-  checks: (pr) => headChecksOf(pr).checks,
-  rerunFailedChecks: (pr, checkNames) => rerunFailedChecksOnce(pr, checkNames),
-  failedCheckLog: (pr, checkNames) => failedCheckLogs(pr, checkNames),
+  checks: (pr) => headChecksOf(pr),
+  rerunFailedChecks: (pr, checkNames, expectedHead) => rerunFailedChecksOnce(pr, checkNames, expectedHead),
+  failedCheckLog: (pr, checkNames, expectedHead) => failedCheckLogs(pr, checkNames, expectedHead),
   replyToThread: (threadId, body) => replyToReviewThread(threadId, body),
   resolveThread: (threadId) => resolveReviewThread(threadId),
   commentOnPullRequest: (pr, body) => commentOnPullRequest(pr, body),
@@ -773,9 +784,17 @@ function planPass(
   // Read fresh, since a re-run may have started or finished since the sweep.
   // While any check is still running the PR isn't settled, so its red checks
   // wait for a later sweep rather than being re-run or fixed from half a
-  // result.
-  const checks = host.checks(target.number);
-  const redChecks = checks.some((check) => !check.completed) ? [] : checks.filter((check) => !check.green);
+  // result. A red check with no Actions run behind it (such as code
+  // scanning's own "CodeQL" result, lib/github.mts's HeadCheck) is left out
+  // of redChecks entirely: no pass can re-run, forward or gate-fix a failure
+  // with nothing behind it to act on, and sending it to the follow-up role
+  // anyway would only start a run with no log to fix from, over and over
+  // every sweep (#79). A thread about the same alert, if the owner or a bot
+  // opens one, still reaches the role as a bot or owner thread.
+  const checksRead = host.checks(target.number);
+  if (checksRead.headRefOid !== target.headRefOid) return skip("its checks were read from a commit other than its head");
+  const checks = checksRead.checks;
+  const redChecks = checks.some((check) => !check.completed) ? [] : checks.filter((check) => !check.green && check.runId !== undefined);
   if (!needsMerge && redChecks.length === 0 && !sorted.forRole.some((thread) => thread.from === "bot")) {
     return skip("there's nothing a follow-up pass handles yet");
   }
@@ -855,7 +874,17 @@ async function passOnMarkedIssue(
       redCi = planRedCi(headGate.passed, redChecks);
       log(`has ${redChecks.length} red check(s), and \`scripts/gate.sh\` ${headGate.passed ? "passes" : "fails"} on its head`);
     }
-    const ciLog = redCi.forward.length > 0 ? endOf(host.failedCheckLog(target.number, redCi.forward), CI_LOG_LIMIT) : undefined;
+    let ciLog: string | undefined;
+    if (redCi.forward.length > 0) {
+      try {
+        ciLog = endOf(host.failedCheckLog(target.number, redCi.forward, target.headRefOid), CI_LOG_LIMIT);
+      } catch (error) {
+        // Nothing has run or pushed yet, so there's nothing of this pass's to
+        // lose by giving up here (#79): a GitHub API error, a rate limit, or
+        // the PR's head having moved since redChecks was read.
+        return stop(`reading the failed-job log of ${checkList(redCi.forward)} failed`, String(error));
+      }
+    }
 
     // Merged, never rebased: the push that follows is a plain one, so the
     // PR's history stays as reviewers saw it.
@@ -982,28 +1011,38 @@ async function passOnMarkedIssue(
       }
     }
 
+    // Replied to and resolved before the red-CI re-run is decided, so a
+    // give-up below for a check still red after its re-run never throws the
+    // role's verdicts away unanswered (#79): the push, if any, has already
+    // landed, so there's nothing left to lose by answering threads first.
+    const matched = threadActions(verdicts, forRole);
+    const { kept: actions, unverified } = await fixesInPush(sandbox, matched.actions, { gated, head: target.headRefOid, base, hostMerge });
+    if (unverified.length > 0) log(`left ${unverified.length} "fixed" verdict(s) unanswered: their commit isn't one this pass added`);
+    const { ignored } = matched;
+    const failedWrites = answerThreads(actions, host, log);
+
     // A push starts CI afresh on the new head, which is as good as a re-run,
     // so only a head the pass left as it was gets its flaky checks re-run.
     let rerun: string[] = [];
     if (redCi.rerun.length > 0 && pushed !== undefined) {
       log(`didn't re-run ${redCi.rerun.join(", ")}: the push starts CI again on the new head`);
     } else if (redCi.rerun.length > 0) {
-      const stillRed = stillRedAfterRerun(target.number, redCi.rerun, host);
+      let stillRed: string[];
+      try {
+        stillRed = stillRedAfterRerun(target.number, redCi.rerun, host, target.headRefOid);
+      } catch (error) {
+        return stop(`re-running the failed jobs of ${checkList(redCi.rerun)} failed`, String(error));
+      }
       if (stillRed.length > 0) {
         return stop(
           `\`scripts/gate.sh\` passes on the head, but ${checkList(stillRed)} stayed red after its one re-run as flaky`,
-          rerunLog(target.number, stillRed, host, log),
+          rerunLog(target.number, stillRed, host, log, target.headRefOid),
         );
       }
       rerun = redCi.rerun;
       log(`re-ran the failed jobs of ${rerun.join(", ")} once as flaky`);
     }
 
-    const matched = threadActions(verdicts, forRole);
-    const { kept: actions, unverified } = await fixesInPush(sandbox, matched.actions, { gated, head: target.headRefOid, base, hostMerge });
-    if (unverified.length > 0) log(`left ${unverified.length} "fixed" verdict(s) unanswered: their commit isn't one this pass added`);
-    const { ignored } = matched;
-    const failedWrites = answerThreads(actions, host, log);
     try {
       host.commentOnPullRequest(
         target.number,

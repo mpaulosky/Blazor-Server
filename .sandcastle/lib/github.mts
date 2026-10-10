@@ -651,14 +651,22 @@ export function headChecksOf(
   };
 }
 
-// The head checks named in `names`, each with the Actions run behind it.
+// The head checks named in `names`, each with the Actions run behind it. Reads
+// the checks afresh and refuses when the head has moved past `expectedHead`
+// (the commit a follow-up pass gated), rather than re-run or forward a check
+// read from a commit the pass never judged (#79).
 function namedRuns(
   number: number,
   names: readonly string[],
+  expectedHead: string,
   run: typeof execFileSync,
   repo: string,
 ): { checks: HeadCheck[]; runIds: number[] } {
-  const checks = headChecksOf(number, run, repo).checks.filter((check) => names.includes(check.name));
+  const { headRefOid, checks: allChecks } = headChecksOf(number, run, repo);
+  if (headRefOid !== expectedHead) {
+    throw new Error(`Pull request #${number}'s head moved to ${headRefOid}, so its checks aren't the ones gated at ${expectedHead}`);
+  }
+  const checks = allChecks.filter((check) => names.includes(check.name));
   const runIds = [...new Set(checks.flatMap((check) => (check.runId === undefined ? [] : [check.runId])))];
   return { checks, runIds };
 }
@@ -676,14 +684,16 @@ function stateOf({ runId: _runId, ...state }: HeadCheck): CheckState {
 // from the run itself, not remembered: a run on a later attempt has been
 // re-run already, by a pass or a person, and its checks are reported as they
 // stand, so one still red there hands the PR back. Throws for a named check
-// with no Actions run, which can't be re-run.
+// with no Actions run, which can't be re-run, or when the head has moved past
+// `expectedHead` since the pass gated it (#79).
 export function rerunFailedChecksOnce(
   number: number,
   names: readonly string[],
+  expectedHead: string,
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
 ): CheckState[] {
-  const { checks, runIds } = namedRuns(number, names, run, repo);
+  const { checks, runIds } = namedRuns(number, names, expectedHead, run, repo);
   const runless = checks.filter((check) => check.runId === undefined).map((check) => check.name);
   if (runless.length > 0) throw new Error(`No GitHub Actions run is behind ${runless.join(", ")}, so it can't be re-run`);
   const states: CheckState[] = [];
@@ -710,13 +720,16 @@ const FAILED_LOG_BUFFER = 256 * 1024 * 1024;
 // for each Actions run behind the checks in `names`, read once per run under
 // a header naming its checks. A check with no Actions run gets a line saying
 // so rather than failing the pass: the follow-up role can still fix the rest.
+// Throws when the head has moved past `expectedHead` since the pass gated it
+// (#79), rather than quote a log for a commit the pass never judged.
 export function failedCheckLogs(
   number: number,
   names: readonly string[],
+  expectedHead: string,
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
 ): string {
-  const { checks, runIds } = namedRuns(number, names, run, repo);
+  const { checks, runIds } = namedRuns(number, names, expectedHead, run, repo);
   const sections = runIds.map((runId) => {
     const ofRun = checks.filter((check) => check.runId === runId).map((check) => check.name);
     const log = ghWithStderr(run, ["run", "view", String(runId), "--log-failed", "--repo", repo], undefined, FAILED_LOG_BUFFER);

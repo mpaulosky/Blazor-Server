@@ -1254,7 +1254,7 @@ describe("head checks and their runs", () => {
     it("re-runs the failed jobs of a run not re-run before, once per run, and reports its checks as running", () => {
       const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21), checkRun("Tests: B", "FAILURE", 21)]);
 
-      const states = rerunFailedChecksOnce(7, ["Tests: A", "Tests: B"], run, "o/r");
+      const states = rerunFailedChecksOnce(7, ["Tests: A", "Tests: B"], HEAD_OID, run, "o/r");
 
       assert.deepEqual(
         calls.filter((args) => args[0] === "run"),
@@ -1272,7 +1272,7 @@ describe("head checks and their runs", () => {
     it("doesn't re-run a run already on a later attempt: its checks are reported as they stand", () => {
       const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21)], { 21: 2 });
 
-      const states = rerunFailedChecksOnce(7, ["Tests: A"], run, "o/r");
+      const states = rerunFailedChecksOnce(7, ["Tests: A"], HEAD_OID, run, "o/r");
 
       assert.ok(!calls.some((args) => args[0] === "run" && args[1] === "rerun"), "nothing was re-run");
       assert.deepEqual(states, [{ name: "Tests: A", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z" }]);
@@ -1281,7 +1281,17 @@ describe("head checks and their runs", () => {
     it("throws for a check with no Actions run to re-run", () => {
       const { run } = gh([checkRun("Tests: A", "FAILURE", null)]);
 
-      assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], run, "o/r"), /Tests: A/);
+      assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], HEAD_OID, run, "o/r"), /Tests: A/);
+    });
+
+    // #79: a pass must never re-run jobs it read for a commit other than the
+    // one it gated, since a push between the read and the re-run would re-run
+    // the wrong commit's failures.
+    it("throws, without re-running anything, when the head has moved past the gated commit", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21)]);
+
+      assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], "b".repeat(40), run, "o/r"), /head moved/);
+      assert.ok(!calls.some((args) => args[0] === "run"), "nothing was re-run");
     });
   });
 
@@ -1293,7 +1303,7 @@ describe("head checks and their runs", () => {
         { 31: "##[error] CS8600" },
       );
 
-      const log = failedCheckLogs(7, ["Analyze (csharp)", "Analyze (actions)"], run, "o/r");
+      const log = failedCheckLogs(7, ["Analyze (csharp)", "Analyze (actions)"], HEAD_OID, run, "o/r");
 
       assert.deepEqual(
         calls.filter((args) => args[0] === "run"),
@@ -1306,7 +1316,13 @@ describe("head checks and their runs", () => {
     it("says a check has no Actions log rather than failing the pass", () => {
       const { run } = gh([checkRun("CodeQL", "FAILURE", null)]);
 
-      assert.match(failedCheckLogs(7, ["CodeQL"], run, "o/r"), /CodeQL[\s\S]*no GitHub Actions/);
+      assert.match(failedCheckLogs(7, ["CodeQL"], HEAD_OID, run, "o/r"), /CodeQL[\s\S]*no GitHub Actions/);
+    });
+
+    it("throws rather than quote a log read for a commit other than the one gated", () => {
+      const { run } = gh([checkRun("Analyze (csharp)", "FAILURE", 31)]);
+
+      assert.throws(() => failedCheckLogs(7, ["Analyze (csharp)"], "b".repeat(40), run, "o/r"), /head moved/);
     });
   });
 });

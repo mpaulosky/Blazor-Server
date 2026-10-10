@@ -22,7 +22,7 @@ import {
   type ThreadAction,
   type ThreadVerdict,
 } from "./follow-up-pass.mts";
-import type { ReviewThread, SandcastleIssue } from "./github.mts";
+import type { HeadCheck, ReviewThread, SandcastleIssue } from "./github.mts";
 import type { IsOwner } from "./queue.mts";
 import type { HumanThreadEntry } from "./report.mts";
 import { RunLimits } from "./limits.mts";
@@ -51,10 +51,18 @@ function passTarget(overrides: Partial<PassTarget> = {}): PassTarget {
   };
 }
 
-// A red check (completed, not green); tests override just the fields their
-// scenario needs.
-function redCheck(overrides: Partial<CheckState> = {}): CheckState {
-  return { name: "Build Solution", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z", ...overrides };
+// A red check (completed, not green) with an Actions run behind it; tests
+// override just the fields their scenario needs. A check's runId is what a
+// pass can re-run or forward (see runlessCheck for one with none, #79).
+function redCheck(overrides: Partial<HeadCheck> = {}): HeadCheck {
+  return { name: "Build Solution", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z", runId: 1001, ...overrides };
+}
+
+// A red check with no Actions run behind it, such as code scanning's own
+// "CodeQL" result (lib/github.mts's HeadCheck): nothing a pass can re-run or
+// read a failed-job log from (#79).
+function runlessCheck(overrides: Partial<HeadCheck> = {}): HeadCheck {
+  return redCheck({ name: "CodeQL", runId: undefined, ...overrides });
 }
 
 function botThread(overrides: Partial<ReviewThread> = {}): ReviewThread {
@@ -626,6 +634,11 @@ function sandboxFake(
     rewritesHistory?: boolean;
     // Something commits while scripts/gate.sh runs.
     gateCommits?: boolean;
+    // These roles leave the worktree's head exactly as they found it: a
+    // follow-up run that declines every thread and fixes nothing from a
+    // forwarded log commits nothing (#79), unlike every other test's role,
+    // which always commits to simulate a change.
+    roleNoCommit?: string[];
   } = {},
 ) {
   const execCalls: string[] = [];
@@ -692,10 +705,12 @@ function sandboxFake(
       runs.push(opts);
       steps.push(role);
       if (options.roleFailing?.includes(role)) throw options.roleFailWith?.[role] ?? new Error(`${role} failed`);
-      commit(role === "follow-up" ? ROLE_COMMIT : nextHead(), {
-        from: options.rewritesHistory ? new Set() : undefined,
-        withMain: mergeConflicted && !options.abandonsMerge,
-      });
+      if (!options.roleNoCommit?.includes(role)) {
+        commit(role === "follow-up" ? ROLE_COMMIT : nextHead(), {
+          from: options.rewritesHistory ? new Set() : undefined,
+          withMain: mergeConflicted && !options.abandonsMerge,
+        });
+      }
       mergeConflicted = false;
       return {
         iterations: [],
@@ -730,7 +745,10 @@ function passHostFake(
     remoteHead?: string;
     // A fresh read of the PR's current checks (host.checks); defaults to no
     // red checks.
-    checks?: CheckState[];
+    checks?: HeadCheck[];
+    // The head host.checks says its checks were read from; defaults to the
+    // PR's head, so a test must say when it's read a race (#79).
+    checksHeadRefOid?: string;
     // The state of the re-run checks host.rerunFailedChecks reports once it
     // settles; defaults to still red, so a test must say when the re-run
     // fixed it.
@@ -751,8 +769,8 @@ function passHostFake(
     handBack: [] as { pr: number; reason: string; body: string }[],
     recordHumanThread: [] as HumanThreadEntry[],
     checks: [] as number[],
-    rerunFailedChecks: [] as { pr: number; checkNames: string[] }[],
-    failedCheckLog: [] as { pr: number; checkNames: string[] }[],
+    rerunFailedChecks: [] as { pr: number; checkNames: string[]; expectedHead: string }[],
+    failedCheckLog: [] as { pr: number; checkNames: string[]; expectedHead: string }[],
     log: [] as string[],
   };
   const sandbox = options.sandbox ?? sandboxFake();
@@ -784,14 +802,14 @@ function passHostFake(
     remoteHead: () => options.remoteHead ?? "f".repeat(40),
     checks: (pr) => {
       calls.checks.push(pr);
-      return options.checks ?? [];
+      return { headRefOid: options.checksHeadRefOid ?? options.headRefOid ?? HEAD, checks: options.checks ?? [] };
     },
-    rerunFailedChecks: (pr, checkNames) => {
-      calls.rerunFailedChecks.push({ pr, checkNames: [...checkNames] });
+    rerunFailedChecks: (pr, checkNames, expectedHead) => {
+      calls.rerunFailedChecks.push({ pr, checkNames: [...checkNames], expectedHead });
       return options.rerunResult ?? [...checkNames].map((name) => redCheck({ name }));
     },
-    failedCheckLog: (pr, checkNames) => {
-      calls.failedCheckLog.push({ pr, checkNames: [...checkNames] });
+    failedCheckLog: (pr, checkNames, expectedHead) => {
+      calls.failedCheckLog.push({ pr, checkNames: [...checkNames], expectedHead });
       return options.failedCheckLog ?? "";
     },
     replyToThread: (threadId, body) => void calls.replyToThread.push({ threadId, body }),
@@ -1465,7 +1483,7 @@ describe("runPass's red CI handling", () => {
     const outcome = await runPass(passTarget({ reasons: ["check Tests: Domain.Tests.Unit is red"] }), issue, BASE, passHost);
 
     assert.deepEqual(outcome, { kind: "passed", pushed: undefined });
-    assert.deepEqual(calls.rerunFailedChecks, [{ pr: PR_NUMBER, checkNames: ["Tests: Domain.Tests.Unit"] }]);
+    assert.deepEqual(calls.rerunFailedChecks, [{ pr: PR_NUMBER, checkNames: ["Tests: Domain.Tests.Unit"], expectedHead: HEAD }]);
     assert.equal(sandbox.runs.length, 0, "no role ran: nothing in the branch needed changing");
     assert.deepEqual(calls.push, []);
   });
@@ -1505,16 +1523,48 @@ describe("runPass's red CI handling", () => {
 
     const outcome = await runPass(passTarget({ reasons: ["check Analyze (csharp) is red"] }), issue, BASE, passHost);
 
-    assert.deepEqual(calls.failedCheckLog, [{ pr: PR_NUMBER, checkNames: ["Analyze (csharp)"] }]);
+    assert.deepEqual(calls.failedCheckLog, [{ pr: PR_NUMBER, checkNames: ["Analyze (csharp)"], expectedHead: HEAD }]);
     const roleRun = sandbox.runs.find((run) => run.name === "follow-up");
     assert.ok(roleRun !== undefined, "the follow-up role ran to fix the CodeQL failure");
     assert.match(String(roleRun?.promptArgs?.CODEQL_LOG ?? ""), /CS8600/);
     assert.equal(outcome.kind, "passed");
     assert.equal(calls.push.length, 1);
   });
+
+  // #79's follow-up review: a red check with no Actions run behind it (code
+  // scanning's own "CodeQL" result, not the "Analyze" job) has no log a pass
+  // could forward and nothing a pass could re-run, so sending it to the
+  // follow-up role would only start a run with nothing to fix from, every
+  // sweep, until a new commit. It's left out of redChecks entirely instead.
+  it("doesn't start a pass for a red check with no Actions run behind it", async () => {
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: true, checks: [runlessCheck()] });
+
+    const outcome = await runPass(passTarget({ reasons: ["check CodeQL is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.createSandbox, []);
+    assert.deepEqual(calls.failedCheckLog, []);
+  });
 });
 
 describe("runPass's red CI decisions", () => {
+  // #79's follow-up review: host.checks's own read can race a push that
+  // lands between the sweep and this pass, which would otherwise decide
+  // redChecks from a commit other than the one it's about to gate and push.
+  it("skips the pass when its checks were read from a commit other than its head", async () => {
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: true,
+      checks: [redCheck({ name: "Build Solution" })],
+      checksHeadRefOid: "f".repeat(40),
+    });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Build Solution is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.createSandbox, []);
+  });
+
   it("leaves a PR alone while any of its checks is still running, red ones included", async () => {
     const { passHost, calls } = passHostFake({
       threads: [],
@@ -1580,6 +1630,68 @@ describe("runPass's red CI decisions", () => {
     const log = String(sandbox.runs.find((run) => run.name === "follow-up")?.promptArgs?.CODEQL_LOG ?? "");
     assert.ok(log.length < 100_000, `the log reached the role at ${log.length} characters`);
     assert.match(log, /the real failure$/);
+  });
+
+  // #79's follow-up review: reading the CodeQL log happens before the role
+  // or anything else runs, so a stop here loses nothing of this pass's own —
+  // but an uncaught throw would otherwise crash the pass instead of handing
+  // the PR back with a reason.
+  it("gives up when reading a forwarded check's failed-job log fails, rather than crashing", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0] });
+    const { passHost, calls } = passHostFake({ threads: [], sandbox, checks: [redCheck({ name: "Analyze (csharp)" })] });
+    passHost.failedCheckLog = () => {
+      throw new Error("gh api rate limited");
+    };
+
+    const outcome = await runPass(passTarget({ reasons: ["check Analyze (csharp) is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /Analyze \(csharp\)/);
+    assert.equal(sandbox.runs.length, 0, "the role never ran: there was no log to give it");
+  });
+
+  // #79's follow-up review: a give-up for a re-run check still red used to
+  // leave before the role's thread verdicts were replied to and resolved,
+  // throwing away work the role already did. The reply and resolution must
+  // land even though the pass ends in a hand-back.
+  it("answers the role's bot thread before giving up when a re-run check stays red", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0, 0], followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "declined", reason: "Out of scope." }]), roleNoCommit: ["follow-up"] });
+    const { passHost, calls } = passHostFake({
+      threads: [botThread()],
+      sandbox,
+      checks: [redCheck({ name: "Tests: Domain.Tests.Unit" })],
+      rerunResult: [redCheck({ name: "Tests: Domain.Tests.Unit" })],
+    });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.deepEqual(calls.push, []);
+    assert.equal(calls.replyToThread.length, 1);
+    assert.equal(calls.replyToThread[0]!.threadId, "RT_bot");
+    assert.deepEqual(calls.resolveThread, ["RT_bot"]);
+  });
+
+  // #79's follow-up review: an error re-running the checks (the head moved,
+  // or a `gh` failure) must give up with a reason rather than crash the pass
+  // outright, and must still answer the role's threads first.
+  it("gives up, after answering threads, when re-running a still-red check fails", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0, 0], followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "declined", reason: "Out of scope." }]), roleNoCommit: ["follow-up"] });
+    const { passHost, calls } = passHostFake({
+      threads: [botThread()],
+      sandbox,
+      checks: [redCheck({ name: "Tests: Domain.Tests.Unit" })],
+    });
+    passHost.rerunFailedChecks = () => {
+      throw new Error("gh run rerun failed");
+    };
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /Tests: Domain\.Tests\.Unit/);
+    assert.equal(calls.replyToThread.length, 1);
+    assert.deepEqual(calls.resolveThread, ["RT_bot"]);
   });
 });
 
