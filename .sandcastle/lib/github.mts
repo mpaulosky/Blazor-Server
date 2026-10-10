@@ -19,10 +19,6 @@ export function repoName(): string {
   return repo;
 }
 
-export function repoOwner(): string {
-  return repoName().split("/")[0]!;
-}
-
 export type GhIssue = {
   number: number;
   title: string;
@@ -43,13 +39,50 @@ export type SandcastleIssue = Omit<GhIssue, "comments"> & {
 // is what actually decides whose guidance the agents trust. A permission
 // lookup that fails drops that author's comments, so an error never lets a
 // stranger's text through.
+// `canPush` caches each author's answer, so a caller that shares one map
+// across issues looks each author up once.
 export function ownerApproved(
   issue: GhIssue,
   repo: string = repoName(),
   run: typeof execFileSync = execFileSync,
+  canPush: Map<string, boolean> = new Map(),
 ): SandcastleIssue {
-  throw new Error("Not implemented");
+  const trusted = (author: string): boolean => {
+    let allowed = canPush.get(author);
+    if (allowed === undefined) {
+      allowed = hasWriteAccess(author, repo, run);
+      canPush.set(author, allowed);
+    }
+    return allowed;
+  };
+  return {
+    number: issue.number,
+    title: issue.title,
+    body: issue.body,
+    labels: issue.labels,
+    comments: issue.comments.filter((comment) => trusted(comment.author)).map((comment) => comment.body),
+  };
 }
+
+const PUSH_PERMISSIONS: ReadonlySet<unknown> = new Set(["admin", "maintain", "write"]);
+
+// Whether `login` can push to `repo`. GitHub reports maintain as "write" in
+// `.permission` and names it only in `.role_name`, so either field counts. A
+// lookup that fails, or an answer of an unexpected shape, counts as no access.
+function hasWriteAccess(login: string, repo: string, run: typeof execFileSync): boolean {
+  try {
+    const answer = JSON.parse(
+      ghWithStderr(run, ["api", `repos/${repo}/collaborators/${encodeURIComponent(login)}/permission`]),
+    ) as { permission?: unknown; role_name?: unknown };
+    return PUSH_PERMISSIONS.has(answer.permission) || PUSH_PERMISSIONS.has(answer.role_name);
+  } catch {
+    return false;
+  }
+}
+
+// Each comment author's answer from ownerApproved, kept for the whole run so
+// no author is looked up twice, however many issues or rounds they comment on.
+const commenterCanPush = new Map<string, boolean>();
 
 // The open Sandcastle issues, with every comment dropped but those from
 // authors with write access.
@@ -61,7 +94,8 @@ export function listSandcastleIssues(): SandcastleIssue[] {
       "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}]",
     ),
   ) as GhIssue[];
-  return issues.map((issue) => ownerApproved(issue));
+  const repo = repoName();
+  return issues.map((issue) => ownerApproved(issue, repo, execFileSync, commenterCanPush));
 }
 
 export type OpenPullRequest = { number: number; headRefName: string };
