@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.96">v0.0.96</a></td>
+                <td>2026-10-10</td>
+                <td>build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-201-build-sandcastle-install-actionlint-shellcheck-and-zizmor-in-the-sandbox-image.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.95">v0.0.95</a></td>
                 <td>2026-10-10</td>
                 <td>docs(review): Check that Sandcastle role prompts can always finish</td>
@@ -282,12 +288,6 @@
                 <td>fix(sandcastle): Name bug branches fix/ rather than hotfix/</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.86">v0.0.86</a></td>
-                <td>2026-10-08</td>
-                <td>fix(sandcastle): Diff the reviewer&#x27;s branch against origin/main</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-182-fix-sandcastle-diff-the-reviewer-s-branch-against-origin-main.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.96</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-201-build-sandcastle-install-actionlint-shellcheck-and-zizmor-in-the-sandbox-image.md">build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image</a></h3>
+              <p class="post-excerpt">scripts/gate.sh runs actionlint, zizmor and shellcheck from PATH when they&#x27;re installed, and otherwise through Docker or uvx. The Sandcastle sandbox has neither, so in the sandbox the gate skipped…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/201">PR #201</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.95</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md">fix(sandcastle): Name bug branches fix/ rather than hotfix/</a></h3>
               <p class="post-excerpt">Sandcastle named every bug issue&#x27;s branch hotfix/{n}-{slug}. The branch standard in docs/PROCESS.md uses fix/{issue}-{slug} for a bug fix and keeps hotfix/ for an urgent fix, and no label in this…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/183">PR #183</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-08">8 Oct 2026</time><span class="post-tag">v0.0.86</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-182-fix-sandcastle-diff-the-reviewer-s-branch-against-origin-main.md">fix(sandcastle): Diff the reviewer&#x27;s branch against origin/main</a></h3>
-              <p class="post-excerpt">Sandcastle&#x27;s reviewer always saw an empty diff. .sandcastle/review-prompt.md ran git diff {{TARGET_BRANCH}}...{{BRANCH}} and git log {{TARGET_BRANCH}}..{{BRANCH}}, but TARGET_BRANCH is a Sandcastle…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/182">PR #182</a></p>
             </article>
           </li>
         </ul>
