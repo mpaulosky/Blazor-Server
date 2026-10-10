@@ -377,7 +377,7 @@ describe("publish", () => {
   const nonFastForward = "git push --quiet origin abc:refs/heads/x failed:\n ! [rejected] abc -> x (non-fast-forward)";
 
   // A push stub that throws `error` on its first `failures` calls, then
-  // succeeds. Records every call and every backoff the caller waited through.
+  // succeeds, and counts its calls.
   function flaky(failures: number, error: string) {
     let calls = 0;
     const push = (_branch: string, _commit: string): void => {

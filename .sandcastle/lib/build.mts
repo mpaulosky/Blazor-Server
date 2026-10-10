@@ -29,10 +29,10 @@ import { agentSandbox } from "./skills.mts";
 // work already there.
 //
 // A GitHub server error (a 5xx or "Internal Server Error" in git's or gh's
-// output) is transient, so the push and the PR creation are each retried up to
-// PUBLISH_RETRY_ATTEMPTS times, with backoff, before giving up. Any other
-// failure, such as a stale --force-with-lease or a rejected push, isn't
-// retried: a person needs to look at it regardless.
+// output) is transient, so the push and the PR creation are each tried up to
+// PUBLISH_RETRY_ATTEMPTS times in all, with backoff, before giving up. Any
+// other failure, such as a push that doesn't fast-forward, isn't retried: a
+// person needs to look at it regardless.
 export async function publish(
   issue: SandcastleIssue,
   branch: string,
@@ -53,9 +53,6 @@ export async function publish(
   return retryOnServerError(() => createPullRequest(branch, issue.title, body), wait);
 }
 
-// The first backoff before a retried publish step; each later one doubles it.
-const PUBLISH_RETRY_DELAY_MS = 5_000;
-
 // Whether a git or gh failure is GitHub's own server error, which a later
 // attempt may not hit. Matches what git and gh print for one ("remote: Internal
 // Server Error", "returned error: 502", "HTTP 503: Service Unavailable"), not a
@@ -67,6 +64,9 @@ export function isGitHubServerError(error: unknown): boolean {
     message,
   );
 }
+
+// The first backoff before a retried publish step; each later one doubles it.
+const PUBLISH_RETRY_DELAY_MS = 5_000;
 
 // Run a publish step, retrying it with backoff while it fails with a GitHub
 // server error, up to PUBLISH_RETRY_ATTEMPTS attempts in all. Any other
@@ -149,8 +149,8 @@ const liveHost: BuildHost = {
 // runs again (checkpoint 2) before the branch is pushed and gets a pull request
 // that closes its issue. Returns the PR's URL, or undefined when a developer
 // run failed, the branch holds nothing to publish or a checkpoint's gate
-// stayed red. `publishFailed` is true only when the branch was gated and
-// reviewed but publishing it still failed, so the caller's round summary can
+// stayed red. `publishFailed` is true only when the branch passed both
+// checkpoints but publishing it still failed, so the caller's round summary can
 // tell that apart from a round that built nothing.
 export async function buildIssue(
   issue: SandcastleIssue,
@@ -269,11 +269,10 @@ export async function buildIssue(
       return notPublished;
     }
 
-    // A push rejected for a reason other than a transient GitHub server error
-    // (an agent rewrote a commit an earlier round pushed), and so can gh,
-    // fails at once; a GitHub server error is retried inside host.publish.
-    // Either needs a person, so the issue gets git's or gh's error rather than
-    // only the run log.
+    // host.publish retries a GitHub server error, but not a push that doesn't
+    // fast-forward origin's branch (an agent rewrote a commit an earlier round
+    // pushed) or any other git or gh failure. Whatever still fails needs a
+    // person, so the issue gets git's or gh's error rather than only the run log.
     try {
       const prUrl = await host.publish(issue, branch, gated, reviewed);
       return { commits, prUrl, publishFailed: false };
