@@ -50,8 +50,7 @@ export const DESIGN_MARKER = "<!-- sandcastle:design -->";
 
 // The roles lib/build.mts#buildIssue runs, each at most once per build,
 // besides the gate-fixer, which runs up to GATE_FIXER_ATTEMPTS times at each
-// checkpoint. #72's architect, UI developer and scribe are counted ahead of
-// time. BUILDING_LABEL_MAX_AGE_MS is sized from these roles' timeouts:
+// checkpoint. BUILDING_LABEL_MAX_AGE_MS is sized from these roles' timeouts:
 // config.test.mts checks the sum fits, and build.test.mts that buildIssue runs
 // no role outside the list.
 export const BUILD_ROLES = ["architect", "tester", "backend", "ui", "scribe", "reviewer"] as const satisfies readonly Role[];

@@ -66,11 +66,13 @@ export async function publish(
   wait: (ms: number) => Promise<void> = (ms) => sleep(ms),
 ): Promise<string> {
   await retryOnServerError(() => push(branch, commit), wait);
-  const body =
-    (reviewed
-      ? `Closes #${issue.number}\n\nImplemented and reviewed by Sandcastle.`
-      : `Closes #${issue.number}\n\nImplemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.`) +
-    (docsFailed ? "\n\n⚠️ The documentation step failed, so this PR may leave `CONTEXT.md`, `README.md` or the guides out of date." : "");
+  const reviewNote = reviewed
+    ? "Implemented and reviewed by Sandcastle."
+    : "Implemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.";
+  const docsNote = docsFailed
+    ? "\n\n⚠️ The documentation step failed, so this PR may leave `CONTEXT.md`, `README.md` or the guides out of date."
+    : "";
+  const body = `Closes #${issue.number}\n\n${reviewNote}${docsNote}`;
   // A retry after a create that GitHub carried out but answered with an error
   // finds that PR rather than open a second one: openPullRequest looks for an
   // open PR from the branch first.
@@ -136,6 +138,10 @@ function truncateDesignNote(note: string, path: string): string {
 // reviewer, which always run (see "Phase 6: Build" in
 // docs/plans/sandcastle-workflow.md).
 export type RoledIssue = SandcastleIssue & { roles: readonly OptionalRole[] };
+
+// The roles that write the design, the tests or the code. When one fails, the
+// issue stops for the round, unlike the scribe or the reviewer.
+type DeveloperRole = "architect" | "tester" | "backend" | "ui";
 
 // What buildIssue needs from outside the pipeline; tests pass stubs.
 export type BuildHost = {
@@ -293,7 +299,7 @@ async function buildMarkedIssue(
   const notPublished = { commits, prUrl: undefined, publishFailed: false };
   const log = (line: string) => host.log(`  #${issue.number} ${line}`);
 
-  function developerPromptArgs(role: "architect" | "tester" | "backend" | "ui"): sandcastle.PromptArgs {
+  function developerPromptArgs(role: DeveloperRole): sandcastle.PromptArgs {
     switch (role) {
       case "architect":
         return architectPromptArgs(issue, branch, host.latestDesignNote(issue.number));
@@ -311,7 +317,7 @@ async function buildMarkedIssue(
   // on the branch for the next round, and the failure counts as one of the
   // issue's build attempts, as a checkpoint that stays red does. An
   // UncountedStopError is rethrown instead.
-  async function developerFinishes(role: "architect" | "tester" | "backend" | "ui"): Promise<boolean> {
+  async function developerFinishes(role: DeveloperRole): Promise<boolean> {
     // Built outside the try: a gh failure reading the earlier design note is
     // the host's, not the architect's, so it mustn't count as a failed attempt.
     const roleArgs = developerPromptArgs(role);
@@ -394,6 +400,31 @@ async function buildMarkedIssue(
     }
   }
 
+  // Run the scribe. Returns false when the run threw or used up its
+  // iterations without signalling completion. Unlike a developer run, that
+  // isn't a failed build attempt: the code is gated, so the PR still
+  // publishes, with a note that the documentation step failed. Out of usage
+  // or time, the UncountedStopError is rethrown to leave the branch for a
+  // later round, as the reviewer's is.
+  async function scribeFinishes(): Promise<boolean> {
+    try {
+      const scribe = await runRoleInSandbox(sandbox, "scribe", {
+        promptFile: "./.sandcastle/roles/scribe.md",
+        promptArgs,
+      });
+      commits.push(...scribe.commits);
+      if (scribe.completionSignal !== undefined) {
+        log("scribe finished");
+        return true;
+      }
+      console.error(`  ⚠ #${issue.number}: the scribe ran out of iterations unfinished, publishing with a note.`);
+    } catch (error) {
+      if (error instanceof UncountedStopError) throw error;
+      console.error(`  ⚠ #${issue.number}: scribe failed, publishing with a note: ${error}`);
+    }
+    return false;
+  }
+
   try {
     if (issue.roles.includes("architect")) {
       if (!(await developerFinishes("architect"))) return notPublished;
@@ -418,29 +449,7 @@ async function buildMarkedIssue(
       return notPublished;
     }
 
-    // A failed scribe doesn't strand finished work: the code is gated, so
-    // publish anyway and say so in the PR. Out of usage or time, leave the
-    // branch for a later round, as the reviewer does below.
-    let docsFailed = false;
-    if (issue.roles.includes("scribe")) {
-      try {
-        const scribe = await runRoleInSandbox(sandbox, "scribe", {
-          promptFile: "./.sandcastle/roles/scribe.md",
-          promptArgs,
-        });
-        commits.push(...scribe.commits);
-        if (scribe.completionSignal === undefined) {
-          console.error(`  ⚠ #${issue.number}: the scribe ran out of iterations unfinished, publishing with a note.`);
-          docsFailed = true;
-        } else {
-          log("scribe finished");
-        }
-      } catch (error) {
-        if (error instanceof UncountedStopError) throw error;
-        console.error(`  ⚠ #${issue.number}: scribe failed, publishing with a note: ${error}`);
-        docsFailed = true;
-      }
-    }
+    const docsFailed = issue.roles.includes("scribe") && !(await scribeFinishes());
 
     let reviewed = true;
     try {
