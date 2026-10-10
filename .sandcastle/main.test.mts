@@ -44,3 +44,18 @@ describe("main.mts header", () => {
     assert.match(usageNote(), /pnpm run sandcastle/);
   });
 });
+
+// main.mts runs at import, so its wiring is checked in its source: intake
+// must run before the blocker gate, so a human's questions reach them even
+// while a blocker is still in flight (#74).
+describe("main.mts's intake wiring", () => {
+  it("runs intake before the blocker gate", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const intakeCall = mainMts.indexOf("intakeRound(");
+    const gateCall = mainMts.indexOf("gateIssues()");
+
+    assert.notEqual(intakeCall, -1, "main.mts doesn't call intakeRound(");
+    assert.notEqual(gateCall, -1, "main.mts doesn't call gateIssues()");
+    assert.ok(intakeCall < gateCall, "main.mts doesn't run intake before the blocker gate");
+  });
+});

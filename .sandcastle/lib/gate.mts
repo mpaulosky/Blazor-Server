@@ -89,6 +89,14 @@ export function unfinishedReason(blocker: Blocker): string | undefined {
   return `${ref} was closed as ${blocker.state_reason ?? "unknown"}, so its work never landed`;
 }
 
+// Why intake hasn't cleared the issue to build yet, or undefined once it has
+// (see docs/plans/sandcastle-workflow.md, "Phase 3: Blocker gate"): it isn't
+// marked sandcastle:ready, or it's labelled sandcastle:needs-info or
+// sandcastle:needs-human (#74).
+export function readinessReason(issue: SandcastleIssue): string | undefined {
+  throw new Error("Not implemented");
+}
+
 // Why an issue waits for review rather than an agent, or undefined when no open
 // PR's head is its feature/{n}-*, fix/{n}-* or hotfix/{n}-* branch.
 export function openPrReason(issueNumber: number, openPrs: OpenPullRequest[]): string | undefined {
@@ -137,6 +145,15 @@ export function gateIssues(
     // is the same label.
     if (issue.labels.some((label) => label.toLowerCase() === BUILDING_LABEL)) {
       blocked.push({ issue, reasons: ["it's already being built"] });
+      continue;
+    }
+
+    // Intake hasn't cleared it yet (#74). Checked before the native blockers
+    // are read, so an issue without sandcastle:ready isn't looked up for
+    // nothing.
+    const readiness = readinessReason(issue);
+    if (readiness) {
+      blocked.push({ issue, reasons: [readiness] });
       continue;
     }
 

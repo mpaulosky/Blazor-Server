@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BUILDING_LABEL } from "./config.mts";
-import { bodyBlockers, gateIssues, openPrReason, unfinishedReason, type Blocker, type GateGitHub } from "./gate.mts";
+import { bodyBlockers, gateIssues, openPrReason, readinessReason, unfinishedReason, type Blocker, type GateGitHub } from "./gate.mts";
+
+// An issue already judged ready by intake, since that's the common case the
+// other gate checks (blockers, open PRs, sandcastle:building) are about.
+const sandcastleIssue = (number: number, body = "", labels: string[] = ["Sandcastle", "sandcastle:ready"]) => ({
+  number,
+  title: `Issue ${number}`,
+  body,
+  labels,
+  comments: [],
+});
 
 describe("bodyBlockers", () => {
   it("reads issue numbers from lines that start with Blocked by or Depends on", () => {
@@ -85,15 +95,31 @@ describe("openPrReason", () => {
   });
 });
 
-describe("gateIssues", () => {
-  const sandcastleIssue = (number: number, body = "", labels: string[] = ["Sandcastle"]) => ({
-    number,
-    title: `Issue ${number}`,
-    body,
-    labels,
-    comments: [],
+describe("readinessReason", () => {
+  it("blocks an issue without sandcastle:ready", () => {
+    assert.match(readinessReason(sandcastleIssue(1, "", ["Sandcastle"])) ?? "", /sandcastle:ready/);
   });
 
+  it("blocks an issue labelled sandcastle:needs-info", () => {
+    assert.match(
+      readinessReason(sandcastleIssue(1, "", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-info"])) ?? "",
+      /sandcastle:needs-info/,
+    );
+  });
+
+  it("blocks an issue labelled sandcastle:needs-human", () => {
+    assert.match(
+      readinessReason(sandcastleIssue(1, "", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-human"])) ?? "",
+      /sandcastle:needs-human/,
+    );
+  });
+
+  it("doesn't block an issue labelled sandcastle:ready and nothing else needing a human", () => {
+    assert.equal(readinessReason(sandcastleIssue(1)), undefined);
+  });
+});
+
+describe("gateIssues", () => {
   const github = (overrides: Partial<GateGitHub>): GateGitHub & { lookedUp: number[] } => {
     const lookedUp: number[] = [];
     return {
@@ -148,6 +174,48 @@ describe("gateIssues", () => {
 
     assert.deepEqual(ready.map((i) => i.number), [68]);
     assert.deepEqual(blocked.map((b) => [b.issue.number, b.reasons]), [[67, ["it's already being built"]]]);
+    assert.deepEqual(gh.lookedUp, [68]);
+  });
+
+  it("holds back an issue without sandcastle:ready, names the reason, and skips its blocker lookup", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(67, "", ["Sandcastle"]), sandcastleIssue(68)],
+    });
+
+    const { ready, blocked } = gateIssues(gh);
+
+    assert.deepEqual(ready.map((i) => i.number), [68]);
+    assert.equal(blocked.length, 1);
+    assert.equal(blocked[0]!.issue.number, 67);
+    assert.match(blocked[0]!.reasons[0]!, /sandcastle:ready/);
+    assert.deepEqual(gh.lookedUp, [68]);
+  });
+
+  it("holds back an issue labelled sandcastle:needs-info, names the reason, and skips its blocker lookup", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(67, "", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-info"]), sandcastleIssue(68)],
+    });
+
+    const { ready, blocked } = gateIssues(gh);
+
+    assert.deepEqual(ready.map((i) => i.number), [68]);
+    assert.equal(blocked.length, 1);
+    assert.equal(blocked[0]!.issue.number, 67);
+    assert.match(blocked[0]!.reasons[0]!, /sandcastle:needs-info/);
+    assert.deepEqual(gh.lookedUp, [68]);
+  });
+
+  it("holds back an issue labelled sandcastle:needs-human, names the reason, and skips its blocker lookup", () => {
+    const gh = github({
+      sandcastleIssues: () => [sandcastleIssue(67, "", ["Sandcastle", "sandcastle:ready", "sandcastle:needs-human"]), sandcastleIssue(68)],
+    });
+
+    const { ready, blocked } = gateIssues(gh);
+
+    assert.deepEqual(ready.map((i) => i.number), [68]);
+    assert.equal(blocked.length, 1);
+    assert.equal(blocked[0]!.issue.number, 67);
+    assert.match(blocked[0]!.reasons[0]!, /sandcastle:needs-human/);
     assert.deepEqual(gh.lookedUp, [68]);
   });
 
