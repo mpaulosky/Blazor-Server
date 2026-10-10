@@ -32,23 +32,27 @@ export type GhIssue = {
 };
 
 export type SandcastleIssue = Omit<GhIssue, "comments"> & {
-  // Only the repository owner's comments; see ownerApproved.
+  // Only the comments of authors with write access to the repository; see ownerApproved.
   comments: string[];
 };
 
-// Keep only the owner's comments, so text from anyone else never reaches a
-// role's prompt.
-export function ownerApproved(issue: GhIssue, owner: string): SandcastleIssue {
-  return {
-    number: issue.number,
-    title: issue.title,
-    body: issue.body,
-    labels: issue.labels,
-    comments: issue.comments.filter((comment) => comment.author === owner).map((comment) => comment.body),
-  };
+// Keep only the comments of authors with admin, maintain or write permission
+// on `repo`, so text from anyone else never reaches a role's prompt. In a
+// repository an organization owns, the owner never comments, so filtering by
+// the owner's login (as this used to) would drop every comment; permission
+// is what actually decides whose guidance the agents trust. A permission
+// lookup that fails drops that author's comments, so an error never lets a
+// stranger's text through.
+export function ownerApproved(
+  issue: GhIssue,
+  repo: string = repoName(),
+  run: typeof execFileSync = execFileSync,
+): SandcastleIssue {
+  throw new Error("Not implemented");
 }
 
-// The open Sandcastle issues, with everyone's comments but the owner's dropped.
+// The open Sandcastle issues, with every comment dropped but those from
+// authors with write access.
 export function listSandcastleIssues(): SandcastleIssue[] {
   const issues = JSON.parse(
     sh(
@@ -57,8 +61,7 @@ export function listSandcastleIssues(): SandcastleIssue[] {
       "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}]",
     ),
   ) as GhIssue[];
-  const owner = repoOwner();
-  return issues.map((issue) => ownerApproved(issue, owner));
+  return issues.map((issue) => ownerApproved(issue));
 }
 
 export type OpenPullRequest = { number: number; headRefName: string };
