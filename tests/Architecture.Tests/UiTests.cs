@@ -29,7 +29,7 @@ public class UiTests
 
 		// Assert
 		forbiddenReferences.Should().BeEmpty(
-			"UI references only the Shared Kernel (see ADR-0005) and ServiceDefaults (see issue #246); any other project reference must be allowed deliberately");
+			"UI references only the Shared Kernel (see ADR-0005) and ServiceDefaults (see ADR-0005's amendment, ADR-0006, and issue #246); any other project reference must be allowed deliberately");
 	}
 
 	[Fact]

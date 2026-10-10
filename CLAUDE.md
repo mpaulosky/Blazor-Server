@@ -24,7 +24,8 @@ matching files.
 - `src/UI/`: the Blazor Web App. Each feature slice (components, request and response records, handler, validator,
   `Add<Feature>Feature()` registration) lives in its own folder under `Components/Features/<Feature>/`; the layout is in
   `Components/Layout/`, and the app-wide Error and NotFound pages are in `Components/Pages/`. It references only
-  `src/Domain` and `src/ServiceDefaults` (see `docs/adr/0005-feature-slices-live-in-the-ui-project.md`).
+  `src/Domain` and `src/ServiceDefaults` (see `docs/adr/0005-feature-slices-live-in-the-ui-project.md` and its amendment,
+  `docs/adr/0006-ui-references-servicedefaults.md`).
 - `src/AppHost/`: the Aspire AppHost (entry file `AppHost.cs`). It runs the UI as the resource
   `ApplicationConstants.Website` (`WebApp`) with the UI's `http` launch profile, so it needs no developer certificate.
 - `src/ServiceDefaults/`: OpenTelemetry (logging, metrics, tracing) and health checks, added by `AddServiceDefaults()`.
