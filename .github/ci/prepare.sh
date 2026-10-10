@@ -18,8 +18,19 @@ set -euo pipefail
 job="${1:?usage: prepare.sh build|test [test-name]}"
 test_name="${2:-}"
 
+# Every job builds UI, whose build runs the Tailwind CLI from src/UI's pnpm
+# packages, so every job installs them first.
+setup_pnpm() {
+  corepack enable pnpm
+  export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+  if [[ -n "${GITHUB_ENV:-}" ]]; then
+    echo "COREPACK_ENABLE_DOWNLOAD_PROMPT=0" >> "$GITHUB_ENV"
+  fi
+  pnpm install --frozen-lockfile
+}
+
 case "$job" in
-  build) ;;
-  test) : "$test_name" ;;
+  build) setup_pnpm ;;
+  test) : "$test_name"; setup_pnpm ;;
   *) echo "prepare.sh: unknown job '$job'" >&2; exit 2 ;;
 esac
