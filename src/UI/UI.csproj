@@ -15,13 +15,13 @@
 		<TailwindMinify Condition="'$(Configuration)' == 'Release'"> --minify</TailwindMinify>
 	</PropertyGroup>
 
-	<!-- `@import "tailwindcss" source("..")` makes the CLI scan every non-gitignored file under src/UI, not just
-	     .razor and .razor.cs, so these inputs mirror that scan: a plain .cs class-map helper, a *.razor.js, or an
-	     .html file can all contribute a utility class the CLI must pick up. -->
+	<!-- `@import "tailwindcss" source("..")` makes the CLI scan every non-gitignored, non-binary, non-CSS file
+	     under src/UI, so this input mirrors that scan with a single broad Include rather than an extension list
+	     that drifts out of sync: excluding wwwroot/css and *.css keeps the CLI's own output out of its inputs. -->
 	<ItemGroup>
 		<TailwindInput
-			Include="**/*.razor;**/*.cs;**/*.js;**/*.html;Styles/**"
-			Exclude="node_modules/**;bin/**;obj/**;wwwroot/css/app.css" />
+			Include="**/*"
+			Exclude="node_modules/**;bin/**;obj/**;wwwroot/css/**;**/*.css" />
 	</ItemGroup>
 
 	<!-- The CLI writes into obj/<Configuration>/, so Debug and Release each keep their own up-to-date check and
@@ -31,7 +31,7 @@
 		Name="BuildTailwindCss"
 		BeforeTargets="BeforeBuild"
 		Condition="'$(DesignTimeBuild)' != 'true'"
-		Inputs="@(TailwindInput);package.json;$(MSBuildThisFileDirectory)../../pnpm-lock.yaml"
+		Inputs="@(TailwindInput);$(MSBuildThisFileDirectory)../../pnpm-lock.yaml"
 		Outputs="$(IntermediateOutputPath)tailwind/app.css">
 		<Error
 			Condition="!Exists('$(MSBuildProjectDirectory)/node_modules/@tailwindcss/cli/package.json')"
