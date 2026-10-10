@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.102">v0.0.102</a></td>
+                <td>2026-10-10</td>
+                <td>docs(sandcastle): Add #214 to the plan table and record the blockers added since</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-216-docs-sandcastle-add-214-to-the-plan-table-and-record-the-blockers-added-since.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.101">v0.0.101</a></td>
                 <td>2026-10-10</td>
                 <td>feat(sandcastle): Hand an issue back to a human after two failed builds</td>
@@ -282,12 +288,6 @@
                 <td>docs(claude): Label every PR review:claude so Claude reviews it</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-197-docs-claude-label-every-pr-review-claude-so-claude-reviews-it.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.92">v0.0.92</a></td>
-                <td>2026-10-10</td>
-                <td>fix(sandcastle): Mount the .git config and hooks through the provider&#x27;s create()</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-195-fix-sandcastle-mount-the-git-config-and-hooks-through-the-provider-s-create.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.102</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-216-docs-sandcastle-add-214-to-the-plan-table-and-record-the-blockers-added-since.md">docs(sandcastle): Add #214 to the plan table and record the blockers added since</a></h3>
+              <p class="post-excerpt">The &quot;Implementation issues&quot; table in docs/plans/sandcastle-workflow.md had fallen behind the issues&#x27; native &quot;blocked by&quot; links. The critique made #72 wait on #73, #214 was filed from the review of…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/216">PR #216</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.101</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-197-docs-claude-label-every-pr-review-claude-so-claude-reviews-it.md">docs(claude): Label every PR review:claude so Claude reviews it</a></h3>
               <p class="post-excerpt">Claude only reviews a PR that has the review:claude label, and nothing told an agent working in this repository to add it. PRs went without a Claude review until someone added the label by hand.</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/197">PR #197</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.92</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-195-fix-sandcastle-mount-the-git-config-and-hooks-through-the-provider-s-create.md">fix(sandcastle): Mount the .git config and hooks through the provider&#x27;s create()</a></h3>
-              <p class="post-excerpt">Since #188, every Sandcastle run has stopped at its first sandbox, before any role runs. #188 mounts .git/config read-only through docker({ mounts }), and Sandcastle 0.12&#x27;s docker() refuses any file…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/195">PR #195</a></p>
             </article>
           </li>
         </ul>

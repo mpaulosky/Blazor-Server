@@ -393,7 +393,8 @@ two `.github/workflows/**` changes the PAT can't push (see **Workflow files**). 
 
 [#80](https://github.com/mpaulosky/Blazor-Server/issues/80), making runs safe to start unattended, was split into #146 and #147.
 Issues #149 and #150 were filed after the plan, from problems seen in runs. The critique added #149 as a blocker of #72 and #73, since all three change
-`buildIssue`'s failure and publish paths.
+`buildIssue`'s failure and publish paths, and later #73 as a blocker of #72, so #72's new roles fit #73's failure counting.
+Issue #214 came out of the review of #213: an organization never posts, so "the owner" means anyone with write access, and #146 reuses its check.
 
 | Issue | Blocked by |
 | --- | --- |
@@ -403,8 +404,8 @@ Issues #149 and #150 were filed after the plan, from problems seen in runs. The 
 | [Run the gate at two checkpoints with a gate-fixer role](https://github.com/mpaulosky/Blazor-Server/issues/69) | #66, #67 |
 | [Skip the pre-push hook's gate for commits the sandbox already gated](https://github.com/mpaulosky/Blazor-Server/issues/70) | #69 |
 | [Replace the implementer with a tester and a backend developer](https://github.com/mpaulosky/Blazor-Server/issues/71) | #69 |
-| [Add architect, UI developer and scribe roles picked by the planner](https://github.com/mpaulosky/Blazor-Server/issues/72) | #68, #71, #149 |
 | [Hand an issue back to a human after two failed builds](https://github.com/mpaulosky/Blazor-Server/issues/73) | #69, #149 |
+| [Add architect, UI developer and scribe roles picked by the planner](https://github.com/mpaulosky/Blazor-Server/issues/72) | #68, #71, #73, #149 |
 | [Intake judges each issue against the Definition of Ready](https://github.com/mpaulosky/Blazor-Server/issues/74) | #68, #73 |
 | [Intake splits oversized issues into blocked child issues](https://github.com/mpaulosky/Blazor-Server/issues/75) | #74 |
 | [Critique each round's plan and defer picks that aren't safe in parallel](https://github.com/mpaulosky/Blazor-Server/issues/76) | #68 |
@@ -412,7 +413,8 @@ Issues #149 and #150 were filed after the plan, from problems seen in runs. The 
 | [Keep pr-automerge.yml from merging PRs handed back to a human (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/84) | none |
 | [Follow-up passes resolve review threads and merge conflicts](https://github.com/mpaulosky/Blazor-Server/issues/78) | #69, #77, #84 |
 | [Follow-up passes fix red CI on Sandcastle PRs](https://github.com/mpaulosky/Blazor-Server/issues/79) | #78 |
-| [Scope the queue to work the repository owner approved](https://github.com/mpaulosky/Blazor-Server/issues/146) | #74, #77 |
+| [Keep comments from anyone with write access, not only the repository owner's](https://github.com/mpaulosky/Blazor-Server/issues/214) | none |
+| [Scope the queue to work the repository owner approved](https://github.com/mpaulosky/Blazor-Server/issues/146) | #74, #77, #214 |
 | [Stop unattended runs cleanly when there's no work, time or usage left](https://github.com/mpaulosky/Blazor-Server/issues/147) | #146 |
 | [Write a run report with outcomes, hand-backs and token usage](https://github.com/mpaulosky/Blazor-Server/issues/81) | #73, #77, #78 |
 | [Create the secrets Sandcastle needs to run from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/83) | none |
