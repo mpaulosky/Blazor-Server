@@ -266,15 +266,17 @@ export function ensureLabels(
   }
 }
 
-// Adds `label` to the issue `number`. The repository must already have the
-// label (see ensureLabels).
+// Adds `label` to the issue `number`, or every label in it, in one edit so
+// they land together or not at all. The repository must already have them
+// (see ensureLabels).
 export function addIssueLabel(
   number: number,
-  label: string,
+  label: string | readonly string[],
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
 ): void {
-  ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, "--add-label", label]);
+  const labels = typeof label === "string" ? [label] : label;
+  ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, ...labels.flatMap((name) => ["--add-label", name])]);
 }
 
 // Removes `label` from the issue `number`.

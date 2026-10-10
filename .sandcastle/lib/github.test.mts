@@ -531,6 +531,16 @@ describe("issue labels", () => {
     assert.deepEqual(calls.map((call) => call.args), [["issue", "edit", "150", "--repo", "o/r", "--add-label", "sandcastle:building"]]);
   });
 
+  it("adds several labels to an issue in one edit", () => {
+    const { calls, run } = recordingGh();
+
+    addIssueLabel(150, ["bug", "sandcastle:ready"], run, "o/r");
+
+    assert.deepEqual(calls.map((call) => call.args), [
+      ["issue", "edit", "150", "--repo", "o/r", "--add-label", "bug", "--add-label", "sandcastle:ready"],
+    ]);
+  });
+
   it("removes a label from an issue in the named repository", () => {
     const { calls, run } = recordingGh();
 

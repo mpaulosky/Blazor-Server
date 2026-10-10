@@ -16,7 +16,7 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { hooks } from "./config.mts";
-import { addIssueLabel, commentOnIssue, handBack, hasLabel, repoName, type SandcastleIssue } from "./github.mts";
+import { addIssueLabel, commentOnIssue, handBack, hasLabel, issueLabels, repoName, type SandcastleIssue } from "./github.mts";
 import { intakePromptArgs } from "./prompts.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
@@ -93,10 +93,25 @@ export function applyVerdicts(
     }
     judged.add(verdict.id);
 
-    // A failed gh call leaves the issue without sandcastle:ready, so the gate
-    // holds it back and the next round's intake judges it again.
+    // Handing an issue back with no questions would leave its author nothing
+    // to answer, so such a verdict counts as none.
+    if (verdict.verdict === "needs-info" && !(verdict.questions ?? []).some((question) => question.trim() !== "")) {
+      log(`  ⚠ Ignoring intake's needs-info verdict on ${ref}: it has no questions, so it's judged again next round.`);
+      continue;
+    }
+
+    // A failed gh call before the verdict's labels land leaves the issue
+    // unjudged, so the gate holds it back and the next round's intake judges
+    // it again.
     try {
-      applyVerdict(issue.number, verdict, run, repo, report);
+      // Another Sandcastle run may have judged the issue since this round read
+      // the queue: applying this verdict too would leave two comments,
+      // possibly conflicting ones.
+      if (JUDGED_LABELS.some((label) => hasLabel({ labels: issueLabels(issue.number, run, repo) }, label))) {
+        log(`  ⚠ Skipping intake's verdict on ${ref}: another run has judged it since this round read the queue.`);
+        continue;
+      }
+      applyVerdict(issue.number, verdict, run, repo, report, log);
     } catch (error) {
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again next round: ${error}`);
       continue;
@@ -114,25 +129,38 @@ export function applyVerdicts(
   }
 }
 
-// Posts the verdict's one comment and adds its labels. The comment goes
-// first, as in handBack: if GitHub rejects it, the issue gets no label it
-// can't explain. A ready issue gets bug before sandcastle:ready, so a failed
-// bug edit leaves it unready rather than built on a feature/ branch.
+// Adds the verdict's labels and posts its one comment.
+//
+// A ready verdict adds bug, when it carries bug: true, and sandcastle:ready in
+// one edit, so the issue never gets built on a feature/ branch, and the
+// comment comes after: a failed edit posts nothing, so judging the issue again
+// next round can't leave a second comment, and a rejected comment costs only
+// the explanation of labels already on the issue, which is logged.
+//
+// A needs-info verdict adds bug first, so a failed bug edit leaves the issue
+// unjudged rather than handed back without it. The hand-back then posts the
+// questions before adding sandcastle:needs-info, as everywhere handBack is
+// used: a label without its questions would leave the author nothing to
+// answer, which is worse than the second comment a failed label edit can cost.
 function applyVerdict(
   number: number,
   verdict: IntakeVerdict,
   run: typeof execFileSync,
   repo: string,
   report: HandBackReport,
+  log: (line: string) => void,
 ): void {
   if (verdict.verdict === "needs-info") {
-    handBack({ kind: "issue", number }, "sandcastle:needs-info", verdict.reason, needsInfoComment(verdict), run, repo, report);
     if (verdict.bug) addIssueLabel(number, "bug", run, repo);
+    handBack({ kind: "issue", number }, "sandcastle:needs-info", verdict.reason, needsInfoComment(verdict), run, repo, report);
     return;
   }
-  commentOnIssue(number, readyComment(verdict), run, repo);
-  if (verdict.bug) addIssueLabel(number, "bug", run, repo);
-  addIssueLabel(number, "sandcastle:ready", run, repo);
+  addIssueLabel(number, verdict.bug ? ["bug", "sandcastle:ready"] : "sandcastle:ready", run, repo);
+  try {
+    commentOnIssue(number, readyComment(verdict), run, repo);
+  } catch (error) {
+    log(`  ⚠ #${number} is marked sandcastle:ready, but posting intake's reason failed: ${error}`);
+  }
 }
 
 // The comment on an issue intake judged ready: what the host did, and why.

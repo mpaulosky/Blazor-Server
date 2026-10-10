@@ -13,12 +13,16 @@ const issue = (number: number, labels: string[] = ["Sandcastle"]): SandcastleIss
   comments: [],
 });
 
-// A gh stub recording every call's args and stdin input, as handback.test.mts uses.
-function recordingGh() {
+// A gh stub recording every call's args and stdin input, as handback.test.mts
+// uses. It answers `issue view` (the labels applyVerdicts reads again before a
+// verdict) with `labels`, and throws `fail`'s error for a call it matches.
+function recordingGh(labels: string[] = ["Sandcastle"], fail?: (args: readonly string[]) => Error | undefined) {
   const calls: { args: readonly string[]; input: unknown }[] = [];
   const run = ((_cmd: string, args: readonly string[], options: { input?: unknown } = {}) => {
     calls.push({ args, input: options.input });
-    return "";
+    const error = fail?.(args);
+    if (error) throw error;
+    return args[1] === "view" ? JSON.stringify(labels) : "";
   }) as unknown as typeof execFileSync;
   return { calls, run };
 }
@@ -155,13 +159,84 @@ describe("applyVerdicts", () => {
 });
 
 describe("applyVerdicts beyond the acceptance criteria", () => {
-  it("adds bug before sandcastle:ready, so a failed bug edit leaves the issue unready", () => {
+  // One edit, so the issue never carries sandcastle:ready without bug, and
+  // never ends up on a feature/ branch.
+  it("adds bug and sandcastle:ready in one edit", () => {
     const gh = recordingGh();
 
     applyVerdicts([issue(3)], [verdict(3, { bug: true })], gh.run, "o/r", new HandBackReport());
 
-    const added = gh.calls.filter((call) => call.args[1] === "edit").map((call) => call.args.at(-1));
-    assert.deepEqual(added, ["bug", "sandcastle:ready"]);
+    const edits = gh.calls.filter((call) => call.args[1] === "edit").map((call) => call.args);
+    assert.deepEqual(edits, [["issue", "edit", "3", "--repo", "o/r", "--add-label", "bug", "--add-label", "sandcastle:ready"]]);
+  });
+
+  // Labels before the comment: a failed edit posts nothing, so judging the
+  // issue again next round can't leave a second "ready" comment on it.
+  it("posts nothing when a ready verdict's label edit fails, and judges the issue again next round", () => {
+    const gh = recordingGh(["Sandcastle"], (args) => (args[1] === "edit" ? new Error("HTTP 502") : undefined));
+    const lines: string[] = [];
+
+    applyVerdicts([issue(1)], [verdict(1)], gh.run, "o/r", new HandBackReport(), (line) => lines.push(line));
+
+    assert.ok(!gh.calls.some((call) => call.args[1] === "comment"));
+    assert.ok(lines.some((line) => line.includes("#1") && line.includes("judged again next round")), lines.join("\n"));
+  });
+
+  // Added before the hand-back, so a failed bug edit leaves the issue
+  // unjudged, as the log says, rather than handed back without bug.
+  it("adds bug before handing a needs-info verdict back, so a failed bug edit leaves the issue unjudged", () => {
+    const gh = recordingGh(["Sandcastle"], (args) => (args[1] === "edit" && args.includes("bug") ? new Error("HTTP 502") : undefined));
+    const report = new HandBackReport();
+    const lines: string[] = [];
+
+    applyVerdicts(
+      [issue(4)],
+      [verdict(4, { verdict: "needs-info", questions: ["Which page?"], bug: true })],
+      gh.run,
+      "o/r",
+      report,
+      (line) => lines.push(line),
+    );
+
+    assert.ok(!gh.calls.some((call) => call.args[1] === "comment"));
+    assert.ok(!gh.calls.some((call) => call.args.includes("sandcastle:needs-info")));
+    assert.deepEqual(report.items(), []);
+    assert.ok(lines.some((line) => line.includes("#4") && line.includes("judged again next round")), lines.join("\n"));
+  });
+
+  // Handing an issue back without questions would leave its author nothing to
+  // answer, so the verdict is treated as missing.
+  for (const questions of [undefined, [], ["  "]]) {
+    it(`leaves a needs-info verdict with questions ${JSON.stringify(questions)} unjudged, and logs it`, () => {
+      const gh = recordingGh();
+      const report = new HandBackReport();
+      const lines: string[] = [];
+
+      applyVerdicts(
+        [issue(5)],
+        [verdict(5, { verdict: "needs-info", ...(questions === undefined ? {} : { questions }) })],
+        gh.run,
+        "o/r",
+        report,
+        (line) => lines.push(line),
+      );
+
+      assert.ok(!gh.calls.some((call) => call.args[1] === "comment" || call.args[1] === "edit"));
+      assert.deepEqual(report.items(), []);
+      assert.ok(lines.some((line) => line.includes("#5") && line.includes("no questions")), lines.join("\n"));
+    });
+  }
+
+  // Another Sandcastle run judged the issue after this round read the queue;
+  // applying this verdict too would leave two comments, possibly conflicting.
+  it("skips a verdict on an issue another run has judged since this round read it", () => {
+    const gh = recordingGh(["Sandcastle", "Sandcastle:Ready"]);
+    const lines: string[] = [];
+
+    applyVerdicts([issue(6)], [verdict(6)], gh.run, "o/r", new HandBackReport(), (line) => lines.push(line));
+
+    assert.deepEqual(gh.calls.map((call) => call.args[1]), ["view"]);
+    assert.ok(lines.some((line) => line.includes("#6") && line.includes("another run")), lines.join("\n"));
   });
 
   it("applies only the first verdict on an issue and logs the rest", () => {
@@ -192,19 +267,16 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
     assert.ok(lines.some((line) => line.includes("#2") && line.includes("no verdict")), lines.join("\n"));
   });
 
-  it("leaves an issue unlabelled when its comment is rejected, and still applies the next verdict", () => {
-    const calls: (readonly string[])[] = [];
-    const run = ((_cmd: string, args: readonly string[]) => {
-      calls.push(args);
-      if (args[1] === "comment" && args[2] === "1") throw new Error("HTTP 422");
-      return "";
-    }) as unknown as typeof execFileSync;
+  // The ready comment only explains labels already applied, so a rejected one
+  // costs the explanation, not the verdict.
+  it("keeps a ready issue's labels and logs it when its comment is rejected, and still applies the next verdict", () => {
+    const gh = recordingGh(["Sandcastle"], (args) => (args[1] === "comment" && args[2] === "1" ? new Error("HTTP 422") : undefined));
     const lines: string[] = [];
 
-    applyVerdicts([issue(1), issue(2)], [verdict(1), verdict(2)], run, "o/r", new HandBackReport(), (line) => lines.push(line));
+    applyVerdicts([issue(1), issue(2)], [verdict(1), verdict(2)], gh.run, "o/r", new HandBackReport(), (line) => lines.push(line));
 
-    const edits = calls.filter((args) => args[1] === "edit");
-    assert.deepEqual(edits.map((args) => args[2]), ["2"]);
+    const edits = gh.calls.filter((call) => call.args[1] === "edit");
+    assert.deepEqual(edits.map((call) => call.args[2]), ["1", "2"]);
     assert.ok(lines.some((line) => line.includes("#1") && line.includes("HTTP 422")), lines.join("\n"));
   });
 
