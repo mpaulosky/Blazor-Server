@@ -133,6 +133,25 @@ describe("ownerApproved", () => {
     assert.deepEqual(result.comments, ["First comment.", "Second comment."]);
     assert.equal(calls.filter((path) => path.includes("repeat-commenter")).length, 1);
   });
+
+  // listSandcastleIssues shares one cache across every issue in a run.
+  it("looks up an author once across issues that share a cache", () => {
+    const first: GhIssue = {
+      number: 3,
+      title: "Add a thing",
+      body: "## Summary",
+      labels: ["Sandcastle"],
+      comments: [{ author: "repeat-commenter", body: "First comment." }],
+    };
+    const second: GhIssue = { ...first, number: 4, comments: [{ author: "repeat-commenter", body: "Second comment." }] };
+    const { calls, run } = stubPermissions({ "repeat-commenter": JSON.stringify({ permission: "write", role_name: "write" }) });
+    const canPush = new Map<string, boolean>();
+
+    const kept = [first, second].flatMap((issue) => ownerApproved(issue, "o/r", run, canPush).comments);
+
+    assert.deepEqual(kept, ["First comment.", "Second comment."]);
+    assert.equal(calls.length, 1);
+  });
 });
 
 describe("commentOnIssue", () => {
