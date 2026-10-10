@@ -68,8 +68,11 @@ const PUSH_PERMISSIONS: ReadonlySet<unknown> = new Set(["admin", "maintain", "wr
 
 // Whether `login` can push to `repo`. GitHub reports maintain as "write" in
 // `.permission` and names it only in `.role_name`, so either field counts. A
-// lookup that fails, or an answer with neither field, is reported through
-// `warn` and returns undefined: it says nothing about the author's access.
+// 404 means GitHub has no such user, as for the bare "github-actions" gh
+// prints for a GitHub App's comment: that's a definite no, cached and not
+// reported. Any other failure, or an answer with neither field, is reported
+// through `warn` and returns undefined: it says nothing about the author's
+// access.
 function hasWriteAccess(
   login: string,
   repo: string,
@@ -85,6 +88,7 @@ function hasWriteAccess(
     }
     return PUSH_PERMISSIONS.has(answer.permission) || PUSH_PERMISSIONS.has(answer.role_name);
   } catch (error) {
+    if (/\(HTTP 404\)/.test(String(error))) return false;
     warn(`  ⚠ Couldn't read ${login}'s permission on ${repo}, so their comments are left out this time: ${error}`);
     return undefined;
   }
