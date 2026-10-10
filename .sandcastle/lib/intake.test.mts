@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import type { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
-import { BUILDING_LABEL, SANDCASTLE_LABELS } from "./config.mts";
+import { BUILDING_LABEL, INTAKE_BATCH_SIZE, SANDCASTLE_LABELS } from "./config.mts";
 import type { OpenPullRequest, SandcastleIssue } from "./github.mts";
 import { UncountedStopError } from "./errors.mts";
-import { applyVerdicts, intakePhase, intakeRound, intakeRunner, needsIntake, type IntakeVerdict } from "./intake.mts";
+import {
+  applyVerdicts,
+  intakePhase,
+  intakeRound,
+  intakeRunner,
+  needsInfoComment,
+  needsIntake,
+  readyComment,
+  type IntakeVerdict,
+} from "./intake.mts";
 import { HandBackReport } from "./report.mts";
 
 const issue = (number: number, labels: string[] = ["Sandcastle"]): SandcastleIssue => ({
@@ -245,6 +254,25 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
     });
   }
 
+  // An ignored verdict isn't the issue's verdict, so a valid one after it
+  // still applies (#224).
+  it("applies a valid verdict that follows an ignored needs-info verdict with no questions", () => {
+    const gh = recordingGh();
+    const lines: string[] = [];
+
+    applyVerdicts(
+      [issue(5)],
+      [verdict(5, { verdict: "needs-info", questions: [] }), verdict(5)],
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+      (line) => lines.push(line),
+    );
+
+    assert.ok(gh.calls.some((call) => call.args[1] === "edit" && call.args.includes("sandcastle:ready")));
+    assert.ok(!lines.some((line) => line.includes("already has a verdict")), lines.join("\n"));
+  });
+
   // Another Sandcastle run judged the issue after this round read the queue;
   // applying this verdict too would leave two comments, possibly conflicting.
   it("skips a verdict on an issue another run has judged since this round read it", () => {
@@ -384,6 +412,30 @@ describe("the labels intake adds", () => {
 });
 
 describe("intakeRound", () => {
+  // One bad or truncated answer then costs at most a batch, and the rest are
+  // judged in a later round or run (#224).
+  it("judges at most INTAKE_BATCH_SIZE issues a round, and logs how many wait", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE + 2 }, (_, i) => issue(i + 1));
+    let sent: number[] = [];
+    const lines: string[] = [];
+
+    await intakeRound(
+      issues,
+      [],
+      async (promptArgs) => {
+        sent = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        return [];
+      },
+      recordingGh().run,
+      "o/r",
+      new HandBackReport(),
+      (line) => lines.push(line),
+    );
+
+    assert.deepEqual(sent, issues.slice(0, INTAKE_BATCH_SIZE).map((i) => i.number));
+    assert.ok(lines.some((line) => line.includes("2 more") && line.includes("later round or run")), lines.join("\n"));
+  });
+
   it("doesn't judge an issue whose PR is open", async () => {
     let ran = false;
 
@@ -533,7 +585,8 @@ describe("intakeRunner", () => {
   // Validates `value` with the schema runIntake hands Sandcastle, as
   // Sandcastle does with the parsed <intake> JSON.
   async function validate(schema: unknown, value: unknown) {
-    return (schema as { "~standard": { validate(value: unknown): Promise<{ issues?: unknown[] }> | { issues?: unknown[] } } })["~standard"].validate(value);
+    type Result = { issues?: unknown[]; value?: { verdicts: IntakeVerdict[] } };
+    return (schema as { "~standard": { validate(value: unknown): Promise<Result> | Result } })["~standard"].validate(value);
   }
 
   it("runs the intake role on intake-prompt.md, asking for an <intake> block, and returns its verdicts", async () => {
@@ -562,10 +615,20 @@ describe("intakeRunner", () => {
     assert.equal(result.issues, undefined);
   });
 
+  // The issue JSON gives `number` as a number, so a model may echo it as one;
+  // and one verdict without bug would otherwise cost the whole batch (#224).
+  it("gives Sandcastle a schema that takes a numeric id as a string and a missing bug as false", async () => {
+    const { calls, runRole } = stubRunRole();
+    await intakeRunner(runRole, noSandbox)({ ISSUES_JSON: "[]" });
+
+    const result = await validate(calls[0]!.options.output.schema, { verdicts: [{ id: 42, verdict: "ready", reason: "Clear." }] });
+
+    assert.equal(result.issues, undefined);
+    assert.deepEqual(result.value!.verdicts, [{ id: "42", verdict: "ready", bug: false, reason: "Clear." }]);
+  });
+
   for (const [what, value] of [
     ["an unknown verdict", { verdicts: [{ id: "1", verdict: "maybe", bug: false, reason: "?" }] }],
-    ["a verdict without bug", { verdicts: [{ id: "1", verdict: "ready", reason: "?" }] }],
-    ["a numeric id", { verdicts: [{ id: 1, verdict: "ready", bug: false, reason: "?" }] }],
     ["no verdicts list", { verdict: "ready" }],
   ] as const) {
     it(`gives Sandcastle a schema that rejects ${what}`, async () => {
@@ -575,6 +638,46 @@ describe("intakeRunner", () => {
       const result = await validate(calls[0]!.options.output.schema, value);
 
       assert.ok(result.issues && result.issues.length > 0);
+    });
+  }
+});
+
+// The reason and questions come from a model that read untrusted issue text,
+// so they're posted as plain text (#224).
+describe("intake's comments", () => {
+  const hostile = "Use ``` here, cc @someone, see #123 and owner/repo#45";
+
+  for (const [name, body] of [
+    ["the ready comment's reason", () => readyComment(verdict(1, { reason: hostile }))],
+    ["the needs-info comment's reason", () => needsInfoComment(verdict(1, { verdict: "needs-info", questions: ["Which?"], reason: hostile }))],
+    ["a needs-info question", () => needsInfoComment(verdict(1, { verdict: "needs-info", questions: [hostile], reason: "r" }))],
+  ] as const) {
+    it(`posts ${name} without a code fence, mention or cross-reference`, () => {
+      const text = body();
+
+      assert.doesNotMatch(text, /(^|[^\\])```/m);
+      assert.doesNotMatch(text, /@someone/);
+      assert.doesNotMatch(text, /#123/);
+      assert.doesNotMatch(text, /#45/);
+      assert.match(text, /Use \\`\\`\\` here/);
+    });
+  }
+
+  it("keeps a reason with line breaks on its one line", () => {
+    const text = readyComment(verdict(1, { reason: "First.\n\n```\nSecond." }));
+
+    assert.match(text, /\*\*Reason:\*\* First\. \\`\\`\\` Second\./);
+  });
+
+  for (const [question, posted] of [
+    ["- a list item?", "1. \\- a list item?"],
+    ["# a heading?", "1. \\# a heading?"],
+    ["> a quote?", "1. \\> a quote?"],
+  ] as const) {
+    it(`escapes a question that starts with ${question.slice(0, 1)}`, () => {
+      const text = needsInfoComment(verdict(1, { verdict: "needs-info", questions: [question], reason: "r" }));
+
+      assert.ok(text.split("\n").includes(posted), text);
     });
   }
 });
