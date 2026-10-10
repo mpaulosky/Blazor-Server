@@ -62,8 +62,8 @@ Work test-first (red → green → refactor), one failing test at a time:
 3. REPEAT until every test passes
 4. REFACTOR with the tests green
 
-Never weaken the tester's tests to make them pass: don't remove or loosen an assertion, add `Skip` (xUnit) or `.skip`/`.todo` (`node:test`), comment a test
-out, or delete one. When a test is wrong rather than the code, leave it as it is and say why in your commit body.
+Never weaken the tester's tests to make them pass: don't remove or loosen an assertion, skip or todo a test in any form (xUnit's `Skip`; `node:test`'s `.skip`,
+`.todo`, `{ skip }`, `{ todo }`, `t.skip()` or `t.todo()`), comment a test out, or delete one. When a test is wrong rather than the code, leave it as it is and say why in your commit body.
 
 # RULES
 

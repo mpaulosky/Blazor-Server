@@ -52,9 +52,13 @@ describe("developer roles across stacks", () => {
     }
   });
 
-  it("names node:test's skip as weakening a test, alongside xUnit's", () => {
+  it("names every node:test skip and todo form as weakening a test, alongside xUnit's", () => {
     for (const role of ["backend", "gate-fixer"]) {
-      assert.match(read(`roles/${role}.md`), /`Skip`[\s\S]*`\.skip`/, role);
+      const prompt = read(`roles/${role}.md`);
+
+      for (const form of ["`Skip`", "`.skip`", "`.todo`", "`{ skip }`", "`{ todo }`", "`t.skip()`", "`t.todo()`"]) {
+        assert.ok(prompt.includes(form), `${role} doesn't name ${form}`);
+      }
     }
   });
 });
