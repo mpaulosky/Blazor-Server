@@ -34,6 +34,14 @@ export const ROLE_AGENTS = {
 
 export type Role = keyof typeof ROLE_AGENTS;
 
+// The roles lib/build.mts#buildIssue runs, each at most once per build,
+// besides the gate-fixer, which runs up to GATE_FIXER_ATTEMPTS times at each
+// checkpoint. #72's architect, UI developer and scribe are counted ahead of
+// time. BUILDING_LABEL_MAX_AGE_MS is sized from these roles' timeouts:
+// config.test.mts checks the sum fits, and build.test.mts that buildIssue runs
+// no role outside the list.
+export const BUILD_ROLES = ["architect", "tester", "backend", "ui", "scribe", "reviewer"] as const satisfies readonly Role[];
+
 // The ref each issue branch is compared with: every issue PR targets main,
 // and fetchMain() refreshes origin/main before each round. The sandbox mounts
 // the host's .git, so the ref resolves there too.
@@ -67,7 +75,8 @@ export const BUILDING_LABEL = "sandcastle:building";
 // crashed run's (see lib/building.mts#clearStaleBuildingLabels). It outlasts
 // any real build: every role's timeoutMinutes, even with two gate-fixer
 // attempts at each of the two checkpoints, adds up to well under 6 hours.
-// config.test.mts checks that sum, with an hour to spare, stays below it.
+// config.test.mts checks that sum (see BUILD_ROLES), with an hour to spare,
+// stays below it.
 export const BUILDING_LABEL_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 // Every label from the Labels table that the host, not a human, is

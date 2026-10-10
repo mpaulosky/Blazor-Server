@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
 import { buildIssue, isGitHubServerError, publicErrorText, publish, UncountedStopError, type BuildHost } from "./build.mts";
-import { PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import { BUILD_ROLES, GATE_FIXER_ATTEMPTS, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [] };
 const branch = "feature/69-run-the-gate";
@@ -581,6 +581,23 @@ describe("buildIssue marking the issue as building", () => {
 
     assert.deepEqual(order, []);
     assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
+  // BUILDING_LABEL_MAX_AGE_MS is sized from BUILD_ROLES' timeouts (see
+  // config.test.mts), so a role buildIssue runs outside that list could make
+  // a live build outlast the label and let a second run clear it.
+  it("runs only BUILD_ROLES, each once, and the gate-fixer at most its attempts per checkpoint, on the longest build", async () => {
+    // Each checkpoint: red, fixer, red, fixer, green.
+    const { runs, buildHost } = host([1, 1, 0, 1, 1, 0]);
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    const roles = runs.map((run) => run.name!);
+    const others = roles.filter((role) => role !== "gate-fixer");
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.deepEqual(others.filter((role) => !(BUILD_ROLES as readonly string[]).includes(role)), []);
+    assert.equal(new Set(others).size, others.length);
+    assert.equal(roles.filter((role) => role === "gate-fixer").length, 2 * GATE_FIXER_ATTEMPTS);
   });
 
   it("marks the issue as building exactly once and unmarks it exactly once per build", async () => {

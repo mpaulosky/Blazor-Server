@@ -168,3 +168,27 @@ export function releaseAllBuildingLabels(
   }
   return released;
 }
+
+// Wires releaseAllBuildingLabels to the process's end (`proc` is `process` in
+// main.mts), because Ctrl-C, SIGTERM and a crash skip buildIssue's finally,
+// which would leave sandcastle:building holding the issue back for
+// BUILDING_LABEL_MAX_AGE_MS. A label goes on before its sandbox exists, while
+// Node's default signal handling would end the process without an exit event,
+// so the signals exit here. Sandcastle's own signal handler, installed while a
+// sandbox is open, never runs then, but the exit listener it installs
+// alongside runs the same container teardown. Only SIGKILL gets past this,
+// and clearStaleBuildingLabels at a later startup covers that.
+export function installBuildingLabelRelease(
+  proc: { on(event: "SIGINT" | "SIGTERM" | "exit", handler: () => void): unknown; exit(code: number): unknown },
+  release: () => number[] = () => releaseAllBuildingLabels(),
+  log: (line: string) => void = console.log,
+): void {
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+    proc.on(signal, () => proc.exit(code));
+  }
+  proc.on("exit", () => {
+    for (const issueNumber of release()) {
+      log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL} as the run stopped.`);
+    }
+  });
+}

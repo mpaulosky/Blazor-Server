@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS } from "./config.mts";
 import type { TimelineLabelEvent } from "./github.mts";
 import {
   claimBuildingLabel,
   clearStaleBuildingLabels,
+  installBuildingLabelRelease,
   labelIsStale,
   releaseAllBuildingLabels,
   releaseBuildingLabel,
@@ -64,6 +66,19 @@ describe("clearStaleBuildingLabels", () => {
     clearStaleBuildingLabels(gh, BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS, now);
 
     assert.deepEqual(gh.removed, [42]);
+  });
+
+  // Clearing a label without knowing its age could free an issue a live run
+  // is building, so an unreadable timeline stops the run at startup instead.
+  it("lets a timeline that can't be read throw, removing nothing", () => {
+    const gh = github({ 42: [] });
+    gh.labelTimeline = () => {
+      throw new Error("gh api repos/o/r/issues/42/timeline failed:\nHTTP 502: Bad Gateway");
+    };
+
+    assert.throws(() => clearStaleBuildingLabels(gh, BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS, now), /502/);
+
+    assert.deepEqual(gh.removed, []);
   });
 
   it("keeps the label on an issue a live run labelled recently", () => {
@@ -265,5 +280,73 @@ describe("releaseAllBuildingLabels", () => {
     assert.deepEqual(labels[150], []);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /#71/);
+  });
+});
+
+describe("installBuildingLabelRelease", () => {
+  // A process stub that records the handlers installed and the exit code.
+  function processStub() {
+    const handlers = new Map<string, () => void>();
+    const exits: number[] = [];
+    const proc = {
+      on: (event: string, handler: () => void) => void handlers.set(event, handler),
+      exit: (code: number) => void exits.push(code),
+    };
+    return { handlers, exits, proc };
+  }
+
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+    // Node's default would end the process without an exit event, so the
+    // labels would never be released.
+    it(`exits with ${code} on ${signal}, so the exit listener runs`, () => {
+      const { handlers, exits, proc } = processStub();
+
+      installBuildingLabelRelease(proc, () => [], () => {});
+      handlers.get(signal)!();
+
+      assert.deepEqual(exits, [code]);
+    });
+  }
+
+  it("releases every label the run holds on exit, logging each", () => {
+    const { handlers, proc } = processStub();
+    const logs: string[] = [];
+
+    installBuildingLabelRelease(proc, () => [71, 150], (line) => logs.push(line));
+    handlers.get("exit")!();
+
+    assert.equal(logs.length, 2);
+    assert.match(logs[0]!, /#71/);
+    assert.match(logs[1]!, /#150/);
+  });
+});
+
+// main.mts runs at import, so its wiring is checked in its source: the order
+// of these calls is what keeps a label from being cleared or left wrongly.
+describe("main.mts's sandcastle:building wiring", () => {
+  const main = readFileSync(new URL("../main.mts", import.meta.url), "utf8");
+  const at = (call: string) => {
+    const index = main.indexOf(call);
+    assert.notEqual(index, -1, `main.mts doesn't call ${call}`);
+    return index;
+  };
+
+  it("installs the release on exit and clears stale labels after ensureLabels, before the first round", () => {
+    const loop = at("for (let iteration = 1;");
+
+    assert.ok(at("ensureLabels();") < at("clearStaleBuildingLabels()"));
+    assert.ok(at("installBuildingLabelRelease(") < loop);
+    assert.ok(at("clearStaleBuildingLabels()") < loop);
+  });
+
+  // Between rounds none of the run's builds is going, so a label it still
+  // holds is one whose removal failed; releasing it before the gate keeps the
+  // issue from being held back for the rest of the run.
+  it("releases the labels the run still holds at the start of each round, before the gate", () => {
+    const loop = at("for (let iteration = 1;");
+    const release = main.indexOf("releaseAllBuildingLabels()", loop);
+
+    assert.ok(release > loop, "main.mts doesn't release labels inside the round loop");
+    assert.ok(release < at("gateIssues()"));
   });
 });

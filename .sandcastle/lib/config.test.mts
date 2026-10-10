@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BUILDING_LABEL_MAX_AGE_MS, GATE_FIXER_ATTEMPTS, ROLE_AGENTS } from "./config.mts";
+import { BUILD_ROLES, BUILDING_LABEL_MAX_AGE_MS, GATE_FIXER_ATTEMPTS, ROLE_AGENTS } from "./config.mts";
 
 const opus = "claude-opus-5-5";
 const sonnet = "claude-sonnet-5";
@@ -27,14 +27,12 @@ describe("BUILDING_LABEL_MAX_AGE_MS", () => {
   // A startup clears a sandcastle:building label older than this as a crashed
   // run's, so it must outlast the longest build a live run can make, or a
   // second run would clear a live build's label and build the issue too.
-  // The roles lib/build.mts#buildIssue runs once each, with #72's architect,
-  // UI developer and scribe counted ahead of time, plus the gate-fixer's
-  // attempts at both checkpoints. Add a role here when buildIssue runs one.
+  // BUILD_ROLES, each once, plus the gate-fixer's attempts at both
+  // checkpoints. build.test.mts checks buildIssue runs no other role.
   it("outlasts the longest build the role timeouts allow, with an hour for gates, sandboxes and publishing", () => {
-    const once = ["architect", "tester", "backend", "ui", "scribe", "reviewer"] as const;
     const checkpoints = 2;
     const minutes =
-      once.reduce((sum, role) => sum + ROLE_AGENTS[role].timeoutMinutes, 0) +
+      BUILD_ROLES.reduce((sum, role) => sum + ROLE_AGENTS[role].timeoutMinutes, 0) +
       checkpoints * GATE_FIXER_ATTEMPTS * ROLE_AGENTS["gate-fixer"].timeoutMinutes;
     const hour = 60;
 

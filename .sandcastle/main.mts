@@ -53,7 +53,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
-import { clearStaleBuildingLabels, releaseAllBuildingLabels } from "./lib/building.mts";
+import { clearStaleBuildingLabels, installBuildingLabelRelease, releaseAllBuildingLabels } from "./lib/building.mts";
 import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { BUILDING_LABEL, MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
@@ -89,22 +89,9 @@ forgetGatedHead();
 ensureLabels();
 cacheHostLogin();
 
-// Ctrl-C, SIGTERM and a crash skip buildIssue's finally, which would leave
-// sandcastle:building holding the issue back for BUILDING_LABEL_MAX_AGE_MS.
-// The exit listener releases every label the run still holds. A label goes on
-// before its sandbox exists, while Node's default signal handling would end
-// the process without an exit event, so the signals exit here. Sandcastle's
-// own signal handler, installed while a sandbox is open, never runs then, but
-// the exit listener it installs alongside runs the same container teardown.
-// Only SIGKILL gets past this, and the startup clearing below covers that.
-for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
-  process.on(signal, () => process.exit(code));
-}
-process.on("exit", () => {
-  for (const issueNumber of releaseAllBuildingLabels()) {
-    console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL} as the run stopped.`);
-  }
-});
+// Release the labels this run holds however the process ends (see
+// lib/building.mts).
+installBuildingLabelRelease(process);
 
 // A run that crashed left sandcastle:building on the issue it was building.
 // Only a label older than any real build is cleared, so a live run's stays.
