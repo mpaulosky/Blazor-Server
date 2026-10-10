@@ -5,7 +5,8 @@
 // working it out from the git remote of wherever it runs.
 
 import { execFileSync } from "node:child_process";
-import { SANDCASTLE_LABELS, type SandcastleLabel } from "./config.mts";
+import { COPILOT_REVIEWER, SANDCASTLE_LABELS, type SandcastleLabel } from "./config.mts";
+import type { CheckState, SweepPullRequest } from "./follow-up.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { sh } from "./shell.mts";
 
@@ -200,6 +201,253 @@ export function openPullRequest(
     ["pr", "create", "--repo", repo, "--base", "main", "--head", branch, "--title", title, "--body-file", "-"],
     body,
   ).trim();
+}
+
+// The fields the follow-up sweep (lib/follow-up.mts) checks on every PR it
+// reads, open or closed.
+export type PullRequestIdentity = {
+  number: number;
+  author: string | null;
+  body: string;
+  baseRefName: string;
+  headRefName: string;
+  isCrossRepository: boolean;
+};
+
+// A closed PR, as lib/follow-up.mts#closedWithoutMerging reads it to find an
+// issue's latest PR that closed without merging. state is "CLOSED" (closed
+// without merging) or "MERGED".
+export type ClosedPullRequest = PullRequestIdentity & { headRefOid: string; state: string; closedAt: string };
+
+// The host's closed PRs into main, newest first, for
+// lib/follow-up.mts#closedWithoutMerging and #startFromMain.
+export function closedPullRequests(
+  author: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): ClosedPullRequest[] {
+  const listed = JSON.parse(
+    ghWithStderr(run, [
+      "pr", "list", "--state", "closed", "--author", author, "--base", "main", "--repo", repo, "--limit", "1000",
+      "--json", "number,author,body,baseRefName,headRefName,headRefOid,isCrossRepository,state,closedAt",
+    ]),
+  ) as (Omit<ClosedPullRequest, "author"> & { author: unknown })[];
+  return listed.map((pr) => ({ ...pr, author: authorLogin(pr.author) }));
+}
+
+// The login in an author field: gh's --json and GraphQL give an object with
+// a login, or null for a deleted account.
+function authorLogin(author: unknown): string | null {
+  const login = (author as { login?: unknown } | null)?.login;
+  return typeof login === "string" ? login : null;
+}
+
+// Each nested list carries its page flags, so a PR with more reviews, threads
+// or checks than one page holds is marked truncated rather than decided from
+// part of its data. reviews and timelineItems read the newest items (last:),
+// so their flag is hasPreviousPage.
+const SWEEP_QUERY = `
+query($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, baseRefName: "main", first: 50, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        id number isDraft isCrossRepository baseRefName headRefName headRefOid body mergeStateStatus
+        author { login }
+        labels(first: 50) { pageInfo { hasNextPage } nodes { name } }
+        reviewRequests(first: 20) {
+          pageInfo { hasNextPage }
+          nodes { requestedReviewer { ... on Bot { login } ... on User { login } } }
+        }
+        reviews(last: 50) { pageInfo { hasPreviousPage } nodes { author { login } commit { oid } } }
+        reviewThreads(first: 100) {
+          pageInfo { hasNextPage }
+          nodes { isResolved comments(first: 1) { nodes { author { __typename login } } } }
+        }
+        commits(last: 1) {
+          nodes {
+            commit {
+              oid
+              statusCheckRollup {
+                contexts(first: 100) {
+                  pageInfo { hasNextPage }
+                  nodes {
+                    __typename
+                    ... on CheckRun { name status conclusion completedAt }
+                    ... on StatusContext { context state createdAt }
+                  }
+                }
+              }
+            }
+          }
+        }
+        timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 50) {
+          pageInfo { hasPreviousPage }
+          nodes { ... on ReviewRequestedEvent { createdAt requestedReviewer { ... on Bot { login } ... on User { login } } } }
+        }
+      }
+    }
+  }
+}`;
+
+type PageInfo = { hasNextPage?: boolean; hasPreviousPage?: boolean; endCursor?: string | null };
+type Connection<T> = { pageInfo?: PageInfo; nodes?: (T | null)[] } | null | undefined;
+type Login = { login?: string } | null | undefined;
+type CheckContext = {
+  __typename?: string;
+  name?: string;
+  status?: string;
+  conclusion?: string | null;
+  completedAt?: string | null;
+  context?: string;
+  state?: string;
+  createdAt?: string;
+};
+type SweepNode = {
+  id: string;
+  number: number;
+  isDraft: boolean;
+  isCrossRepository: boolean;
+  baseRefName: string;
+  headRefName: string;
+  headRefOid: string;
+  body: string | null;
+  mergeStateStatus: string;
+  author: Login;
+  labels: Connection<{ name: string }>;
+  reviewRequests: Connection<{ requestedReviewer: Login }>;
+  reviews: Connection<{ author: Login; commit: { oid?: string } | null }>;
+  reviewThreads: Connection<{ isResolved: boolean; comments: Connection<{ author?: { __typename?: string } | null }> }>;
+  commits: Connection<{ commit: { oid?: string; statusCheckRollup: { contexts: Connection<CheckContext> } | null } | null }>;
+  timelineItems: Connection<{ createdAt?: string; requestedReviewer?: Login }>;
+};
+
+// The open PRs into main with everything the follow-up sweep decides from
+// (lib/follow-up.mts#sweepPullRequests), through one GraphQL query paged by
+// hand, 50 PRs a page. Normalised to SweepPullRequest.
+export function openPullRequestsForSweep(
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): SweepPullRequest[] {
+  const [owner, name] = repo.split("/") as [string, string];
+  const pullRequests: SweepPullRequest[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = JSON.parse(
+      ghWithStderr(run, [
+        "api", "graphql", "-f", `query=${SWEEP_QUERY}`, "-f", `owner=${owner}`, "-f", `name=${name}`,
+        ...(cursor === undefined ? [] : ["-f", `cursor=${cursor}`]),
+      ]),
+    ) as { data?: { repository?: { pullRequests?: Connection<SweepNode> } } };
+    const connection = page.data?.repository?.pullRequests;
+    // An answer without the list can't be told apart from no open PRs.
+    if (!connection?.nodes) throw new Error(`gh api graphql didn't answer the open pull requests: ${JSON.stringify(page)}`);
+    pullRequests.push(...nodesOf(connection).map(sweepPullRequest));
+    cursor = connection.pageInfo?.hasNextPage ? (connection.pageInfo.endCursor ?? undefined) : undefined;
+    if (connection.pageInfo?.hasNextPage && cursor === undefined) throw new Error("gh api graphql gave a next page with no cursor");
+  } while (cursor !== undefined);
+  return pullRequests;
+}
+
+function nodesOf<T>(connection: Connection<T>): T[] {
+  return (connection?.nodes ?? []).filter((node): node is T => node !== null && node !== undefined);
+}
+
+function truncated(connection: Connection<unknown>): boolean {
+  return connection?.pageInfo?.hasNextPage === true || connection?.pageInfo?.hasPreviousPage === true;
+}
+
+function sweepPullRequest(node: SweepNode): SweepPullRequest {
+  const head = nodesOf(node.commits)[0]?.commit;
+  const contexts = head?.statusCheckRollup?.contexts;
+  return {
+    id: node.id,
+    number: node.number,
+    author: authorLogin(node.author),
+    body: node.body ?? "",
+    baseRefName: node.baseRefName,
+    headRefName: node.headRefName,
+    headRefOid: node.headRefOid,
+    isCrossRepository: node.isCrossRepository,
+    isDraft: node.isDraft,
+    labels: nodesOf(node.labels).map((label) => label.name),
+    mergeStateStatus: node.mergeStateStatus,
+    reviewRequests: nodesOf(node.reviewRequests).flatMap((request) => {
+      const login = request.requestedReviewer?.login;
+      return typeof login === "string" ? [login] : [];
+    }),
+    reviews: nodesOf(node.reviews).map((review) => ({ author: authorLogin(review.author), commitOid: review.commit?.oid ?? null })),
+    threads: nodesOf(node.reviewThreads).map((thread) => {
+      const first = nodesOf(thread.comments)[0];
+      const author = first?.author;
+      return { resolved: thread.isResolved, byBot: author?.__typename === "Bot" };
+    }),
+    checks: nodesOf(contexts).map(checkState),
+    copilotRequestedAt: nodesOf(node.timelineItems)
+      .filter((event) => typeof event.createdAt === "string" && isCopilot(event.requestedReviewer?.login ?? null))
+      .map((event) => event.createdAt as string),
+    truncated:
+      [node.labels, node.reviewRequests, node.reviews, node.reviewThreads, contexts, node.timelineItems].some(truncated) ||
+      nodesOf(node.reviewThreads).some((thread) => truncated(thread.comments)) ||
+      // The rollup read must be the head's: checks on any other commit say
+      // nothing about whether the head is settled.
+      (head?.oid !== undefined && head.oid !== node.headRefOid),
+  };
+}
+
+// A check run is green when it succeeded, or was neutral or skipped; a
+// status only when it succeeded. Any other value, an unknown one included,
+// counts as red. A status that's pending or expected hasn't completed, and
+// neither has a context of a type the query didn't ask for.
+function checkState(context: CheckContext): CheckState {
+  if (context.__typename === "StatusContext") {
+    const state = context.state ?? "";
+    return {
+      name: context.context ?? "",
+      completed: state !== "PENDING" && state !== "EXPECTED",
+      green: state === "SUCCESS",
+      completedAt: context.createdAt ?? null,
+    };
+  }
+  return {
+    name: context.name ?? "",
+    completed: context.status === "COMPLETED",
+    green: ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(context.conclusion ?? ""),
+    completedAt: context.completedAt ?? null,
+  };
+}
+
+// Whether `login` is Copilot's code-review account. GitHub names it
+// differently across REST, GraphQL and review requests ("Copilot",
+// "copilot-pull-request-reviewer" and "...[bot]"), so every form is accepted.
+// lib/follow-up.mts re-exports it, and the sweep decides with it.
+export function isCopilot(login: string | null): boolean {
+  const name = login?.toLowerCase().replace(/\[bot\]$/, "");
+  return name === "copilot-pull-request-reviewer" || name === "copilot";
+}
+
+// Asks Copilot to review a PR again (lib/follow-up.mts#decide), once CI has
+// been done for a while with no review of the head and no pending request.
+// union: true adds Copilot to the PR's reviewers rather than replacing them.
+export function requestCopilotReview(pullRequestId: string, run: typeof execFileSync = execFileSync): void {
+  const mutation =
+    "mutation($pullRequestId: ID!) { requestReviewsByLogin(input: { pullRequestId: $pullRequestId, " +
+    `botLogins: [${JSON.stringify(COPILOT_REVIEWER)}], union: true }) { clientMutationId } }`;
+  ghWithStderr(run, ["api", "graphql", "-f", `query=${mutation}`, "-f", `pullRequestId=${pullRequestId}`]);
+}
+
+// Updates a PR's branch from its base on GitHub's server
+// (lib/follow-up.mts#decide), for a settled PR whose only problem is being
+// behind main. expected_head_sha makes GitHub refuse (422) when the head
+// moved since the sweep read it, rather than merge into a head it never
+// judged.
+export function updatePullRequestBranch(
+  number: number,
+  expectedHeadSha: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  ghWithStderr(run, ["api", "--method", "PUT", `repos/${repo}/pulls/${number}/update-branch`, "-f", `expected_head_sha=${expectedHeadSha}`]);
 }
 
 // The paths an open PR changes.
@@ -509,6 +757,19 @@ export function cacheHostLogin(run: typeof execFileSync = execFileSync): string 
   signedInLogin = hostLogin(run);
   return signedInLogin;
 }
+
+// The host's own login (see hostLogin), cached the same way markerComments and
+// openIssuesWithComment already do, for the follow-up sweep
+// (lib/follow-up.mts), which needs it outside any single GitHub read: "the
+// repository owner opened it" means this login authored the PR (#77, #214).
+export function signedInHostLogin(run: typeof execFileSync = execFileSync): string {
+  if (sweepLogin?.run !== run) sweepLogin = { run, login: hostLogin(run) };
+  return sweepLogin.login;
+}
+
+// signedInHostLogin's cache, kept with the runner that read it, so a caller
+// passing a different gh (a test's stub) never gets another runner's login.
+let sweepLogin: { run: typeof execFileSync; login: string } | undefined;
 
 // The comments on the issue or PR `number` that carry `marker` and were posted
 // since `label` was last removed (see markerCommentsSince). Only the host's own

@@ -1,7 +1,15 @@
 // Parallel Planner with Review — plan → execute → review → PR loop
 //
 // This template drives a multi-phase workflow:
-//   Phase 0 (Umbrellas):        The host closes as completed every umbrella
+//   Phase 0 (Housekeeping):     Two steps that need no agent. First the
+//                               follow-up sweep (lib/follow-up.mts): for each
+//                               open PR the host published for an in-scope
+//                               issue, it re-requests a Copilot review that
+//                               never came, updates a settled PR that's only
+//                               behind main on GitHub, and logs one that needs
+//                               a follow-up pass; and it hands back an issue
+//                               whose latest PR closed without merging. Then
+//                               the host closes as completed every umbrella
 //                               (an issue intake split) whose sub-issues have
 //                               all closed as completed (lib/umbrella.mts).
 //   Phase 0a (Intake):          One run judges every open issue that carries
@@ -78,6 +86,7 @@ import { clearStaleBuildingLabels, installBuildingLabelRelease, releaseAllBuildi
 import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { BUILDING_LABEL, MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
+import { followUpPhase } from "./lib/follow-up.mts";
 import { gateIssues } from "./lib/gate.mts";
 import { cacheHostLogin, ensureLabels, listSandcastleIssues, openPullRequests } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
@@ -127,9 +136,11 @@ try {
     console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
     // -----------------------------------------------------------------------
-    // Phase 0: Umbrellas
+    // Phase 0: Housekeeping
     // -----------------------------------------------------------------------
-    // A failure is logged, and the umbrellas are checked again next round.
+    // The sweep runs first, even in a round that then exits early. A failure
+    // in either step is logged, and the step runs again next round.
+    followUpPhase();
     umbrellaPhase();
 
     // -----------------------------------------------------------------------

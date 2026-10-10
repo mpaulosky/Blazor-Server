@@ -100,3 +100,23 @@ describe("main.mts's umbrella wiring", () => {
     assert.ok(loop < umbrellaCall && umbrellaCall < intakeCall, "main.mts doesn't check umbrellas in each round, before intake");
   });
 });
+
+// Each round sweeps the open Sandcastle PRs before anything else, so a PR
+// falls no further behind, misses no Copilot review, and a closed-without-
+// merging issue is handed back even in a round that ends early with nothing
+// ready (#77).
+describe("main.mts's follow-up wiring", () => {
+  it("sweeps open pull requests in each round, before the umbrella check and intake", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration");
+    const followUpCall = mainMts.indexOf("followUpPhase(");
+    const umbrellaCall = mainMts.indexOf("umbrellaPhase(");
+    const intakeCall = mainMts.indexOf("intakePhase(");
+
+    assert.notEqual(followUpCall, -1, "main.mts doesn't call followUpPhase(");
+    assert.ok(
+      loop < followUpCall && followUpCall < umbrellaCall && umbrellaCall < intakeCall,
+      "main.mts doesn't sweep pull requests in each round, before the umbrella check and intake",
+    );
+  });
+});

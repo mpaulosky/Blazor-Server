@@ -16,10 +16,12 @@ import {
   copyToWorktree,
   DESIGN_MARKER,
   hooks,
+  PR_MARKER,
   PUBLISH_RETRY_ATTEMPTS,
   type OptionalRole,
 } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
+import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, repoName, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
@@ -73,7 +75,9 @@ export async function publish(
   const docsNote = docsFailed
     ? "\n\n⚠️ The documentation step failed, so this PR may leave `CONTEXT.md`, `README.md` or the guides out of date."
     : "";
-  const body = `Closes #${issue.number}\n\n${reviewNote}${docsNote}`;
+  // PR_MARKER is how the follow-up sweep (lib/follow-up.mts) tells a PR the
+  // host published from a collaborator's on a matching branch (#77).
+  const body = `${PR_MARKER}\nCloses #${issue.number}\n\n${reviewNote}${docsNote}`;
   // A retry after a create that GitHub carried out but answered with an error
   // finds that PR rather than open a second one: openPullRequest looks for an
   // open PR from the branch first.
@@ -235,6 +239,13 @@ export type BuildHost = {
   // Whether what the commits from `base` to `commit` publish (see
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
   leaksSecret(base: string, commit: string): boolean;
+  // Deletes the refs of `branch` that still hold the work of the issue's
+  // latest Sandcastle PR, when that PR was closed without merging and a
+  // person has since re-queued the issue, so the build starts from main
+  // (#77). Returns that PR's number and the refs it deleted, or undefined
+  // when there was nothing to do. Throws when nobody re-queued the issue
+  // (handing it back first) or a ref can't be deleted.
+  startFromMain(issueNumber: number, branch: string, base: string): { pr: number; deleted: string[] } | undefined;
   publish: typeof publish;
   // What's wrong with how the worktree finds its repository (see
   // lib/host-safety.mts); empty when nothing is.
@@ -281,6 +292,7 @@ const liveHost: BuildHost = {
   markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
   unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
+  startFromMain: (issueNumber, branch, base) => sweepStartFromMain(issueNumber, branch, base),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
   worktreeProblems,
@@ -346,6 +358,15 @@ async function buildMarkedIssue(
   base: string,
   host: BuildHost,
 ): Promise<BuildResult> {
+  // Only once the issue is marked, so two runs never delete the same refs,
+  // and before the sandbox, so a closed PR's work is never built on. A throw
+  // stops the build uncounted (see buildIssue): building on the old work is
+  // what the hand-back's comment promised wouldn't happen.
+  const fresh = host.startFromMain(issue.number, branch, base);
+  if (fresh !== undefined && fresh.deleted.length > 0) {
+    host.log(`  #${issue.number} PR #${fresh.pr} was closed without merging, so the build starts from main: deleted ${fresh.deleted.join(", ")}`);
+  }
+
   const sandbox = await host.createSandbox(branch);
 
   const promptArgs = issuePromptArgs(issue, branch);

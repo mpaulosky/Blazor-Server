@@ -98,6 +98,138 @@ export function fetchMain(): string {
   return git("rev-parse", "--verify", "refs/remotes/origin/main^{commit}");
 }
 
+// The git operations discardClosedWork needs; tests pass a stub.
+export type BranchRefs = {
+  // git ls-remote origin refs/heads/<branch>; undefined when origin has no such branch.
+  remoteHead(branch: string): string | undefined;
+  // git rev-parse --verify --quiet <ref>^{commit}; undefined when the ref doesn't exist.
+  localHead(ref: string): string | undefined;
+  // git merge-base --is-ancestor; false on exit 1 or a missing object.
+  contains(commit: string, ancestor: string): boolean;
+  // git cat-file -e <commit>^{commit}; whether the repository has the commit.
+  hasCommit(commit: string): boolean;
+  // git fetch origin refs/pull/<n>/head, which GitHub keeps after the PR's
+  // branch is deleted.
+  fetchPullHead(number: number): void;
+  // git merge-base; undefined on exit 1, when the two share no commit.
+  mergeBase(commit: string, other: string): string | undefined;
+  // git branch -D; git refuses when a worktree has the branch checked out.
+  deleteLocalBranch(branch: string): void;
+  // git update-ref -d.
+  deleteRef(ref: string): void;
+  // git push --force-with-lease=refs/heads/<b>:<sha> origin :refs/heads/<b>.
+  deleteRemote(branch: string, expectedSha: string): void;
+};
+
+// A git failure's exit status, read from the execFileSync error runHostGit
+// keeps as the cause.
+function exitStatus(error: unknown): unknown {
+  return ((error as { cause?: { status?: unknown } }).cause ?? {}).status;
+}
+
+const originRefs: BranchRefs = {
+  remoteHead: (branch) => git("ls-remote", "origin", `refs/heads/${branch}`).split(/\s/)[0] || undefined,
+  localHead: (ref) => {
+    try {
+      return git("rev-parse", "--verify", "--quiet", `${ref}^{commit}`);
+    } catch (error) {
+      // --quiet exits 1 with no output only when the ref doesn't exist; any
+      // other failure is rethrown rather than read as a missing ref.
+      if (exitStatus(error) === 1) return undefined;
+      throw error;
+    }
+  },
+  contains: (commit, ancestor) => {
+    try {
+      git("merge-base", "--is-ancestor", ancestor, commit);
+      return true;
+    } catch (error) {
+      if (exitStatus(error) === 1) return false;
+      // An object this repository doesn't have can't be in any of its refs.
+      if (/Not a valid (?:object|commit) name/.test(String(error))) return false;
+      throw error;
+    }
+  },
+  hasCommit: (commit) => {
+    try {
+      git("cat-file", "-e", `${commit}^{commit}`);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  fetchPullHead: (number) => void git("fetch", "--quiet", "origin", `refs/pull/${number}/head`),
+  mergeBase: (commit, other) => {
+    try {
+      return git("merge-base", commit, other);
+    } catch (error) {
+      if (exitStatus(error) === 1) return undefined;
+      throw error;
+    }
+  },
+  deleteLocalBranch: (branch) => void git("branch", "-D", branch),
+  deleteRef: (ref) => void git("update-ref", "-d", ref),
+  deleteRemote: (branch, expectedSha) =>
+    void git("push", "--quiet", `--force-with-lease=refs/heads/${branch}:${expectedSha}`, "origin", `:refs/heads/${branch}`),
+};
+
+// Deletes each ref of `branch` that holds the work of `closed`, an issue's
+// Sandcastle PR that closed without merging, and returns the refs it
+// deleted: refs/heads/<branch>, refs/remotes/origin/<branch> and
+// origin/<branch>, in that order (lib/follow-up.mts#startFromMain). Leaves
+// everything alone when `base` already contains the closed head. A ref holds
+// the closed PR's work when it shares a commit with the closed head that
+// `base` doesn't have, whether it contains the head, lags behind it (the
+// local branch sits where the sandbox pushed, and an update-branch or a
+// commit made on GitHub moves the PR past it) or has diverged from it. Any
+// other ref is left alone, so a fresh attempt's commits, which start from
+// main, survive. The closed head is fetched first when the repository
+// doesn't have it (its branch was deleted with the PR), and a head that
+// can't be fetched throws: without it, no ref can be told apart. All three
+// go because Sandcastle's `git worktree add` checks out a local branch if
+// there is one, else DWIMs from origin/<branch>, and starts fresh from main
+// only when neither exists. Every call goes through `refs` (live: git(),
+// hooks off, main checkout), so a test can stub it.
+export function discardClosedWork(
+  branch: string,
+  closed: { number: number; headRefOid: string },
+  base: string,
+  refs: BranchRefs = originRefs,
+): string[] {
+  const closedHead = closed.headRefOid;
+  if (!refs.hasCommit(closedHead)) refs.fetchPullHead(closed.number);
+  if (!refs.hasCommit(closedHead)) {
+    throw new Error(`PR #${closed.number}'s head ${closedHead} isn't in the repository and couldn't be fetched, so its work can't be told from a fresh attempt`);
+  }
+  if (refs.contains(base, closedHead)) return [];
+  const holdsClosedWork = (commit: string): boolean => {
+    const shared = refs.mergeBase(commit, closedHead);
+    return shared !== undefined && !refs.contains(base, shared);
+  };
+  const deleted: string[] = [];
+  // The local branch goes first: it's the one git can refuse to delete (a
+  // worktree still has it checked out), and failing there leaves origin's
+  // branch untouched.
+  const localRef = `refs/heads/${branch}`;
+  const local = refs.localHead(localRef);
+  if (local !== undefined && holdsClosedWork(local)) {
+    refs.deleteLocalBranch(branch);
+    deleted.push(localRef);
+  }
+  const trackingRef = `refs/remotes/origin/${branch}`;
+  const tracking = refs.localHead(trackingRef);
+  if (tracking !== undefined && holdsClosedWork(tracking)) {
+    refs.deleteRef(trackingRef);
+    deleted.push(trackingRef);
+  }
+  const remote = refs.remoteHead(branch);
+  if (remote !== undefined && holdsClosedWork(remote)) {
+    refs.deleteRemote(branch, remote);
+    deleted.push(`origin/${branch}`);
+  }
+  return deleted;
+}
+
 // Name each issue's branch, and fetch the ones that already exist on origin
 // into their remote-tracking refs so createSandbox() checks them out from
 // origin/<branch>. Without the fetch, Sandcastle finds no such branch and

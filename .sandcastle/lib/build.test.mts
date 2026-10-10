@@ -13,7 +13,15 @@ import {
   UncountedStopError,
   type BuildHost,
 } from "./build.mts";
-import { BUILD_FAILED_MARKER, BUILD_ROLES, DESIGN_MARKER, GATE_FIXER_ATTEMPTS, PUBLISH_RETRY_ATTEMPTS, type OptionalRole } from "./config.mts";
+import {
+  BUILD_FAILED_MARKER,
+  BUILD_ROLES,
+  DESIGN_MARKER,
+  GATE_FIXER_ATTEMPTS,
+  PR_MARKER,
+  PUBLISH_RETRY_ATTEMPTS,
+  type OptionalRole,
+} from "./config.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [], roles: [] as OptionalRole[] };
 
@@ -125,10 +133,16 @@ function host(
   const buildingCalls: number[] = [];
   const designNoteCalls: number[] = [];
   const publishCalls: { reviewed: boolean; docsFailed: boolean }[] = [];
+  const startFromMainCalls: { issueNumber: number; branch: string; base: string }[] = [];
   const buildHost: BuildHost = {
     createSandbox: async () => {
       order.push("create");
       return sandbox;
+    },
+    startFromMain: (issueNumber, startFromMainBranch, startFromMainBase) => {
+      order.push("startFromMain");
+      startFromMainCalls.push({ issueNumber, branch: startFromMainBranch, base: startFromMainBase });
+      return undefined;
     },
     commitsAhead: (aheadBranch, aheadBase) => {
       aheadBranches.push(aheadBranch);
@@ -176,7 +190,7 @@ function host(
   };
   return {
     steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
-    order, buildingCalls, designNoteCalls, publishCalls, workCommands,
+    order, buildingCalls, designNoteCalls, publishCalls, workCommands, startFromMainCalls,
   };
 }
 
@@ -771,8 +785,33 @@ describe("buildIssue marking the issue as building", () => {
 
     await buildIssue(issue, branch, base, buildHost);
 
-    assert.deepEqual(order.slice(0, 2), ["mark", "create"]);
+    assert.deepEqual(order.slice(0, 3), ["mark", "startFromMain", "create"]);
     assert.deepEqual(order.slice(-2), ["close", "unmark"]);
+  });
+
+  // #77: a closed-without-merging PR's old work must be discarded before a
+  // fresh sandbox is created from the branch, but only once the issue is
+  // marked (so a second run can't race to delete the same refs).
+  it("calls startFromMain with the issue, branch and base after marking the issue and before creating its sandbox", async () => {
+    const { order, startFromMainCalls, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(order.slice(0, 3), ["mark", "startFromMain", "create"]);
+    assert.deepEqual(startFromMainCalls, [{ issueNumber: issue.number, branch, base }]);
+  });
+
+  it("propagates a throw from startFromMain before any sandbox is created, still unmarks the issue, and records no build failure", async () => {
+    const { order, recordBuildFailureCalls, buildHost } = host([0, 0]);
+    buildHost.startFromMain = () => {
+      throw new Error("git branch -D failed: worktree in use");
+    };
+
+    await assert.rejects(() => buildIssue(issue, branch, base, buildHost), /worktree in use/);
+
+    assert.ok(!order.includes("create"), "no sandbox should be created");
+    assert.ok(order.includes("unmark"), "the issue should still be unmarked");
+    assert.deepEqual(recordBuildFailureCalls, []);
   });
 
   for (const role of ["tester", "backend"]) {
@@ -980,6 +1019,21 @@ describe("publish", () => {
     await publish(issue, branch, "a".repeat(40), true, false, () => {}, createPullRequest, async () => {});
 
     assert.doesNotMatch(body, /documentation/i);
+  });
+
+  // #77: the follow-up sweep (lib/follow-up.mts#isSandcastlePullRequest) only
+  // ever acts on a PR whose body carries this marker, so every PR the host
+  // publishes from now on must carry it.
+  it("carries PR_MARKER in the body, so the follow-up sweep recognises a PR the host published", async () => {
+    let body = "";
+    const createPullRequest = (_branch: string, _title: string, prBody: string): string => {
+      body = prBody;
+      return "https://github.com/o/r/pull/1";
+    };
+
+    await publish(issue, branch, "a".repeat(40), true, false, () => {}, createPullRequest, async () => {});
+
+    assert.ok(body.includes(PR_MARKER), body);
   });
 });
 

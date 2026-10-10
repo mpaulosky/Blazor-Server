@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { execFileSync } from "node:child_process";
-import { SANDCASTLE_LABELS } from "./config.mts";
+import { COPILOT_REVIEWER, SANDCASTLE_LABELS } from "./config.mts";
 import {
   addIssueLabel,
   addSubIssue,
   cacheHostLogin,
+  type ClosedPullRequest,
+  closedPullRequests,
   closeIssueAsCompleted,
   commentOnIssue,
   createIssue,
@@ -22,13 +24,17 @@ import {
   markerCommentsSince,
   openIssuesWithComment,
   openPullRequest,
+  openPullRequestsForSweep,
   ownerApproved,
   removeIssueLabel,
+  requestCopilotReview,
   sameRepoBlockers,
   sameRepository,
+  signedInHostLogin,
   subIssuesOf,
   type TimelineLabelEvent,
   type TimestampedComment,
+  updatePullRequestBranch,
 } from "./github.mts";
 import { HandBackReport } from "./report.mts";
 
@@ -809,4 +815,192 @@ describe("hasLabel", () => {
   it("doesn't match a label the issue doesn't carry", () => {
     assert.equal(hasLabel({ labels: ["Sandcastle"] }, "sandcastle:ready"), false);
   });
+});
+
+// The follow-up sweep's own login (#77), read and cached the same way
+// hostLogin's other callers already do (see cacheHostLogin and
+// markerComments above).
+describe("signedInHostLogin", () => {
+  it("returns the login gh is signed in as", () => {
+    const { calls, run } = recordingGh(["sandcastle-bot\n"]);
+
+    assert.equal(signedInHostLogin(run), "sandcastle-bot");
+    assert.deepEqual(calls[0]!.args, ["api", "user", "--jq", ".login"]);
+  });
+
+  it("reads the login once and reuses it on a later call", () => {
+    const { calls, run } = recordingGh(["sandcastle-bot\n"]);
+
+    signedInHostLogin(run);
+    signedInHostLogin(run);
+
+    assert.equal(calls.length, 1);
+  });
+});
+
+describe("closedPullRequests", () => {
+  it("lists the author's closed PRs into main, newest first", () => {
+    const closed: ClosedPullRequest[] = [
+      {
+        number: 50,
+        author: "host",
+        body: "<!-- sandcastle:pr -->\nCloses #42",
+        baseRefName: "main",
+        headRefName: "feature/42-add-search",
+        isCrossRepository: false,
+        headRefOid: "a".repeat(40),
+        state: "CLOSED",
+        closedAt: "2026-10-01T00:00:00Z",
+      },
+    ];
+    // gh's --json gives each author as an object with a login.
+    const answer = closed.map((pr) => ({ ...pr, author: { login: pr.author } }));
+    const { calls, run } = recordingGh([JSON.stringify(answer)]);
+
+    const result = closedPullRequests("host", run, "o/r");
+
+    assert.deepEqual(result, closed);
+    assert.deepEqual(calls[0]!.args, [
+      "pr", "list", "--state", "closed", "--author", "host", "--base", "main", "--repo", "o/r", "--limit", "1000",
+      "--json", "number,author,body,baseRefName,headRefName,headRefOid,isCrossRepository,state,closedAt",
+    ]);
+  });
+});
+
+describe("updatePullRequestBranch", () => {
+  it("PUTs the update-branch endpoint with the expected head SHA", () => {
+    const { calls, run } = recordingGh();
+
+    updatePullRequestBranch(42, "a".repeat(40), run, "o/r");
+
+    assert.deepEqual(calls[0]!.args, [
+      "api", "--method", "PUT", "repos/o/r/pulls/42/update-branch", "-f", `expected_head_sha=${"a".repeat(40)}`,
+    ]);
+  });
+});
+
+describe("requestCopilotReview", () => {
+  it("requests a review from Copilot's bot login through requestReviewsByLogin", () => {
+    const { calls, run } = recordingGh();
+
+    requestCopilotReview("PR_kwABC", run);
+
+    assert.equal(calls[0]!.args[0], "api");
+    assert.equal(calls[0]!.args[1], "graphql");
+    const body = calls[0]!.args.join(" ") + String(calls[0]!.input ?? "");
+    assert.match(body, /requestReviewsByLogin/);
+    assert.match(body, new RegExp(COPILOT_REVIEWER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(body, /union:\s*true/);
+    assert.match(body, /PR_kwABC/);
+  });
+});
+
+describe("openPullRequestsForSweep", () => {
+  // One GraphQL page shaped as lib/follow-up.mts's design describes: the PR
+  // itself, review requests, reviews, threads and the head's check rollup,
+  // each with its own pageInfo.
+  function page() {
+    return {
+      data: {
+        repository: {
+          pullRequests: {
+            pageInfo: { hasNextPage: false },
+            nodes: [
+              {
+                id: "PR_1",
+                number: 42,
+                isDraft: false,
+                isCrossRepository: false,
+                baseRefName: "main",
+                headRefName: "feature/42-add-search",
+                headRefOid: "a".repeat(40),
+                body: "<!-- sandcastle:pr -->\nCloses #42",
+                author: { login: "host" },
+                mergeStateStatus: "CLEAN",
+                labels: { pageInfo: { hasNextPage: false }, nodes: [] },
+                reviewRequests: {
+                  pageInfo: { hasNextPage: false },
+                  nodes: [{ requestedReviewer: { login: COPILOT_REVIEWER } }],
+                },
+                reviews: {
+                  pageInfo: { hasNextPage: false },
+                  nodes: [{ author: { login: COPILOT_REVIEWER }, commit: { oid: "a".repeat(40) } }],
+                },
+                reviewThreads: {
+                  pageInfo: { hasNextPage: false },
+                  nodes: [
+                    { isResolved: false, comments: { nodes: [{ author: { __typename: "Bot", login: "github-advanced-security[bot]" } }] } },
+                    { isResolved: false, comments: { nodes: [{ author: { __typename: "User", login: "reviewer" } }] } },
+                  ],
+                },
+                commits: {
+                  nodes: [
+                    {
+                      commit: {
+                        statusCheckRollup: {
+                          contexts: {
+                            pageInfo: { hasNextPage: false },
+                            nodes: [{ __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "SUCCESS", completedAt: "2026-10-01T00:00:00Z" }],
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+                timelineItems: {
+                  pageInfo: { hasPreviousPage: false },
+                  nodes: [{ createdAt: "2026-10-01T00:00:00Z", requestedReviewer: { login: COPILOT_REVIEWER } }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    };
+  }
+
+  it("normalises Copilot's review request, a bot thread and the head's check state", () => {
+    const { run } = recordingGh([JSON.stringify(page())]);
+
+    const [pr] = openPullRequestsForSweep(run, "o/r");
+
+    assert.equal(pr!.number, 42);
+    assert.equal(pr!.headRefOid, "a".repeat(40));
+    assert.deepEqual(pr!.reviewRequests, [COPILOT_REVIEWER]);
+    assert.deepEqual(pr!.reviews, [{ author: COPILOT_REVIEWER, commitOid: "a".repeat(40) }]);
+    assert.deepEqual(pr!.threads, [
+      { resolved: false, byBot: true },
+      { resolved: false, byBot: false },
+    ]);
+    assert.deepEqual(pr!.checks, [{ name: "build", completed: true, green: true, completedAt: "2026-10-01T00:00:00Z" }]);
+    assert.equal(pr!.truncated, false);
+  });
+
+  // Each list is read from the end it pages from: reviews and timelineItems
+  // with last:, so GitHub flags what's left with hasPreviousPage, and the
+  // rest with first:, flagged by hasNextPage.
+  type Paged = { pageInfo: Record<string, boolean> };
+  const cases: [list: string, flag: string, pick: (node: Record<string, unknown>) => Paged][] = [
+    ["labels", "hasNextPage", (node) => node.labels as Paged],
+    ["reviewRequests", "hasNextPage", (node) => node.reviewRequests as Paged],
+    ["reviews", "hasPreviousPage", (node) => node.reviews as Paged],
+    ["reviewThreads", "hasNextPage", (node) => node.reviewThreads as Paged],
+    [
+      "the head's check contexts",
+      "hasNextPage",
+      (node) => (node.commits as { nodes: { commit: { statusCheckRollup: { contexts: Paged } } }[] }).nodes[0]!.commit.statusCheckRollup.contexts,
+    ],
+    ["timelineItems", "hasPreviousPage", (node) => node.timelineItems as Paged],
+  ];
+  for (const [list, flag, pick] of cases) {
+    it(`marks a PR truncated when ${list} sets ${flag}, rather than deciding from part of the data`, () => {
+      const truncatedPage = page();
+      pick(truncatedPage.data.repository.pullRequests.nodes[0] as unknown as Record<string, unknown>).pageInfo[flag] = true;
+      const { run } = recordingGh([JSON.stringify(truncatedPage)]);
+
+      const [pr] = openPullRequestsForSweep(run, "o/r");
+
+      assert.equal(pr!.truncated, true);
+    });
+  }
 });
