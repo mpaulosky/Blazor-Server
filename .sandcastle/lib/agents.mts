@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { ROLE_AGENTS, type Role } from "./config.mts";
+import { RunLimits, runLimits } from "./limits.mts";
 import { usageReport } from "./report.mts";
 
 // The options a role fixes; callers supply everything else.
@@ -38,9 +39,18 @@ export function withSharedRules<T extends { prompt?: string; promptFile?: string
 export function runRole<T>(
   role: Role,
   options: Omit<sandcastle.RunOptions, RoleFixed | "output"> & { output: sandcastle.OutputObjectDefinition<T> },
+  limits?: RunLimits,
 ): Promise<sandcastle.RunResult & { output: T }>;
-export function runRole(role: Role, options: Omit<sandcastle.RunOptions, RoleFixed>): Promise<sandcastle.RunResult>;
-export async function runRole(role: Role, options: Omit<sandcastle.RunOptions, RoleFixed>): Promise<sandcastle.RunResult> {
+export function runRole(
+  role: Role,
+  options: Omit<sandcastle.RunOptions, RoleFixed>,
+  limits?: RunLimits,
+): Promise<sandcastle.RunResult>;
+export async function runRole(
+  role: Role,
+  options: Omit<sandcastle.RunOptions, RoleFixed>,
+  limits: RunLimits = runLimits,
+): Promise<sandcastle.RunResult> {
   usageReport.record(role, []);
   const result = await sandcastle.run({ ...withSharedRules(options), ...roleOptions(role) });
   usageReport.record(role, result.iterations);
@@ -51,9 +61,18 @@ export async function runRoleInSandbox(
   sandbox: sandcastle.Sandbox,
   role: Role,
   options: Omit<sandcastle.SandboxRunOptions, RoleFixed>,
+  limits: RunLimits = runLimits,
 ): Promise<sandcastle.SandboxRunResult> {
   usageReport.record(role, []);
   const result = await sandbox.run({ ...withSharedRules(options), ...roleOptions(role) });
   usageReport.record(role, result.iterations);
   return result;
+}
+
+// Runs one role through `start`. Before the run: limits.throwIfStopped(). If
+// the run rejects with an error isUsageLimitError accepts: limits.hitUsageLimit(reason),
+// then throws UncountedStopError(reason, { cause: error }). Any other error is
+// rethrown unchanged.
+export async function runWithinLimits<R>(role: Role, start: () => Promise<R>, limits: RunLimits = runLimits): Promise<R> {
+  throw new Error("Not implemented");
 }
