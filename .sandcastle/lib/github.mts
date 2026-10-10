@@ -40,19 +40,26 @@ export type SandcastleIssue = Omit<GhIssue, "comments"> & {
 // never lets a stranger's text through. `canPush` caches each author's
 // answer, so a caller that shares one map across issues looks each author up
 // once. Only GitHub's answer is cached, never a failure: one transient error
-// would otherwise drop a maintainer's guidance for the rest of the run.
+// would otherwise drop a maintainer's guidance for the rest of the run. A
+// failure goes in `failed` instead, which a caller shares across one round's
+// issues and starts afresh each round: the author's comments are dropped
+// without another lookup or warning until then, since a retry within the same
+// burst would most likely fail too and deepen a rate limit.
 export function ownerApproved(
   issue: GhIssue,
   repo: string = repoName(),
   run: typeof execFileSync = execFileSync,
   canPush: Map<string, boolean> = new Map(),
   warn: (message: string) => void = console.error,
+  failed: Set<string> = new Set(),
 ): SandcastleIssue {
   const trusted = (author: string): boolean => {
     const cached = canPush.get(author);
     if (cached !== undefined) return cached;
+    if (failed.has(author)) return false;
     const allowed = hasWriteAccess(author, repo, run, warn);
-    if (allowed !== undefined) canPush.set(author, allowed);
+    if (allowed === undefined) failed.add(author);
+    else canPush.set(author, allowed);
     return allowed ?? false;
   };
   return {
@@ -68,9 +75,10 @@ const PUSH_PERMISSIONS: ReadonlySet<unknown> = new Set(["admin", "maintain", "wr
 
 // Whether `login` can push to `repo`. GitHub reports maintain as "write" in
 // `.permission` and names it only in `.role_name`, so either field counts. A
-// 404 means GitHub has no such user, as for the bare "github-actions" gh
-// prints for a GitHub App's comment: that's a definite no, cached and not
-// reported. Any other failure, or an answer with neither field, is reported
+// 404 whose message says the login "is not a user", as for the bare
+// "github-actions" gh prints for a GitHub App's comment, is a definite no,
+// cached and not reported. Any other 404 means the token can't see the
+// repository, which says nothing about the author. Any other failure, or an answer with neither field, is reported
 // through `warn` and returns undefined: it says nothing about the author's
 // access.
 function hasWriteAccess(
@@ -88,7 +96,7 @@ function hasWriteAccess(
     }
     return PUSH_PERMISSIONS.has(answer.permission) || PUSH_PERMISSIONS.has(answer.role_name);
   } catch (error) {
-    if (/\(HTTP 404\)/.test(String(error))) return false;
+    if (/is not a user \(HTTP 404\)/.test(String(error))) return false;
     warn(`  ⚠ Couldn't read ${login}'s permission on ${repo}, so their comments are left out this time: ${error}`);
     return undefined;
   }
@@ -109,7 +117,9 @@ export function listSandcastleIssues(): SandcastleIssue[] {
     ),
   ) as GhIssue[];
   const repo = repoName();
-  return issues.map((issue) => ownerApproved(issue, repo, execFileSync, commenterCanPush));
+  // Each call is a round, so a lookup that failed is tried again next round.
+  const failed = new Set<string>();
+  return issues.map((issue) => ownerApproved(issue, repo, execFileSync, commenterCanPush, console.error, failed));
 }
 
 export type OpenPullRequest = { number: number; headRefName: string };

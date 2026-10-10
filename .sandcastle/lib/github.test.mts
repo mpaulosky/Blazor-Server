@@ -128,11 +128,58 @@ describe("ownerApproved", () => {
 
       assert.deepEqual(warnings, []);
     });
+
+    // A 404 without "is not a user" means the token can't see the repository
+    // (an unauthorized PAT, a lapsed SSO grant, the wrong repo). Caching that
+    // as no access would drop every maintainer's comment for the run, silently.
+    it("treats a 404 that isn't about the login as a failed lookup: reported and not cached", () => {
+      const issue = issueWith(["maintainer", "Use the existing helper."]);
+      const repoNotFound = Object.assign(new Error("Command failed"), { stderr: "gh: Not Found (HTTP 404)\n" });
+      const { run } = stubPermissions({ maintainer: repoNotFound });
+      const canPush = new Map<string, boolean>();
+      const warnings: string[] = [];
+
+      const kept = ownerApproved(issue, "o/r", run, canPush, (message) => warnings.push(message)).comments;
+
+      assert.deepEqual(kept, []);
+      assert.equal(warnings.length, 1);
+      assert.equal(canPush.has("maintainer"), false);
+    });
+  });
+
+  // Within one round a lookup that failed would most likely fail again (a
+  // rate limit, an outage), and each retry deepens a rate limit. So it waits
+  // for the next round, which passes a fresh `failed` set.
+  describe("a lookup that failed in this round", () => {
+    const badGateway = () => Object.assign(new Error("Command failed"), { stderr: "gh: Bad Gateway (HTTP 502)\n" });
+
+    it("isn't retried for the author's later comments on the same issue, and is reported once", () => {
+      const issue = issueWith(["maintainer", "First comment."], ["maintainer", "Second comment."]);
+      const { calls, run } = stubPermissions({ maintainer: badGateway() });
+      const warnings: string[] = [];
+
+      ownerApproved(issue, "o/r", run, new Map(), (message) => warnings.push(message));
+
+      assert.equal(calls.length, 1);
+      assert.equal(warnings.length, 1);
+    });
+
+    it("isn't retried on another issue in the same round", () => {
+      const first = issueWith(["maintainer", "First comment."]);
+      const second = { ...issueWith(["maintainer", "Second comment."]), number: 4 };
+      const { calls, run } = stubPermissions({ maintainer: badGateway() });
+      const canPush = new Map<string, boolean>();
+      const failed = new Set<string>();
+
+      for (const issue of [first, second]) ownerApproved(issue, "o/r", run, canPush, () => {}, failed);
+
+      assert.equal(calls.length, 1);
+    });
   });
 
   // A failure says nothing about the author's access, so caching it would
   // drop a maintainer's guidance for the rest of the run after one blip.
-  it("looks an author up again after a lookup that failed", () => {
+  it("looks an author up again in a later round after a lookup that failed", () => {
     const issue = issueWith(["maintainer", "Use the existing helper."]);
     const answers: (string | Error)[] = [new Error("gh: HTTP 502: Bad Gateway"), permission("write")];
     const calls: string[] = [];

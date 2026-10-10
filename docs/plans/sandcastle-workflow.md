@@ -46,8 +46,8 @@ The PAT is the owner's, so the labels the host adds to split children pass. Any 
 re-adding `Sandcastle`. Only the comments of people with write access (`admin`, `maintain` or `write` on the repository, from the collaborator-permission API) reach a role: the
 host drops everyone else's when it builds a prompt, and the sandbox has no token to fetch them itself (see **Principles**). Write access, not the owner's login, decides this, because in a
 repository an organization owns the owner never comments. The host looks each author up once per run.
-A login GitHub doesn't know (a 404, as for a bot's bare login) counts as no access. Any other lookup that fails drops that author's comments and is logged,
-and the host asks again for the next issue or round rather than remember the failure.
+A login GitHub says "is not a user" (a 404, as for a bot's bare login) counts as no access. Any other lookup that fails, including a 404 for the repository itself,
+drops that author's comments and is logged once, and the host asks again in the next round rather than remember the failure.
 On PRs, follow-up acts only on bot threads and the owner's threads (see **Thread rules**).
 The workflow applies the label rule to the events that start it (see **Trigger and run environment**), and the host checks cover scheduled, manual and local runs.
 
