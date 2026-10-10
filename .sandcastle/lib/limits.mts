@@ -99,7 +99,3 @@ export function usageLimitLine(error: unknown): string | undefined {
   }
   return undefined;
 }
-
-// Re-exported so a caller that only needs the stop error doesn't also have
-// to import errors.mts.
-export { UncountedStopError };

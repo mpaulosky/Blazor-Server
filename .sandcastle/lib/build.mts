@@ -24,7 +24,7 @@ import { UncountedStopError } from "./errors.mts";
 import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, repoName, type SandcastleIssue } from "./github.mts";
-import { handBackWorkflowChange as recordWorkflowHandBack, recordFailedAttempt } from "./handback.mts";
+import { handBackWorkflowChange, recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { runLimits, type RunLimits } from "./limits.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
@@ -323,7 +323,7 @@ const liveHost: BuildHost = {
   worktreeProblems,
   log: console.log,
   limits: runLimits,
-  handBackWorkflowChange: (issueNumber, branch, detail) => recordWorkflowHandBack(issueNumber, branch, detail),
+  handBackWorkflowChange: (issueNumber, branch, detail) => handBackWorkflowChange(issueNumber, branch, detail),
 };
 
 // The branch comes from prepareBranches, which has already fetched it when it

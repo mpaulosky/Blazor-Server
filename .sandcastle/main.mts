@@ -190,166 +190,165 @@ for (const issueNumber of clearStaleBuildingLabels()) {
   console.log(`  🧹 #${issueNumber}: cleared a stale ${BUILDING_LABEL} label left by a run that didn't finish.`);
 }
 
+// An UncountedStopError from any phase (intake, the planner, the critique)
+// means the budget has passed or Claude's usage limit was hit: the catch below
+// ends the run cleanly rather than crash, since the next run picks the work up.
 try {
-  // An UncountedStopError from any phase (intake, the planner, the critique)
-  // means the budget has passed or Claude's usage limit was hit: end the run
-  // cleanly rather than crash, since the next run picks the work up.
-  try {
-    for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-      // No new round once the budget has passed or the usage limit was hit.
-      const stopReason = runLimits.stopReason();
-      if (stopReason !== undefined) {
-        console.log(`⏹ ${stopReason}, so no new round starts.`);
-        break;
-      }
+  for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+    // No new round once the budget has passed or the usage limit was hit.
+    const stopReason = runLimits.stopReason();
+    if (stopReason !== undefined) {
+      console.log(`⏹ ${stopReason}, so no new round starts.`);
+      break;
+    }
 
-      console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+    console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
-      // ---------------------------------------------------------------------
-      // Phase 0: Housekeeping
-      // ---------------------------------------------------------------------
-      // The sweep runs first, even in a round that then exits early. A failure
-      // in either step is logged, and the step runs again next round.
-      // Every phase below loads the queue; they share one read of each issue
-      // this round.
-      startQueueRound();
-      const { needsPass } = followUpPhase();
-      umbrellaPhase();
+    // -----------------------------------------------------------------------
+    // Phase 0: Housekeeping
+    // -----------------------------------------------------------------------
+    // The sweep runs first, even in a round that then exits early. A failure
+    // in either step is logged, and the step runs again next round.
+    // Every phase below loads the queue; they share one read of each issue
+    // this round.
+    startQueueRound();
+    const { needsPass } = followUpPhase();
+    umbrellaPhase();
 
-      // No build of this run is going between rounds, so any label it still
-      // holds is one whose removal failed: try again before the work check
-      // and the gate, which would otherwise hold the issue back for the rest
-      // of the run.
-      for (const issueNumber of releaseAllBuildingLabels()) {
-        console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL}, which an earlier round couldn't.`);
-      }
+    // No build of this run is going between rounds, so any label it still
+    // holds is one whose removal failed: try again before the work check
+    // and the gate, which would otherwise hold the issue back for the rest
+    // of the run.
+    for (const issueNumber of releaseAllBuildingLabels()) {
+      console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL}, which an earlier round couldn't.`);
+    }
 
-      // The early exit: before intake, the first step that can start Claude,
-      // and before any sandbox needs the Docker image. A failed read here ends
-      // the run red, as a failed gate does.
-      const found = findWork(needsPass);
-      if (found === undefined) {
-        console.log(
-          `Nothing to do in ${describeQueueScope(scope)}: no issue for intake, no ready unblocked issue and no PR ` +
-            "that needs a follow-up pass. Exiting.",
-        );
-        break;
-      }
-      console.log(`Work found: ${found}`);
-
-      // ---------------------------------------------------------------------
-      // Phase 0a: Intake
-      // ---------------------------------------------------------------------
-      // See lib/intake.mts#intakePhase: a failed intake is logged and costs only
-      // the issues it was judging this round.
-      await intakePhase(() => ({ issues: loadQueue(), openPrs: openPullRequests() }));
-
-      // ---------------------------------------------------------------------
-      // Phase 0b: Gate
-      // ---------------------------------------------------------------------
-      const { ready, blocked } = gateIssues();
-
-      for (const { issue, reasons } of blocked) {
-        console.log(`  ⏸ #${issue.number} is held back: ${reasons.join("; ")}`);
-      }
-
-      if (ready.length === 0) {
-        console.log(
-          blocked.length > 0
-            ? "Every open issue is waiting on a blocker, a pull request, another run, intake or a human. Exiting."
-            : `No open, owner-approved issues in the queue (${describeQueueScope(scope)}). Exiting.`,
-        );
-        break;
-      }
-
-      // ---------------------------------------------------------------------
-      // Phase 1: Plan
-      // ---------------------------------------------------------------------
-      const planned = await planRound(ready);
-
-      if (planned.length === 0) {
-        // No unblocked work — either everything is done or everything is blocked.
-        console.log("No unblocked issues to work on. Exiting.");
-        break;
-      }
-
-      // planRound keeps only ids from the ready list, so the lookup can't miss.
-      // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
-      // planner's raw roles field, resolved to a safe list by resolveRoles
-      // (lib/plan.mts), which falls back to every optional role when it's
-      // missing or invalid.
-      const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
-      const picks = planned.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
-
-      // ---------------------------------------------------------------------
-      // Phase 1b: Critique
-      // ---------------------------------------------------------------------
-      // critiqueRound only filters the picks, so its SandcastleIssue[] return
-      // type is narrower than what it's given; put each kept pick's roles back
-      // by issue number rather than widen the critique's own types for a field
-      // it never reads.
-      const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
-      const pickedNumbers = new Set(picks.map((issue) => issue.number));
-      const critiqued = await critiqueRound({
-        picks,
-        inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
-        unpicked: ready.filter((issue) => !pickedNumbers.has(issue.number)),
-      });
-      const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
-
-      if (issues.length === 0) {
-        // Each deferral added a "blocked by" link, so the next round's gate
-        // holds those issues back and the planner picks from what's left.
-        console.log("The critique deferred every pick. Moving on to the next round.");
-        continue;
-      }
-
-      // ---------------------------------------------------------------------
-      // Phase 2: Execute + Review
-      //
-      // Promise.allSettled means one failing pipeline doesn't cancel the others.
-      // ---------------------------------------------------------------------
-      const base = fetchMain();
-      const work = prepareBranches(issues);
-
+    // The early exit: before intake, the first step that can start Claude,
+    // and before any sandbox needs the Docker image. A failed read here ends
+    // the run red, as a failed gate does.
+    const found = findWork(needsPass);
+    if (found === undefined) {
       console.log(
-        `Planning complete. ${work.length} issue(s) to work in parallel:`,
+        `Nothing to do in ${describeQueueScope(scope)}: no issue for intake, no ready unblocked issue and no PR ` +
+          "that needs a follow-up pass. Exiting.",
       );
-      for (const { issue, branch } of work) {
-        const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
-        console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
-      }
+      break;
+    }
+    console.log(`Work found: ${found}`);
 
-      const settled = await Promise.allSettled(
-        work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
+    // -----------------------------------------------------------------------
+    // Phase 0a: Intake
+    // -----------------------------------------------------------------------
+    // See lib/intake.mts#intakePhase: a failed intake is logged and costs only
+    // the issues it was judging this round.
+    await intakePhase(() => ({ issues: loadQueue(), openPrs: openPullRequests() }));
+
+    // -----------------------------------------------------------------------
+    // Phase 0b: Gate
+    // -----------------------------------------------------------------------
+    const { ready, blocked } = gateIssues();
+
+    for (const { issue, reasons } of blocked) {
+      console.log(`  ⏸ #${issue.number} is held back: ${reasons.join("; ")}`);
+    }
+
+    if (ready.length === 0) {
+      console.log(
+        blocked.length > 0
+          ? "Every open issue is waiting on a blocker, a pull request, another run, intake or a human. Exiting."
+          : `No open, owner-approved issues in the queue (${describeQueueScope(scope)}). Exiting.`,
       );
+      break;
+    }
 
-      // Log any agents that threw (network error, sandbox crash, timeout, etc.).
-      // A clean stop is named in the round summary instead.
-      for (const [i, outcome] of settled.entries()) {
-        if (outcome.status === "rejected" && !(outcome.reason instanceof UncountedStopError)) {
-          console.error(
-            `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
-          );
-        }
-      }
+    // -----------------------------------------------------------------------
+    // Phase 1: Plan
+    // -----------------------------------------------------------------------
+    const planned = await planRound(ready);
 
-      const summary = roundSummary(work, settled);
-      for (const line of summary.lines) {
-        console.log(line);
-      }
+    if (planned.length === 0) {
+      // No unblocked work — either everything is done or everything is blocked.
+      console.log("No unblocked issues to work on. Exiting.");
+      break;
+    }
 
-      if (summary.stop !== undefined) {
-        // Nothing reached a PR, so the next plan would pick the same issues and
-        // repeat the same round. Stop and let a human look.
-        console.log(summary.stop);
-        break;
+    // planRound keeps only ids from the ready list, so the lookup can't miss.
+    // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
+    // planner's raw roles field, resolved to a safe list by resolveRoles
+    // (lib/plan.mts), which falls back to every optional role when it's
+    // missing or invalid.
+    const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
+    const picks = planned.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
+
+    // -----------------------------------------------------------------------
+    // Phase 1b: Critique
+    // -----------------------------------------------------------------------
+    // critiqueRound only filters the picks, so its SandcastleIssue[] return
+    // type is narrower than what it's given; put each kept pick's roles back
+    // by issue number rather than widen the critique's own types for a field
+    // it never reads.
+    const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
+    const pickedNumbers = new Set(picks.map((issue) => issue.number));
+    const critiqued = await critiqueRound({
+      picks,
+      inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
+      unpicked: ready.filter((issue) => !pickedNumbers.has(issue.number)),
+    });
+    const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
+
+    if (issues.length === 0) {
+      // Each deferral added a "blocked by" link, so the next round's gate
+      // holds those issues back and the planner picks from what's left.
+      console.log("The critique deferred every pick. Moving on to the next round.");
+      continue;
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 2: Execute + Review
+    //
+    // Promise.allSettled means one failing pipeline doesn't cancel the others.
+    // -----------------------------------------------------------------------
+    const base = fetchMain();
+    const work = prepareBranches(issues);
+
+    console.log(
+      `Planning complete. ${work.length} issue(s) to work in parallel:`,
+    );
+    for (const { issue, branch } of work) {
+      const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
+      console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
+    }
+
+    const settled = await Promise.allSettled(
+      work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
+    );
+
+    // Log any agents that threw (network error, sandbox crash, timeout, etc.).
+    // A clean stop is named in the round summary instead.
+    for (const [i, outcome] of settled.entries()) {
+      if (outcome.status === "rejected" && !(outcome.reason instanceof UncountedStopError)) {
+        console.error(
+          `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
+        );
       }
     }
-  } catch (error) {
-    if (!(error instanceof UncountedStopError)) throw error;
-    console.log(`\n⏹ Stopping the run cleanly: ${error.message}. Nothing more starts; the next run picks the work up.`);
+
+    const summary = roundSummary(work, settled);
+    for (const line of summary.lines) {
+      console.log(line);
+    }
+
+    if (summary.stop !== undefined) {
+      // Nothing reached a PR, so the next plan would pick the same issues and
+      // repeat the same round: stop and let a human look. Or a build stopped
+      // cleanly on the time budget or usage limit, so nothing more can start.
+      console.log(summary.stop);
+      break;
+    }
   }
+} catch (error) {
+  if (!(error instanceof UncountedStopError)) throw error;
+  console.log(`\n⏹ Stopping the run cleanly: ${error.message}. Nothing more starts; the next run picks the work up.`);
 } finally {
   console.log("\nToken usage by role:");
   const lines = usageReport.lines();

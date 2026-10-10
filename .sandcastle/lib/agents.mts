@@ -80,10 +80,11 @@ export async function runRoleInSandbox(
   return result;
 }
 
-// Runs one role through `start`. Before the run: limits.throwIfStopped(). If
-// the run rejects with an error isUsageLimitError accepts: limits.hitUsageLimit(reason),
-// then throws UncountedStopError(reason, { cause: error }). Any other error is
-// rethrown unchanged.
+// Runs one role through `start`, refusing to start once `limits` say stop. A
+// run that fails on Claude's usage limit (lib/limits.mts#usageLimitLine)
+// records the stop, so no later role starts or publishes, and rejects with an
+// UncountedStopError naming the role and the limit's line, with the original
+// error as its cause. Any other error is rethrown unchanged.
 export async function runWithinLimits<R>(role: Role, start: () => Promise<R>, limits: RunLimits = runLimits): Promise<R> {
   limits.throwIfStopped();
   try {

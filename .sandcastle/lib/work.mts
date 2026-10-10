@@ -6,8 +6,7 @@
 // round on housekeeping alone.
 
 import { gateIssues } from "./gate.mts";
-import type { OpenPullRequest, SandcastleIssue } from "./github.mts";
-import { openPullRequests } from "./github.mts";
+import { openPullRequests, type OpenPullRequest, type SandcastleIssue } from "./github.mts";
 import { needsIntake } from "./intake.mts";
 import { loadQueue } from "./queue.mts";
 
