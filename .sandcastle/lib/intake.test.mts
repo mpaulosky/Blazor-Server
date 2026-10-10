@@ -314,6 +314,38 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
     assert.match(body, /ask a maintainer/);
   });
 
+  // The comment is the only guidance the author gets, so the questions are
+  // cleaned up before they're numbered.
+  describe("the needs-info comment's questions", () => {
+    const posted = (questions: string[]) => {
+      const gh = recordingGh();
+      applyVerdicts(
+        [issue(8)],
+        [verdict(8, { verdict: "needs-info", questions, reason: "unclear" })],
+        gh.run,
+        "o/r",
+        new HandBackReport(),
+      );
+      const body = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+      return body.split("\n").filter((line) => /^\d+\. /.test(line));
+    };
+
+    it("drops a blank question", () => {
+      assert.deepEqual(posted(["Which page?", "  "]), ["1. Which page?"]);
+    });
+
+    it("keeps a question with a blank line in it to one numbered line", () => {
+      assert.deepEqual(posted(["Which page?\n\nThe menu or the footer?", "Which Theme?"]), [
+        "1. Which page? The menu or the footer?",
+        "2. Which Theme?",
+      ]);
+    });
+
+    it("doesn't number a question twice when intake numbered it", () => {
+      assert.deepEqual(posted(["1. Which page?", "2) Which Theme?"]), ["1. Which page?", "2. Which Theme?"]);
+    });
+  });
+
   it("explains in the needs-info comment why, and how to re-queue the issue", () => {
     const gh = recordingGh();
 

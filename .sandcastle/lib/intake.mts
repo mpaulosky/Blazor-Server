@@ -113,7 +113,7 @@ export function applyVerdicts(
 
     // Handing an issue back with no questions would leave its author nothing
     // to answer, so such a verdict counts as none.
-    if (verdict.verdict === "needs-info" && !(verdict.questions ?? []).some((question) => question.trim() !== "")) {
+    if (verdict.verdict === "needs-info" && questionsOf(verdict).length === 0) {
       log(`  ⚠ Ignoring intake's needs-info verdict on ${ref}: it has no questions, so it's judged again next round.`);
       continue;
     }
@@ -191,10 +191,20 @@ export function readyComment(verdict: IntakeVerdict): string {
   ].join("\n\n");
 }
 
+// The verdict's questions as one line each, ready to number: trimmed, with
+// internal line breaks collapsed (a blank line would end the Markdown list
+// and restart its numbering), any numbering intake added itself removed, and
+// blank ones dropped.
+function questionsOf(verdict: IntakeVerdict): string[] {
+  return (verdict.questions ?? [])
+    .map((question) => question.replace(/\s+/g, " ").trim().replace(/^\d+[.)]\s*/, ""))
+    .filter((question) => question !== "");
+}
+
 // The one comment on an issue intake handed back: why, the numbered
 // questions a person must answer, and how to put it back in the queue.
 export function needsInfoComment(verdict: IntakeVerdict): string {
-  const questions = verdict.questions ?? [];
+  const questions = questionsOf(verdict);
   const bugNote = verdict.bug ? " and labelled `bug` (so its branch is `fix/`)" : "";
   return [
     `Sandcastle's intake found this issue doesn't meet the Definition of Ready yet, so it's handed back with \`sandcastle:needs-info\`${bugNote}. ` +
