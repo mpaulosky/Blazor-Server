@@ -65,10 +65,25 @@ export const BASE_BRANCH = "origin/main";
 export const MAX_ITERATIONS = 10;
 
 // How many issues one intake run judges. A malformed or truncated <intake>
-// block costs every verdict in it, so a large backlog is judged a batch per
-// round rather than in one answer (#224); the rest wait for a later round or
-// run.
+// block costs every verdict in it, so a large backlog is judged in several
+// runs of this many issues each (#224, #227).
 export const INTAKE_BATCH_SIZE = 10;
+
+// How many intake runs in a row may fail before intake stops for the round.
+// A failed batch is split in halves to find the issues that break it, which
+// takes up to 5 failed runs in a row for one bad issue in a full batch, and a
+// few more for bad issues next to each other: 8 leaves room for three. A
+// failure every run hits (a sandbox that won't start, an answer the parser
+// always rejects) then costs 8 runs a round, not one for every split of every
+// batch (#229).
+export const INTAKE_FAILED_RUNS_LIMIT = 8;
+
+// How many batches in a row may have GitHub refuse every verdict before
+// intake stops for the round. A batch counts only when it held more than one
+// verdict: one refused edit can be the issue's own (closed or transferred
+// since the queue was read), and narrowing a failed batch makes single-issue
+// batches back to back (#229).
+export const INTAKE_REFUSED_BATCHES_LIMIT = 2;
 
 // Gate-fixer runs allowed at each gate checkpoint before the issue's round is
 // given up, and how much of the final gate output the issue comment quotes.

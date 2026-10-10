@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE } from "./config.mts";
+import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, INTAKE_REFUSED_BATCHES_LIMIT } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { openPrReason } from "./gate.mts";
 import {
@@ -105,9 +105,10 @@ export function applyVerdicts(
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
-): void {
+): { applied: number; failed: number } {
   const sent = new Map(issues.map((issue) => [String(issue.number), issue]));
   const judged = new Set<string>();
+  const counts = { applied: 0, failed: 0 };
 
   for (const verdict of verdicts) {
     const ref = `#${verdict.id}`;
@@ -145,8 +146,10 @@ export function applyVerdicts(
       applyVerdict(issue.number, verdict, run, repo, report, log);
     } catch (error) {
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again in a later round or run: ${error}`);
+      counts.failed += 1;
       continue;
     }
+    counts.applied += 1;
     const bugNote = verdict.bug ? " (a bug)" : "";
     log(
       verdict.verdict === "ready"
@@ -158,6 +161,7 @@ export function applyVerdicts(
   for (const id of sent.keys()) {
     if (!judged.has(id)) log(`  ⚠ Intake gave no verdict on #${id}, so it's judged again in a later round or run.`);
   }
+  return counts;
 }
 
 // Adds the verdict's labels and posts its one comment.
@@ -218,18 +222,26 @@ function questionsOf(verdict: IntakeVerdict): string[] {
 
 // `text` from intake, as plain text for an issue comment. Intake read
 // untrusted issue text, and its words go to the issue's author, so nothing in
-// them may restructure the comment or reach anyone else (#224): it's kept to
-// one line, backslashes and backticks are escaped (no code span or fence to
-// swallow the re-queue instructions), a zero-width space after @ and # stops
-// a mention or a cross-reference, and a leading Markdown marker is escaped so
-// it can't start a list, heading or quote.
+// them may restructure the comment or reach anyone else (#224, #227): it's
+// kept to one line; backslashes and backticks are escaped (no code span or
+// fence to swallow the re-queue instructions), and so are & (no character
+// reference to decode into an @, # or . the rules below don't see) and < (no
+// HTML tag, such as an unclosed <details>, or comment to hide them); a
+// zero-width space after @, a # or GH- before digits, and the dot of
+// github.com stops a mention, a cross-reference or a link to another issue or
+// PR; and a leading Markdown marker is escaped so it can't start a list,
+// heading or quote.
 export function plainText(text: string): string {
   return text
     .replace(/\s+/g, " ")
     .trim()
     .replace(/[\\`]/g, "\\$&")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
     .replace(/@(?=[A-Za-z0-9])/g, "@\u200B")
     .replace(/#(?=\d)/g, "#\u200B")
+    .replace(/\b(GH)-(?=\d)/gi, "$1-\u200B")
+    .replace(/\b(github)\.(com)\b/gi, "$1\u200B.$2")
     .replace(/^[-+*#>]/, "\\$&")
     .replace(/^(\d+)([.)])(?=\s)/, "$1\\$2");
 }
@@ -255,6 +267,21 @@ export function needsInfoComment(verdict: IntakeVerdict): string {
 // and apply the verdicts. Skipped, without running intake, when there's
 // nothing left to judge. `openPrs` are the open pull requests, whose issues
 // intake leaves alone (see needsIntake).
+//
+// Intake runs once per batch of INTAKE_BATCH_SIZE issues, so a malformed or
+// truncated answer costs only its batch (#224), and the next batch is still
+// judged (#227). A batch whose run fails is tried again in halves, and each
+// half that fails again in halves, so an issue that always breaks intake's
+// answer is left unjudged on its own rather than with its batch-mates: they'd
+// otherwise re-form the same batch every round (#229). Whatever is left
+// unjudged is logged and judged again in a later round or run.
+//
+// Intake stops for the round after INTAKE_FAILED_RUNS_LIMIT failed runs in a
+// row, since a failure every run hits (a sandbox that won't start, say) would
+// otherwise cost a run for every split of every batch, and once GitHub has
+// refused every verdict in INTAKE_REFUSED_BATCHES_LIMIT batches in a row,
+// since each later batch would then cost a run for nothing. An UncountedStopError (a usage limit or time budget) still
+// ends the run.
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
   openPrs: readonly OpenPullRequest[],
@@ -263,17 +290,63 @@ export async function intakeRound(
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
+  warn: (message: string) => void = console.error,
 ): Promise<void> {
+  const refs = (batch: readonly SandcastleIssue[]) => batch.map((issue) => `#${issue.number}`).join(", ");
+  let failedInARow = 0;
+  let refusedInARow = 0;
+  // Why intake stopped for the round, once it has.
+  let stopped: string | undefined;
+
+  // Runs intake over `batch` and applies its verdicts. Returns the run's
+  // error when it failed, or undefined.
+  async function judge(batch: SandcastleIssue[]): Promise<unknown> {
+    log(`Intake is judging ${batch.length} issue(s) against the Definition of Ready: ${refs(batch)}`);
+    let verdicts: IntakeVerdict[];
+    try {
+      verdicts = await run(intakePromptArgs(batch));
+    } catch (error) {
+      if (error instanceof UncountedStopError) throw error;
+      failedInARow += 1;
+      if (failedInARow >= INTAKE_FAILED_RUNS_LIMIT) stopped = `${INTAKE_FAILED_RUNS_LIMIT} intake runs in a row failed`;
+      return error ?? new Error("intake failed");
+    }
+    failedInARow = 0;
+    const { applied, failed } = applyVerdicts(batch, verdicts, gh, repo, report, log);
+    // A batch counts only when GitHub refused more than one verdict in it: one
+    // refused edit can be that issue's own, and narrowing makes single-issue
+    // batches back to back. Any other run that answered resets the count.
+    refusedInARow = applied === 0 && failed > 1 ? refusedInARow + 1 : 0;
+    if (refusedInARow >= INTAKE_REFUSED_BATCHES_LIMIT) {
+      stopped = `GitHub refused every verdict in ${INTAKE_REFUSED_BATCHES_LIMIT} batches in a row`;
+    }
+    return undefined;
+  }
+
+  // Narrows a batch whose run failed with `error` down to the issues that
+  // break it (see above), until intake stops for the round.
+  async function narrow(batch: SandcastleIssue[], error: unknown): Promise<void> {
+    if (stopped) return;
+    if (batch.length === 1) {
+      warn(`  ✗ Intake failed on ${refs(batch)}, so it's judged again in a later round or run: ${error}`);
+      return;
+    }
+    log(`  Intake failed on ${refs(batch)}, so it's trying them in halves: ${error}`);
+    const middle = Math.ceil(batch.length / 2);
+    for (const half of [batch.slice(0, middle), batch.slice(middle)]) {
+      if (stopped) return;
+      const halfError = await judge(half);
+      if (halfError !== undefined) await narrow(half, halfError);
+    }
+  }
+
   const unjudged = needsIntake(issues, openPrs);
-  if (unjudged.length === 0) return;
-  // A batch at a time: a malformed or truncated answer costs every verdict in
-  // it (#224).
-  const toJudge = unjudged.slice(0, INTAKE_BATCH_SIZE);
-  log(`Intake is judging ${toJudge.length} issue(s) against the Definition of Ready: ${toJudge.map((issue) => `#${issue.number}`).join(", ")}`);
-  const waiting = unjudged.length - toJudge.length;
-  if (waiting > 0) log(`  ${waiting} more wait for intake in a later round or run.`);
-  const verdicts = await run(intakePromptArgs(toJudge));
-  applyVerdicts(toJudge, verdicts, gh, repo, report, log);
+  for (let start = 0; start < unjudged.length && !stopped; start += INTAKE_BATCH_SIZE) {
+    const batch = unjudged.slice(start, start + INTAKE_BATCH_SIZE);
+    const error = await judge(batch);
+    if (error !== undefined) await narrow(batch, error);
+  }
+  if (stopped) warn(`  ✗ ${stopped}, so intake stops for this round; the issues it hadn't judged are judged again in a later round or run.`);
 }
 
 // Phase 0a as main.mts runs it: load the queue and the open PRs, then run
