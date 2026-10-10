@@ -25,7 +25,7 @@ import {
   retryOnServerError,
 } from "./build.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
-import { runCheckpoint, runGate, tail } from "./checkpoint.mts";
+import { runCheckpoint, runGate, tail, type GateRun } from "./checkpoint.mts";
 import {
   BUILDING_LABEL,
   FOLLOW_UP_MARKER,
@@ -65,6 +65,11 @@ const VERDICTS_FILE = ".sandcastle/follow-up.json";
 
 // GitHub refuses a comment over 65,536 characters; this leaves room to spare.
 const COMMENT_LIMIT = 65_000;
+
+// How much of the red checks' failed-job logs the follow-up role gets: the
+// end, where the error is. A whole CodeQL log can run to megabytes, far past
+// what a prompt should carry.
+const CI_LOG_LIMIT = 60_000;
 
 // One review thread given to the follow-up role, trimmed to only what it
 // needs (see threadsForRole): never a stranger's comment, and never more
@@ -277,8 +282,10 @@ export function replyBody(action: ThreadAction, publicError: (text: string) => s
 // commit was pushed (undefined when nothing needed pushing), whether main
 // needed merging in and how that went, every thread action taken, the
 // ignored verdicts, the "fixed" verdicts left unanswered because their commit
-// didn't check out (see fixesInPush), any GitHub write that failed, and how
-// many threads were left for a person.
+// didn't check out (see fixesInPush), any GitHub write that failed, how
+// many threads were left for a person, and what was done about red CI:
+// planRedCi's plan, with `rerun` naming only the checks actually re-run (none
+// when the pass pushed). Left out, or all empty, when no check was red.
 export type PassReport = {
   pass: number;
   pushed: string | undefined;
@@ -288,6 +295,7 @@ export type PassReport = {
   unverified: string[];
   failedWrites: string[];
   leftForHuman: number;
+  redCi?: RedCiPlan;
 };
 
 // How the pass summary says main was merged in, if it was.
@@ -307,6 +315,14 @@ export function passSummaryComment(report: PassReport, publicError: (text: strin
   const pushed =
     report.pushed === undefined ? "Nothing needed pushing." : `Pushed \`${report.pushed}\`, which passed \`scripts/gate.sh\`.`;
   lines.push([...MERGE_SENTENCES[report.merged], pushed].join(" "));
+  const ci = report.redCi;
+  if (ci?.fix) lines.push("`scripts/gate.sh` was red on the PR's head before this pass.");
+  if (ci !== undefined && ci.forward.length > 0) {
+    lines.push(`Gave the follow-up role the failed-job logs of these checks, which \`scripts/gate.sh\` doesn't cover: ${checkList(ci.forward)}.`);
+  }
+  if (ci !== undefined && ci.rerun.length > 0) {
+    lines.push(`Re-ran the failed jobs of ${checkList(ci.rerun)} once as flaky, since \`scripts/gate.sh\` passes on the PR's head.`);
+  }
   if (report.actions.length > 0) {
     lines.push(["Review threads:", ...report.actions.map((action) => summaryLine(action, publicError))].join("\n"));
   }
@@ -349,6 +365,33 @@ function summaryLine(action: ThreadAction, publicError: (text: string) => string
   const where = thread.path === null ? "" : ` on ${plainText(thread.path)}${thread.line === null ? "" : `:${thread.line}`}`;
   const outcome = resolve === undefined ? "left open for the owner" : `resolved ${resolve}`;
   return `- ${thread.from} thread${where}: ${verdict.verdict}, ${outcome}. ${summaryText(verdict.reason, 300, publicError)}`;
+}
+
+// Check names for a line of the pass summary or a give-up reason. They're
+// the repository's own job names, but a matrix entry's name comes from the
+// branch, so each is kept to plain text all the same.
+function checkList(names: readonly string[]): string {
+  return names.map(plainText).join(", ");
+}
+
+// The last `limit` characters of `text`, never starting halfway through a
+// character: a CI log's error is at its end.
+function endOf(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const end = text.slice(-limit);
+  return /^[\uDC00-\uDFFF]/.test(end) ? end.slice(1) : end;
+}
+
+// The failed-job logs of `names`, which stayed red after their re-run, for
+// the hand-back comment to quote. Undefined when they can't be read: the
+// hand-back goes ahead without them.
+function rerunLog(pr: number, names: readonly string[], host: PassHost, log: (line: string) => void): string | undefined {
+  try {
+    return host.failedCheckLog(pr, names);
+  } catch (error) {
+    log(`reading the failed-job logs of ${names.join(", ")} failed, so the hand-back doesn't quote them: ${error}`);
+    return undefined;
+  }
 }
 
 // The PR hand-back comment for a pass that gave up (runPass's step 4, 9, 10,
@@ -513,7 +556,9 @@ async function sandboxContains(sandbox: Pick<sandcastle.Sandbox, "exec">, commit
   return result.exitCode === 0;
 }
 
-// Runs the follow-up role and reads its verdicts from VERDICTS_FILE. Returns
+// Runs the follow-up role, with `ciLog` (the failed-job logs of the red
+// checks the gate doesn't cover, when there are any), and reads its verdicts
+// from VERDICTS_FILE. Returns
 // them, or the outcome from `stop` when the role failed, ended unfinished or
 // wrote no usable file. An UncountedStopError is rethrown.
 async function followUpVerdicts(
@@ -522,6 +567,7 @@ async function followUpVerdicts(
   target: PassTarget,
   forRole: PromptThread[],
   mergeNote: string,
+  ciLog: string | undefined,
   host: PassHost,
   stop: (reason: string, output?: string) => PassOutcome,
 ): Promise<ThreadVerdict[] | PassOutcome> {
@@ -532,7 +578,7 @@ async function followUpVerdicts(
       "follow-up",
       {
         promptFile: "./.sandcastle/roles/follow-up.md",
-        promptArgs: followUpPromptArgs(issue, target.headRefName, target.number, forRole, mergeNote),
+        promptArgs: followUpPromptArgs(issue, target.headRefName, target.number, forRole, mergeNote, ciLog),
       },
       host.limits,
     );
@@ -605,10 +651,16 @@ async function fixesInPush(
 // lint-yaml.yml ("yamllint"). Every other check on a PR's head, CodeQL's
 // "Analyze" jobs included, isn't: the gate never runs it, so a pass can't
 // tell whether it's a real failure or a flaky one by gating alone (see "Red
-// CI" in docs/plans/sandcastle-workflow.md).
+// CI" in docs/plans/sandcastle-workflow.md). ci.yml's "Test Suite" counts
+// as covered too: it only reports the test jobs' results, so it's red exactly
+// when one of them is, and `gh run rerun --failed` re-runs it with them.
 export function isGateCovered(checkName: string): boolean {
-  throw new Error("Not implemented");
+  return GATE_COVERED_CHECKS.has(checkName) || /^Tests: \S/.test(checkName);
 }
+
+// The check names isGateCovered matches exactly; ci.yml's test matrix jobs
+// ("Tests: <project>") are matched by their prefix.
+const GATE_COVERED_CHECKS = new Set(["Build Solution", "Test Suite", "markdownlint", "yamllint"]);
 
 // What a pass does about a PR's red checks (planPass's `redChecks`),
 // decided from whether `scripts/gate.sh` reproduced a failure on the head
@@ -623,7 +675,11 @@ export function isGateCovered(checkName: string): boolean {
 // no red checks at all.
 export type RedCiPlan = { fix: boolean; rerun: string[]; forward: string[] };
 export function planRedCi(gatePassed: boolean, redChecks: readonly CheckState[]): RedCiPlan {
-  throw new Error("Not implemented");
+  if (!gatePassed) return { fix: true, rerun: [], forward: [] };
+  // A check can be listed twice (a status and a check run of one name), but
+  // it's re-run or forwarded once.
+  const names = [...new Set(redChecks.map((check) => check.name))];
+  return { fix: false, rerun: names.filter(isGateCovered), forward: names.filter((name) => !isGateCovered(name)) };
 }
 
 // Runs one follow-up pass on `target`, a PR the sweep (lib/follow-up.mts)
@@ -668,11 +724,11 @@ export async function runPass(
   }
 }
 
-// What runPass decides from: the PR's head and threads, and its pass count,
-// read from GitHub. Returns the plan for a pass, or the outcome when there's
-// to be none: skipped (the head moved since the sweep read it, an author's
-// ownership is unknown, or there's nothing a pass handles) or handed back
-// (the PR has had FOLLOW_UP_PASS_CAP passes). Only a read made while the
+// What runPass decides from: the PR's head, threads and checks, and its pass
+// count, read from GitHub. Returns the plan for a pass, or the outcome when
+// there's to be none: skipped (the head moved since the sweep read it, an
+// author's ownership is unknown, or there's nothing a pass handles) or handed
+// back (the PR has had FOLLOW_UP_PASS_CAP passes). Only a read made while the
 // claim is held (`claimed`) checks the cap: one before it may be stale, so
 // the hand-back is left to the read after the claim.
 // Records each thread left for a person.
@@ -691,15 +747,20 @@ function planPass(
     const first = thread.comments[0];
     host.recordHumanThread({ pr: target.number, author: first?.author ?? null, url: first?.url ?? "" });
   }
-  // Only a needed merge or a bot thread starts a pass. A PR that's only red
-  // on CI waits for #79, and one with only owner threads keeps the sweep's
-  // rule that human threads alone don't start a pass, so an owner thread is
-  // answered only alongside one of the two. A merge is needed only when the
-  // PR conflicts with main: one that's merely behind is updated by the sweep
-  // once it's settled, so a red-CI PR doesn't spend a counted pass every
-  // time main moves.
+  // Only a needed merge, a bot thread or a red check starts a pass. One with
+  // only owner threads keeps the sweep's rule that human threads alone don't
+  // start a pass, so an owner thread is answered only alongside one of the
+  // others. A merge is needed only when the PR conflicts with main: one
+  // that's merely behind is updated by the sweep once it's settled, so a
+  // red-CI PR doesn't spend a counted pass every time main moves.
   const needsMerge = target.conflicted && !host.contains(target.headRefOid, base);
-  if (!needsMerge && !sorted.forRole.some((thread) => thread.from === "bot")) {
+  // Read fresh, since a re-run may have started or finished since the sweep.
+  // While any check is still running the PR isn't settled, so its red checks
+  // wait for a later sweep rather than being re-run or fixed from half a
+  // result.
+  const checks = host.checks(target.number);
+  const redChecks = checks.some((check) => !check.completed) ? [] : checks.filter((check) => !check.green);
+  if (!needsMerge && redChecks.length === 0 && !sorted.forRole.some((thread) => thread.from === "bot")) {
     return skip("there's nothing a follow-up pass handles yet");
   }
 
@@ -712,7 +773,7 @@ function planPass(
       undefined,
     );
   }
-  return { forRole: sorted.forRole, leftForHuman: sorted.leftForHuman.length, needsMerge, passCount };
+  return { forRole: sorted.forRole, leftForHuman: sorted.leftForHuman.length, needsMerge, redChecks, passCount };
 }
 
 // Hands the PR back with sandcastle:needs-human (see giveUpComment), quoting
@@ -730,8 +791,15 @@ function giveUp(target: PassTarget, host: PassHost, reason: string, output: stri
 
 // What planPass decided, read again once the issue was marked: the threads
 // for the role, how many were left for a person, whether main needs merging
-// in, and how many passes the PR has already had.
-type PassPlan = { forRole: PromptThread[]; leftForHuman: number; needsMerge: boolean; passCount: number };
+// in, the PR's red checks (empty while any check is still running), and how
+// many passes the PR has already had.
+type PassPlan = {
+  forRole: PromptThread[];
+  leftForHuman: number;
+  needsMerge: boolean;
+  redChecks: CheckState[];
+  passCount: number;
+};
 
 // runPass's work once the issue is marked: everything from creating the
 // sandbox to closing it.
@@ -740,7 +808,7 @@ async function passOnMarkedIssue(
   issue: SandcastleIssue,
   base: string,
   host: PassHost,
-  { forRole, leftForHuman, needsMerge, passCount }: PassPlan,
+  { forRole, leftForHuman, needsMerge, redChecks, passCount }: PassPlan,
 ): Promise<PassOutcome> {
   const branch = target.headRefName;
   const log = (line: string) => host.log(`  PR #${target.number} ${line}`);
@@ -761,6 +829,17 @@ async function passOnMarkedIssue(
     await sandbox.exec(`rm -f ${VERDICTS_FILE}`);
     const head = await sandbox.exec("git rev-parse HEAD");
     if (head.stdout.trim() !== target.headRefOid) return stop("the worktree isn't at the PR's head after resetting it to it");
+
+    // Red CI is decided by the gate (see planRedCi), run on the commit CI
+    // checked, before a merge or the role changes it.
+    let headGate: GateRun | undefined;
+    let redCi: RedCiPlan = { fix: false, rerun: [], forward: [] };
+    if (redChecks.length > 0) {
+      headGate = await runGate(sandbox);
+      redCi = planRedCi(headGate.passed, redChecks);
+      log(`has ${redChecks.length} red check(s), and \`scripts/gate.sh\` ${headGate.passed ? "passes" : "fails"} on its head`);
+    }
+    const ciLog = redCi.forward.length > 0 ? endOf(host.failedCheckLog(target.number, redCi.forward), CI_LOG_LIMIT) : undefined;
 
     // Merged, never rebased: the push that follows is a plain one, so the
     // PR's history stays as reviewers saw it.
@@ -785,21 +864,31 @@ async function passOnMarkedIssue(
       }
     }
 
-    // With no conflict to resolve and no thread to answer, the role has
-    // nothing to do, and a run of it would only cost usage or make changes
-    // nobody asked for.
+    // With no conflict to resolve, no thread to answer and no failed-job log
+    // to fix from, the role has nothing to do, and a run of it would only
+    // cost usage or make changes nobody asked for.
     let verdicts: ThreadVerdict[] = [];
-    if (merged === "conflicts" || forRole.length > 0) {
-      const role = await followUpVerdicts(sandbox, issue, target, forRole, mergeNote, host, stop);
+    const roleRuns = merged === "conflicts" || forRole.length > 0 || ciLog !== undefined;
+    if (roleRuns) {
+      const role = await followUpVerdicts(sandbox, issue, target, forRole, mergeNote, ciLog, host, stop);
       if (!Array.isArray(role)) return role;
       verdicts = role;
       log("follow-up finished");
     }
 
+    // The gate on the head is the checkpoint's first run when nothing has
+    // changed the worktree since: running it again on the same commit would
+    // only cost time, and a red one goes straight to the gate-fixer.
+    let unchangedGate = merged === "none" && !roleRuns ? headGate : undefined;
+
     const gate = await runCheckpoint(
       2,
       {
-        gate: () => runGate(sandbox),
+        gate: async () => {
+          const known = unchangedGate;
+          unchangedGate = undefined;
+          return known ?? (await runGate(sandbox));
+        },
         fix: (at, gateOutput) =>
           runRoleInSandbox(
             sandbox,
@@ -877,6 +966,29 @@ async function passOnMarkedIssue(
       }
     }
 
+    // A push starts CI afresh on the new head, which is as good as a re-run,
+    // so only a head the pass left as it was gets its flaky checks re-run.
+    let rerun: string[] = [];
+    if (redCi.rerun.length > 0 && pushed !== undefined) {
+      log(`didn't re-run ${redCi.rerun.join(", ")}: the push starts CI again on the new head`);
+    } else if (redCi.rerun.length > 0) {
+      const after = new Map(host.rerunFailedChecks(target.number, redCi.rerun).map((check) => [check.name, check]));
+      // A check the answer leaves out isn't known to have passed, so it
+      // counts as still red.
+      const stillRed = redCi.rerun.filter((name) => {
+        const check = after.get(name);
+        return check === undefined || (check.completed && !check.green);
+      });
+      if (stillRed.length > 0) {
+        return stop(
+          `\`scripts/gate.sh\` passes on the head, but ${checkList(stillRed)} stayed red after its one re-run as flaky`,
+          rerunLog(target.number, stillRed, host, log),
+        );
+      }
+      rerun = redCi.rerun;
+      log(`re-ran ${rerun.join(", ")} once as flaky`);
+    }
+
     const matched = threadActions(verdicts, forRole);
     const { kept: actions, unverified } = await fixesInPush(sandbox, matched.actions, { gated, head: target.headRefOid, base, hostMerge });
     if (unverified.length > 0) log(`left ${unverified.length} "fixed" verdict(s) unanswered: their commit isn't one this pass added`);
@@ -886,7 +998,17 @@ async function passOnMarkedIssue(
       host.commentOnPullRequest(
         target.number,
         passSummaryComment(
-          { pass: passCount + 1, pushed, merged, actions, ignored, unverified, failedWrites, leftForHuman },
+          {
+            pass: passCount + 1,
+            pushed,
+            merged,
+            actions,
+            ignored,
+            unverified,
+            failedWrites,
+            leftForHuman,
+            redCi: { fix: redCi.fix, rerun, forward: redCi.forward },
+          },
           (text) => host.publicError(text),
         ),
       );

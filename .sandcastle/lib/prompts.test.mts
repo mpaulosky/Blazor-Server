@@ -163,6 +163,19 @@ describe("followUpPromptArgs", () => {
 
     assert.deepEqual(JSON.parse(String(args.THREADS_JSON)), []);
   });
+
+  // #79: a red check the gate doesn't cover reaches the role as its log.
+  it("passes the failed-job log of a check the gate doesn't cover as CODEQL_LOG", () => {
+    const args = followUpPromptArgs(issue, "feature/3-add-a-thing", 42, [], "already contains main.", "##[error] CS8600");
+
+    assert.equal(args.CODEQL_LOG, "##[error] CS8600");
+  });
+
+  it("still fills CODEQL_LOG when there's no log, since Sandcastle refuses an empty placeholder", () => {
+    const args = followUpPromptArgs(issue, "feature/3-add-a-thing", 42, [], "already contains main.");
+
+    assert.match(String(args.CODEQL_LOG), /no log/i);
+  });
 });
 
 describe("critiquePromptArgs", () => {

@@ -1496,6 +1496,75 @@ describe("runPass's red CI handling", () => {
   });
 });
 
+describe("runPass's red CI decisions", () => {
+  it("leaves a PR alone while any of its checks is still running, red ones included", async () => {
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      checks: [redCheck({ name: "Tests: Domain.Tests.Unit" }), redCheck({ name: "Analyze (csharp)", completed: false, completedAt: null })],
+    });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Tests: Domain.Tests.Unit is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.markBuilding, []);
+    assert.deepEqual(calls.rerunFailedChecks, []);
+  });
+
+  it("doesn't re-run a flaky check when the pass pushes, since the push starts CI again", async () => {
+    const sandbox = sandboxFake({
+      gateExitCodes: [0, 0],
+      followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: ROLE_COMMIT }]),
+    });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], sandbox, checks: [redCheck({ name: "Tests: Domain.Tests.Unit" })] });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.deepEqual(outcome, { kind: "passed", pushed: ROLE_COMMIT });
+    assert.deepEqual(calls.rerunFailedChecks, []);
+  });
+
+  it("says in the pass summary which checks it re-ran", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0] });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      sandbox,
+      checks: [redCheck({ name: "Tests: Domain.Tests.Unit" })],
+      rerunResult: [redCheck({ name: "Tests: Domain.Tests.Unit", completed: false, completedAt: null })],
+    });
+
+    await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(calls.commentOnPullRequest.length, 1);
+    assert.match(calls.commentOnPullRequest[0]!.body, /Re-ran the failed jobs of Tests: Domain\.Tests\.Unit once/);
+  });
+
+  it("gives up on a re-run check the answer leaves out, rather than taking it as green", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0] });
+    const { passHost, calls } = passHostFake({ threads: [], sandbox, checks: [redCheck({ name: "Build Solution" })], rerunResult: [] });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /Build Solution/);
+  });
+
+  it("gives the follow-up role only the end of a failed-job log too long for a prompt", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0, 0] });
+    const { passHost } = passHostFake({
+      threads: [],
+      sandbox,
+      checks: [redCheck({ name: "Analyze (csharp)" })],
+      failedCheckLog: `${"x".repeat(200_000)}\n##[error] the real failure`,
+    });
+
+    await runPass(passTarget(), issue, BASE, passHost);
+
+    const log = String(sandbox.runs.find((run) => run.name === "follow-up")?.promptArgs?.CODEQL_LOG ?? "");
+    assert.ok(log.length < 100_000, `the log reached the role at ${log.length} characters`);
+    assert.match(log, /the real failure$/);
+  });
+});
+
 describe("followUpPassPhase's skips", () => {
   it("neither fetches nor passes on a PR whose issue isn't in this round's queue", async () => {
     const { passHost, calls } = passHostFake({ threads: [botThread()] });
