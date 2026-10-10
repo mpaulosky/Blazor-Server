@@ -8,7 +8,7 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
-import { BASE_BRANCH, copyToWorktree, hooks } from "./config.mts";
+import { BASE_BRANCH, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 import { commentOnIssue, openPullRequest, type SandcastleIssue } from "./github.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
@@ -43,7 +43,45 @@ export async function publish(
   createPullRequest: (branch: string, title: string, body: string) => string = openPullRequest,
   wait: (ms: number) => Promise<void> = (ms) => sleep(ms),
 ): Promise<string> {
-  throw new Error("publish's retry on a GitHub server error isn't implemented yet");
+  await retryOnServerError(() => push(branch, commit), wait);
+  const body = reviewed
+    ? `Closes #${issue.number}\n\nImplemented and reviewed by Sandcastle.`
+    : `Closes #${issue.number}\n\nImplemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.`;
+  // A retry after a create that GitHub carried out but answered with an error
+  // finds that PR rather than open a second one: openPullRequest looks for an
+  // open PR from the branch first.
+  return retryOnServerError(() => createPullRequest(branch, issue.title, body), wait);
+}
+
+// The first backoff before a retried publish step; each later one doubles it.
+const PUBLISH_RETRY_DELAY_MS = 5_000;
+
+// Whether a git or gh failure is GitHub's own server error, which a later
+// attempt may not hit. Matches what git and gh print for one ("remote: Internal
+// Server Error", "returned error: 502", "HTTP 503: Service Unavailable"), not a
+// bare 5xx anywhere in the message, since the message also quotes the branch
+// name (fix/500-...).
+export function isGitHubServerError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bHTTP(?:\/[\d.]+)? 5\d\d\b|returned error: 5\d\d\b|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Time-?out/i.test(
+    message,
+  );
+}
+
+// Run a publish step, retrying it with backoff while it fails with a GitHub
+// server error, up to PUBLISH_RETRY_ATTEMPTS attempts in all. Any other
+// failure, or the last attempt's, is rethrown.
+async function retryOnServerError<T>(step: () => T, wait: (ms: number) => Promise<void>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return step();
+    } catch (error) {
+      if (attempt >= PUBLISH_RETRY_ATTEMPTS || !isGitHubServerError(error)) throw error;
+      const delay = PUBLISH_RETRY_DELAY_MS * 2 ** (attempt - 1);
+      console.error(`  ⚠ GitHub server error, retrying in ${delay / 1000}s (attempt ${attempt + 1} of ${PUBLISH_RETRY_ATTEMPTS}): ${error}`);
+      await wait(delay);
+    }
+  }
 }
 
 // The issue comment for a tester or backend run that stopped the build.
@@ -245,9 +283,11 @@ export async function buildIssue(
       const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
       host.commentOnIssue(
         issue.number,
-        `Sandcastle couldn't publish \`${branch}\`. A person needs to look at it: if origin's branch has commits the ` +
-          "local one doesn't (an agent rewrote one an earlier round pushed), the two need reconciling before Sandcastle " +
-          `can push it.\n\n${fence}text\n${detail}\n${fence}`,
+        `Sandcastle couldn't publish \`${branch}\`: it passed the gate, but pushing it or opening its pull request ` +
+          "failed, so no pull request is open for it. The branch keeps its commits. A person needs to look at it: a " +
+          "GitHub server error that outlasted the retries can be pushed by hand once GitHub recovers, and if origin's " +
+          "branch has commits the local one doesn't (an agent rewrote one an earlier round pushed), the two need " +
+          `reconciling before Sandcastle can push it.\n\n${fence}text\n${detail}\n${fence}`,
       );
       return { commits, prUrl: undefined, publishFailed: true };
     }

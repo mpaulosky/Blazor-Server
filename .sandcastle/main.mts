@@ -168,10 +168,27 @@ try {
       console.log(`  #${issue.number} (${branch}) → ${prUrl}`);
     }
 
+    // Branches that passed the gate and review but couldn't be pushed or get a
+    // PR: their work is done but stranded, which a person needs to hear apart
+    // from a round that built nothing.
+    const stranded = settled.flatMap((outcome, i) =>
+      outcome.status === "fulfilled" && outcome.value.publishFailed ? [work[i]!] : [],
+    );
+    if (stranded.length > 0) {
+      console.log(`\n${stranded.length} gated branch(es) couldn't be published, so their work is stranded:`);
+      for (const { issue, branch } of stranded) {
+        console.log(`  #${issue.number} (${branch}): see the comment on the issue`);
+      }
+    }
+
     if (published.length === 0) {
       // Nothing reached a PR, so the next plan would pick the same issues and
       // repeat the same round. Stop and let a human look.
-      console.log("No pull requests opened this round. Stopping.");
+      console.log(
+        stranded.length > 0
+          ? "Publishing failed for every gated branch this round. Stopping."
+          : "No pull requests opened this round. Stopping.",
+      );
       break;
     }
   }

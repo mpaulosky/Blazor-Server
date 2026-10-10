@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
-import { buildIssue, publicErrorText, publish, type BuildHost } from "./build.mts";
+import { buildIssue, isGitHubServerError, publicErrorText, publish, type BuildHost } from "./build.mts";
 import { PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [] };
@@ -442,6 +442,33 @@ describe("publish", () => {
 
     await assert.rejects(() => publish(issue, branch, "a".repeat(40), true, push, neverCreatePr, wait));
     assert.equal(calls(), PUBLISH_RETRY_ATTEMPTS);
+  });
+});
+
+describe("isGitHubServerError", () => {
+  it("recognises the server errors git and gh report", () => {
+    for (const output of [
+      "git push failed:\nremote: Internal Server Error",
+      "git push failed:\nerror: RPC failed; HTTP 500 curl 22 The requested URL returned error: 500",
+      "git push failed:\nfatal: unable to access 'https://github.com/o/r/': The requested URL returned error: 502",
+      "gh pr create failed:\nHTTP 503",
+      "gh pr list failed:\nHTTP 502: Bad Gateway (https://api.github.com/graphql)",
+      "gh pr create failed:\nService Unavailable",
+      "gh pr create failed:\nGateway Timeout",
+    ]) {
+      assert.equal(isGitHubServerError(new Error(output)), true, output);
+    }
+  });
+
+  it("doesn't take a rejected push, a client error or a 5xx in a branch name for a server error", () => {
+    for (const output of [
+      "git push --quiet origin abc:refs/heads/x failed:\n ! [rejected] abc -> x (non-fast-forward)",
+      "git push --quiet origin abc:refs/heads/fix/500-retry failed:\n ! [rejected] (stale info)",
+      "gh pr create failed:\nHTTP 422: Validation Failed",
+      "gh pr create failed:\nHTTP 401: Bad credentials",
+    ]) {
+      assert.equal(isGitHubServerError(new Error(output)), false, output);
+    }
   });
 });
 
