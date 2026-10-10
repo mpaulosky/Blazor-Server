@@ -5,6 +5,7 @@ import { SANDCASTLE_LABELS } from "./config.mts";
 import {
   commentOnIssue,
   ensureLabels,
+  hostLogin,
   handBack,
   markerCommentsSince,
   openPullRequest,
@@ -143,6 +144,18 @@ describe("ensureLabels", () => {
   });
 });
 
+// The host's own comments are the ones that count, and in a repository an
+// organization owns, the owner never posts: so the count is filtered by the
+// account gh is signed in as, not by the repository owner.
+describe("hostLogin", () => {
+  it("returns the login gh is signed in as", () => {
+    const { calls, run } = recordingGh(["sandcastle-bot\n"]);
+
+    assert.equal(hostLogin(run), "sandcastle-bot");
+    assert.deepEqual(calls[0]!.args, ["api", "user", "--jq", ".login"]);
+  });
+});
+
 describe("markerCommentsSince", () => {
   const marker = "<!-- sandcastle:build-failed -->";
   const comment = (body: string, createdAt: string, author = "owner"): TimestampedComment => ({ body, createdAt, author });
@@ -171,7 +184,7 @@ describe("markerCommentsSince", () => {
 
   // The host posts as the repository owner, and anyone can comment on a public
   // issue, so a stranger pasting the marker in mustn't hand the issue back.
-  it("drops a marker comment that someone other than the owner posted", () => {
+  it("drops a marker comment that anyone but the host's own login posted", () => {
     const comments = [
       comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z", "stranger"),
       comment(`${marker} attempt 1`, "2026-01-02T00:00:00Z"),

@@ -192,11 +192,10 @@ export type TimelineLabelEvent = { event: "labeled" | "unlabeled"; label: string
 // which side of a label's removal it falls on, and who posted it.
 export type TimestampedComment = { body: string; createdAt: string; author: string };
 
-// The comments in `comments` that `owner` posted and that carry `marker`,
-// posted after `label` was
-// last removed from this issue or PR (its most recent "unlabeled" event
-// naming `label` in `timeline`), or since `createdAt` when `label` was never
-// removed. Counting from the timeline rather than a running counter means the
+// The comments in `comments` that `poster` posted and that carry `marker`,
+// posted after `label` was last removed from this issue or PR (its most
+// recent "unlabeled" event naming `label` in `timeline`), or since
+// `createdAt` when `label` was never removed. Counting from the timeline rather than a running counter means the
 // count survives a restart, and a human re-queueing by removing the label
 // resets it (see docs/plans/sandcastle-workflow.md, "Giving up and telling
 // the human").
@@ -206,14 +205,14 @@ export function markerCommentsSince(
   label: string,
   marker: string,
   createdAt: string,
-  owner: string,
+  poster: string,
 ): TimestampedComment[] {
   const since = Math.max(
     timestamp(createdAt),
     ...timeline.filter((event) => event.event === "unlabeled" && event.label === label).map((event) => timestamp(event.createdAt)),
   );
   return comments.filter(
-    (comment) => comment.author === owner && comment.body.includes(marker) && timestamp(comment.createdAt) >= since,
+    (comment) => comment.author === poster && comment.body.includes(marker) && timestamp(comment.createdAt) >= since,
   );
 }
 
@@ -225,19 +224,27 @@ function timestamp(time: string): number {
   return ms;
 }
 
+// The login gh is signed in as: the account every host comment is posted
+// from. Not the repository owner, which is an organization for a repository
+// an organization owns, and never posts a comment itself.
+export function hostLogin(run: typeof execFileSync = execFileSync): string {
+  return ghWithStderr(run, ["api", "user", "--jq", ".login"]).trim();
+}
+
+let signedInLogin: string | undefined;
+
 // The comments on the issue or PR `number` that carry `marker` and were posted
-// since `label` was last removed (see markerCommentsSince). Only the
-// repository owner's comments count: the host posts as the owner, and anyone
-// can comment on a public issue, so a stranger could otherwise paste the
-// marker in to hand the issue back early. PRs share the issues API, so this
-// covers both.
+// since `label` was last removed (see markerCommentsSince). Only the host's own
+// comments count (see hostLogin): anyone can comment on a public issue, so a
+// stranger could otherwise paste the marker in to hand the issue back early.
+// PRs share the issues API, so this covers both.
 export function markerComments(number: number, label: string, marker: string, repo: string = repoName()): TimestampedComment[] {
   const lines = (output: string) =>
     output
       .split("\n")
       .filter((line) => line.trim() !== "")
       .map((line) => JSON.parse(line) as unknown);
-  const owner = repoOwner();
+  signedInLogin ??= hostLogin();
   // Each item is printed as one line of JSON (@json), so the pages
   // --paginate fetches concatenate into lines that parse one at a time.
   const comments = lines(
@@ -253,7 +260,7 @@ export function markerComments(number: number, label: string, marker: string, re
     ),
   ) as TimelineLabelEvent[];
   const createdAt = sh(process.cwd(), "gh", "api", `repos/${repo}/issues/${number}`, "--jq", ".created_at");
-  return markerCommentsSince(comments, timeline, label, marker, createdAt, owner);
+  return markerCommentsSince(comments, timeline, label, marker, createdAt, signedInLogin);
 }
 
 // A label only the host or a human applies to hand work back: the issue's or
