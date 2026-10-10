@@ -35,7 +35,7 @@ import {
   GATE_FIXER_ATTEMPTS,
 } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import type { PassTarget } from "./follow-up.mts";
+import type { CheckState, PassTarget } from "./follow-up.mts";
 import {
   commentOnPullRequest,
   handBack,
@@ -424,6 +424,18 @@ export type PassHost = {
   push(branch: string, commit: string): Promise<void>;
   // branches.mts's originRefs.remoteHead: the branch's head on GitHub now.
   remoteHead(branch: string): string | undefined;
+  // A fresh read of the PR's current checks on its head, since the ones the
+  // sweep read (lib/follow-up.mts#SweepPullRequest.checks) may be stale by
+  // the time a pass claims the PR.
+  checks(pr: number): CheckState[];
+  // `gh run rerun --failed` for the run(s) backing each of `checkNames`
+  // (planRedCi's `rerun`), then the rechecked state of exactly those checks
+  // once the re-run settles.
+  rerunFailedChecks(pr: number, checkNames: readonly string[]): CheckState[];
+  // `gh run view --log-failed` for the run(s) backing each of `checkNames`
+  // (planRedCi's `forward`), concatenated: the text the follow-up role gets
+  // to fix what the gate doesn't cover.
+  failedCheckLog(pr: number, checkNames: readonly string[]): string;
   // lib/github.mts#replyToReviewThread.
   replyToThread(threadId: string, body: string): void;
   // lib/github.mts#resolveReviewThread.
@@ -464,6 +476,15 @@ export const livePassHost: PassHost = {
       (ms) => sleep(ms),
     ),
   remoteHead: (branch) => originRefs.remoteHead(branch),
+  checks: () => {
+    throw new Error("Not implemented");
+  },
+  rerunFailedChecks: () => {
+    throw new Error("Not implemented");
+  },
+  failedCheckLog: () => {
+    throw new Error("Not implemented");
+  },
   replyToThread: (threadId, body) => replyToReviewThread(threadId, body),
   resolveThread: (threadId) => resolveReviewThread(threadId),
   commentOnPullRequest: (pr, body) => commentOnPullRequest(pr, body),
@@ -576,6 +597,33 @@ async function fixesInPush(
     else unverified.push(verdict.threadId);
   }
   return { kept, unverified };
+}
+
+// Whether `checkName` is a job scripts/gate.sh actually runs: the build and
+// test jobs in ci.yml ("Build Solution", and "Tests: <project>" for each
+// matrix entry) and the lint jobs in lint-markdown.yml ("markdownlint") and
+// lint-yaml.yml ("yamllint"). Every other check on a PR's head, CodeQL's
+// "Analyze" jobs included, isn't: the gate never runs it, so a pass can't
+// tell whether it's a real failure or a flaky one by gating alone (see "Red
+// CI" in docs/plans/sandcastle-workflow.md).
+export function isGateCovered(checkName: string): boolean {
+  throw new Error("Not implemented");
+}
+
+// What a pass does about a PR's red checks (planPass's `redChecks`),
+// decided from whether `scripts/gate.sh` reproduced a failure on the head
+// (`gatePassed`): `fix` when it's red, so the gate-fixer takes it and the
+// host pushes once it's green. Otherwise `rerun` names each still-red check
+// the gate covers, for one re-run as flaky (`gh run rerun --failed`); a
+// check named there that's still red after the re-run gives up with
+// sandcastle:needs-human. `forward` names each red check the gate doesn't
+// cover (CodeQL), whose failed-job log (`gh run view --log-failed`) goes to
+// the follow-up role. Both arrays are empty when `gatePassed` is false (there's
+// nothing to re-run or forward until the gate is green), and when there are
+// no red checks at all.
+export type RedCiPlan = { fix: boolean; rerun: string[]; forward: string[] };
+export function planRedCi(gatePassed: boolean, redChecks: readonly CheckState[]): RedCiPlan {
+  throw new Error("Not implemented");
 }
 
 // Runs one follow-up pass on `target`, a PR the sweep (lib/follow-up.mts)

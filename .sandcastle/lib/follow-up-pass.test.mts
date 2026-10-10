@@ -3,12 +3,14 @@ import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
 import { FOLLOW_UP_MARKER, FOLLOW_UP_PASS_CAP, FOLLOW_UP_REPLY_MARKER } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import type { PassTarget } from "./follow-up.mts";
+import type { CheckState, PassTarget } from "./follow-up.mts";
 import {
   followUpPassPhase,
   giveUpComment,
+  isGateCovered,
   parseVerdicts,
   passSummaryComment,
+  planRedCi,
   type PassHost,
   type PassReport,
   replyBody,
@@ -16,6 +18,7 @@ import {
   threadActions,
   threadsForRole,
   type PromptThread,
+  type RedCiPlan,
   type ThreadAction,
   type ThreadVerdict,
 } from "./follow-up-pass.mts";
@@ -46,6 +49,12 @@ function passTarget(overrides: Partial<PassTarget> = {}): PassTarget {
     conflicted: false,
     ...overrides,
   };
+}
+
+// A red check (completed, not green); tests override just the fields their
+// scenario needs.
+function redCheck(overrides: Partial<CheckState> = {}): CheckState {
+  return { name: "Build Solution", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z", ...overrides };
 }
 
 function botThread(overrides: Partial<ReviewThread> = {}): ReviewThread {
@@ -523,6 +532,64 @@ describe("giveUpComment", () => {
 });
 
 // ---------------------------------------------------------------------------
+// isGateCovered / planRedCi
+// ---------------------------------------------------------------------------
+
+// Acceptance criterion: "The decision between fix, re-run and CodeQL is unit
+// tested with stubbed check data."
+describe("isGateCovered", () => {
+  for (const name of ["Build Solution", "Tests: Domain.Tests.Unit", "Tests: Architecture.Tests", "markdownlint", "yamllint"]) {
+    it(`treats "${name}" as a job scripts/gate.sh reproduces`, () => {
+      assert.equal(isGateCovered(name), true);
+    });
+  }
+
+  for (const name of ["Analyze (csharp)", "Analyze (actions)", "Analyze", "Python tests", "Hook tests", "Docs-only label"]) {
+    it(`treats "${name}" as a check scripts/gate.sh doesn't reproduce`, () => {
+      assert.equal(isGateCovered(name), false);
+    });
+  }
+});
+
+describe("planRedCi", () => {
+  it("fixes a build the gate reproduces, regardless of which checks are red", () => {
+    const plan: RedCiPlan = planRedCi(false, [redCheck({ name: "Build Solution" })]);
+
+    assert.deepEqual(plan, { fix: true, rerun: [], forward: [] });
+  });
+
+  it("fixes even when the only red check is one the gate doesn't cover, since the gate itself is red", () => {
+    const plan: RedCiPlan = planRedCi(false, [redCheck({ name: "Analyze (csharp)" })]);
+
+    assert.deepEqual(plan, { fix: true, rerun: [], forward: [] });
+  });
+
+  it("re-runs a gate-covered check once the gate is green", () => {
+    const plan: RedCiPlan = planRedCi(true, [redCheck({ name: "Tests: Domain.Tests.Unit" })]);
+
+    assert.deepEqual(plan, { fix: false, rerun: ["Tests: Domain.Tests.Unit"], forward: [] });
+  });
+
+  it("forwards a check the gate doesn't cover once the gate is green", () => {
+    const plan: RedCiPlan = planRedCi(true, [redCheck({ name: "Analyze (csharp)" })]);
+
+    assert.deepEqual(plan, { fix: false, rerun: [], forward: ["Analyze (csharp)"] });
+  });
+
+  it("sorts red checks of both kinds into rerun and forward once the gate is green", () => {
+    const plan: RedCiPlan = planRedCi(true, [redCheck({ name: "Build Solution" }), redCheck({ name: "Analyze (csharp)" })]);
+
+    assert.deepEqual(plan, { fix: false, rerun: ["Build Solution"], forward: ["Analyze (csharp)"] });
+  });
+
+  it("does nothing when the gate is green and no check is red", () => {
+    const plan: RedCiPlan = planRedCi(true, []);
+
+    assert.deepEqual(plan, { fix: false, rerun: [], forward: [] });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runPass
 // ---------------------------------------------------------------------------
 
@@ -643,6 +710,15 @@ function passHostFake(
     // The branch's head on GitHub after a failed push; by default someone
     // else pushed meanwhile.
     remoteHead?: string;
+    // A fresh read of the PR's current checks (host.checks); defaults to no
+    // red checks.
+    checks?: CheckState[];
+    // The state of the re-run checks host.rerunFailedChecks reports once it
+    // settles; defaults to still red, so a test must say when the re-run
+    // fixed it.
+    rerunResult?: CheckState[];
+    // host.failedCheckLog's answer.
+    failedCheckLog?: string;
   } = {},
 ) {
   const calls = {
@@ -656,6 +732,9 @@ function passHostFake(
     commentOnPullRequest: [] as { pr: number; body: string }[],
     handBack: [] as { pr: number; reason: string; body: string }[],
     recordHumanThread: [] as HumanThreadEntry[],
+    checks: [] as number[],
+    rerunFailedChecks: [] as { pr: number; checkNames: string[] }[],
+    failedCheckLog: [] as { pr: number; checkNames: string[] }[],
     log: [] as string[],
   };
   const sandbox = options.sandbox ?? sandboxFake();
@@ -685,6 +764,18 @@ function passHostFake(
       if (options.pushError) throw options.pushError;
     },
     remoteHead: () => options.remoteHead ?? "f".repeat(40),
+    checks: (pr) => {
+      calls.checks.push(pr);
+      return options.checks ?? [];
+    },
+    rerunFailedChecks: (pr, checkNames) => {
+      calls.rerunFailedChecks.push({ pr, checkNames: [...checkNames] });
+      return options.rerunResult ?? [...checkNames].map((name) => redCheck({ name }));
+    },
+    failedCheckLog: (pr, checkNames) => {
+      calls.failedCheckLog.push({ pr, checkNames: [...checkNames] });
+      return options.failedCheckLog ?? "";
+    },
     replyToThread: (threadId, body) => void calls.replyToThread.push({ threadId, body }),
     resolveThread: (threadId) => void calls.resolveThread.push(threadId),
     commentOnPullRequest: (pr, body) => void calls.commentOnPullRequest.push({ pr, body }),
@@ -1319,6 +1410,89 @@ describe("runPass's other give-ups", () => {
 
     assert.equal(outcome.kind, "skipped");
     assert.deepEqual(calls.createSandbox, []);
+  });
+});
+
+describe("runPass's red CI handling", () => {
+  // Acceptance criterion: "A failed build that the gate reproduces is fixed
+  // by the gate-fixer and pushed."
+  it("fixes a build the gate reproduces, via the gate-fixer, and pushes the result", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [1, 0] });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: true,
+      sandbox,
+      checks: [redCheck({ name: "Build Solution" })],
+    });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Build Solution is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "passed");
+    assert.ok(sandbox.runs.some((run) => run.name === "gate-fixer"), "the gate-fixer ran");
+    assert.equal(calls.push.length, 1);
+  });
+
+  // Acceptance criterion: "A failed test job that the gate doesn't
+  // reproduce is re-run once, not changed."
+  it("re-runs a gate-covered check once when the gate is green, without changing anything", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0] });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: true,
+      sandbox,
+      checks: [redCheck({ name: "Tests: Domain.Tests.Unit" })],
+      rerunResult: [redCheck({ name: "Tests: Domain.Tests.Unit", green: true })],
+    });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Tests: Domain.Tests.Unit is red"] }), issue, BASE, passHost);
+
+    assert.deepEqual(outcome, { kind: "passed", pushed: undefined });
+    assert.deepEqual(calls.rerunFailedChecks, [{ pr: PR_NUMBER, checkNames: ["Tests: Domain.Tests.Unit"] }]);
+    assert.equal(sandbox.runs.length, 0, "no role ran: nothing in the branch needed changing");
+    assert.deepEqual(calls.push, []);
+  });
+
+  // Acceptance criterion: "A second failure hands the PR back with
+  // `sandcastle:needs-human`."
+  it("gives up with sandcastle:needs-human when the re-run check fails again", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0] });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: true,
+      sandbox,
+      checks: [redCheck({ name: "Tests: Domain.Tests.Unit" })],
+      rerunResult: [redCheck({ name: "Tests: Domain.Tests.Unit" })],
+    });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Tests: Domain.Tests.Unit is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.equal(calls.handBack.length, 1);
+    const handBack = calls.handBack[0]!;
+    assert.match(`${handBack.reason}\n${handBack.body}`, /Tests: Domain\.Tests\.Unit/);
+    assert.deepEqual(calls.push, []);
+  });
+
+  // Acceptance criterion: "A failed CodeQL check passes its failed-job log
+  // to the follow-up role."
+  it("forwards a CodeQL check's failed-job log to the follow-up role", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0, 0, 0], followUpJson: "[]" });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: true,
+      sandbox,
+      checks: [redCheck({ name: "Analyze (csharp)" })],
+      failedCheckLog: "##[error] CS8600: converting null literal...",
+    });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Analyze (csharp) is red"] }), issue, BASE, passHost);
+
+    assert.deepEqual(calls.failedCheckLog, [{ pr: PR_NUMBER, checkNames: ["Analyze (csharp)"] }]);
+    const roleRun = sandbox.runs.find((run) => run.name === "follow-up");
+    assert.ok(roleRun !== undefined, "the follow-up role ran to fix the CodeQL failure");
+    assert.match(String(roleRun?.promptArgs?.CODEQL_LOG ?? ""), /CS8600/);
+    assert.equal(outcome.kind, "passed");
+    assert.equal(calls.push.length, 1);
   });
 });
 
