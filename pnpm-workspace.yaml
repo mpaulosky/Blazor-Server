@@ -1,8 +1,13 @@
 ---
+packages:
+  - src/UI
 # esbuild (under tsx) only uses its install script to check its native
 # binary, which pnpm already installs as an optional dependency.
+# @parcel/watcher (under @tailwindcss/cli) is the same: its prebuilt binary
+# comes from an optional dependency, so its install script has nothing to do.
 allowBuilds:
   esbuild: false
+  '@parcel/watcher': false
 # pnpm 12 otherwise writes a two-document lockfile (the pnpm version first),
 # and GitHub's dependency graph reads only that first document, hiding the
 # real dependencies from Dependabot alerts (dependabot/dependabot-core#15904).

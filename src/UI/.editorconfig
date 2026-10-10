@@ -1,0 +1,8 @@
+# Analyzer settings for the UI project only. The root .editorconfig is Owned
+# by the repo-ci-baseline Template and overwritten on every Apply.
+
+[*.cs]
+# CA1515 (make public types internal) doesn't fit here: UI is an executable
+# with no public API, and internal types would need InternalsVisibleTo for the
+# tests and still hit CS0053 when they appear in a public component parameter.
+dotnet_diagnostic.CA1515.severity = none

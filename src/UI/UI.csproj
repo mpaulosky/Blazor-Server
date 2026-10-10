@@ -1,10 +1,50 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
-  </PropertyGroup>
+	<PropertyGroup>
+		<BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="../Domain/Domain.csproj" />
+	</ItemGroup>
+
+	<!-- Tailwind CSS v4: the CLI (from src/UI/package.json) builds wwwroot/css/app.css from
+	     Styles/app.tailwind.css on every build, so there is no separate CSS step to remember. -->
+	<PropertyGroup>
+		<TailwindOutput>wwwroot/css/app.css</TailwindOutput>
+		<TailwindMinify Condition="'$(Configuration)' == 'Release'"> --minify</TailwindMinify>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<TailwindInput Include="**/*.razor;**/*.razor.cs;Styles/**" Exclude="node_modules/**;bin/**;obj/**" />
+	</ItemGroup>
+
+	<!-- The stamp in obj/<Configuration>/ makes each configuration build the CSS once with its own flags, so
+	     switching from Debug to Release rebuilds it minified. It's named here rather than in a property because
+	     IntermediateOutputPath isn't set yet when the project body is evaluated.
+	     Skipped in design-time builds (IDEs, the code-metrics workflow), which have no pnpm. -->
+	<Target
+		Name="BuildTailwindCss"
+		BeforeTargets="BeforeBuild"
+		Condition="'$(DesignTimeBuild)' != 'true'"
+		Inputs="@(TailwindInput);package.json"
+		Outputs="$(TailwindOutput);$(IntermediateOutputPath)tailwind.stamp">
+		<Error
+			Condition="!Exists('$(MSBuildProjectDirectory)/node_modules/@tailwindcss/cli/package.json')"
+			Text="The Tailwind CSS CLI isn't installed in src/UI/node_modules. Run 'pnpm install' at the repository root, then build again." />
+		<!-- The CLI writes progress to stderr; IgnoreStandardErrorWarningFormat keeps it from becoming a warning under -warnaserror. -->
+		<Exec
+			Command="pnpm exec tailwindcss --input Styles/app.tailwind.css --output $(TailwindOutput)$(TailwindMinify)"
+			WorkingDirectory="$(MSBuildProjectDirectory)"
+			IgnoreStandardErrorWarningFormat="true" />
+		<MakeDir Directories="$(IntermediateOutputPath)" />
+		<Touch Files="$(IntermediateOutputPath)tailwind.stamp" AlwaysCreate="true" />
+		<!-- Static web assets read Content at evaluation time, before this target writes the file, so a clean
+		     build would leave app.css out of its endpoints. Re-adding it here puts it in the first build too. -->
+		<ItemGroup>
+			<Content Remove="$(TailwindOutput)" />
+			<Content Include="$(TailwindOutput)" />
+		</ItemGroup>
+	</Target>
 
 </Project>

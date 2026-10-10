@@ -1,0 +1,2 @@
+/* source("..") roots the scan at src/UI, whatever directory the CLI runs from. */
+@import "tailwindcss" source("..");

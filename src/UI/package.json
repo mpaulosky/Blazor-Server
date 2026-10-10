@@ -1,0 +1,11 @@
+{
+  "name": "ui",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss --input Styles/app.tailwind.css --output wwwroot/css/app.css",
+    "watch:css": "tailwindcss --input Styles/app.tailwind.css --output wwwroot/css/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3"
+  }
+}
