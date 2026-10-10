@@ -212,6 +212,10 @@ export async function buildIssue(
       }
       failure = `the ${role} ran out of iterations unfinished`;
     } catch (error) {
+      // Nothing throws UncountedStopError yet: recognising a usage-limit or
+      // time-budget stop in the role runner is #147's. Until it lands, such a
+      // stop counts as a failed attempt; runs are started by hand until then,
+      // and removing sandcastle:needs-human undoes a wrong hand-back.
       if (error instanceof UncountedStopError) throw error;
       failure = `the ${role} failed: ${error}`;
     }

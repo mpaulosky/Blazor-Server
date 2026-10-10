@@ -182,6 +182,10 @@ try {
   const lines = usageReport.lines();
   console.log(lines.length > 0 ? lines.join("\n") : "  (no role ran)");
 
+  // Only logged here. Ending the run red on a hand-back is the trigger
+  // workflow's final step (#82), reading the list #81 writes to
+  // .sandcastle/logs/handbacks.json; exiting non-zero here would make a local
+  // run that hands something back look like a crash.
   const handBacks = handBackReport.items();
   if (handBacks.length > 0) {
     console.log("\nHanded back to a human:");

@@ -2,8 +2,9 @@
 // no imports of its own, so the role runner (lib/agents.mts) can throw one that
 // lib/build.mts catches without the two importing each other.
 
-// Thrown by a role run that stopped because of the Claude usage limit or the
-// run's time budget, not because the role itself failed. buildIssue
+// For a role run that stopped because of the Claude usage limit or the run's
+// time budget, not because the role itself failed. Nothing throws it yet: the
+// role runner starts to once #147 recognises those stops. buildIssue
 // (lib/build.mts) rethrows it from any role, the reviewer's included, rather
 // than treating it as a failed build attempt or publishing work a role didn't
 // get to finish: a round
