@@ -62,6 +62,19 @@ RUN groupmod -o -g $AGENT_GID node && usermod -o -u $AGENT_UID -g $AGENT_GID -d 
 # pnpm through corepack, at the version package.json's "packageManager" pins.
 RUN corepack enable pnpm
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+# The system libraries headless Chromium needs, so the Playwright E2E tests can
+# run in the sandbox's gate. Only the libraries: the E2E fixture downloads the
+# browser itself at test time, at the Microsoft.Playwright version in
+# Directory.Packages.props, so a Playwright bump never needs an image change.
+# This version was that package's when it was written; it only has to move if a
+# later Chromium needs a library this one doesn't install. Root's pnpm and apt
+# caches are removed so they don't stay in the layer.
+ARG PLAYWRIGHT_VERSION=1.63.0
+RUN cd /tmp \
+  && pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install-deps chromium \
+  && rm -rf /var/lib/apt/lists/* /root/.cache /root/.local/share/pnpm
+
 USER ${AGENT_UID}:${AGENT_GID}
 
 # Install Claude Code CLI
