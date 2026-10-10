@@ -370,10 +370,13 @@ bounce issues. The next trigger resumes the work.
 **Renewal:** record each secret's expiry date in the setup issue and a calendar reminder. To renew the OAuth token, run `claude setup-token` and update the secret. To renew the PAT,
 regenerate it under *Settings → Developer settings → Fine-grained tokens* with the same scopes and update the secret. An expired secret shows up as a red run with an auth error.
 
-**Observability:** `.sandcastle/logs/` is uploaded with `actions/upload-artifact` (`if: always()`, 14-day retention). The job summary lists each issue or PR touched and its outcome
-(published, deferred, handed back, role failed, gate failed, timed out), each hand-back with a link, and each role's token usage. There is no run-summary comment on issues or
-PRs; the only comments are the ones the phases above post (intake verdicts, critique deferrals, architect design notes, follow-up pass summaries, build-failure markers and
-hand-backs).
+**Observability:** `.sandcastle/logs/` is uploaded with `actions/upload-artifact` (`if: always()`, 14-day retention). At the end of every run, including one that ended on an
+error, `lib/report.mts` writes the run report to `.sandcastle/logs/summary.md` and appends it to the job summary (`$GITHUB_STEP_SUMMARY`). It says how the run ended (finished,
+stopped on the time budget or usage limit, or crashed) and lists each issue or PR touched and its outcome (published, deferred, handed back, role failed, gate failed, timed
+out, stopped, not published, updated, follow-up pass), each hand-back with a link, the open Sandcastle PRs waiting on unresolved review threads a person opened, and each role's
+token usage. `.sandcastle/logs/handbacks.json` holds the run's hand-backs as an array of `{ kind, number, label, reason, url }`, empty when there were none, for the workflow
+step that ends the run red. There is no run-summary comment on issues or PRs; the only comments are the ones the phases above post (intake verdicts, critique deferrals,
+architect design notes, follow-up pass summaries, build-failure markers and hand-backs).
 
 ## Proposed module layout
 
