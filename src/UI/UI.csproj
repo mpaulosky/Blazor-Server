@@ -18,11 +18,14 @@
 
 	<!-- `@import "tailwindcss" source("..")` makes the CLI scan every non-gitignored, non-binary, non-CSS file
 	     under src/UI, so this input mirrors that scan with a single broad Include rather than an extension list
-	     that drifts out of sync: excluding wwwroot/css and *.css keeps the CLI's own output out of its inputs. -->
+	     that drifts out of sync: excluding wwwroot/css and *.css keeps the CLI's own output out of its inputs.
+	     That exclusion also drops the stylesheet the CLI compiles, so it's added back on its own, or an edit to
+	     it alone would leave the CSS stale. -->
 	<ItemGroup>
 		<TailwindInput
 			Include="**/*"
 			Exclude="node_modules/**;bin/**;obj/**;wwwroot/css/**;**/*.css" />
+		<TailwindInput Include="Styles/app.tailwind.css" />
 	</ItemGroup>
 
 	<!-- The CLI writes into obj/<Configuration>/, so Debug and Release each keep their own up-to-date check and
