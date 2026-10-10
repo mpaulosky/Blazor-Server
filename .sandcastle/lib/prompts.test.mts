@@ -163,6 +163,25 @@ describe("followUpPromptArgs", () => {
 
     assert.deepEqual(JSON.parse(String(args.THREADS_JSON)), []);
   });
+
+  // #79: a red check the gate doesn't cover reaches the role as its log, and
+  // only then does CODEQL_LOG say the gate passed: planRedCi only forwards a
+  // check once the gate is green, but the prompt mustn't claim that on every
+  // run (#79's follow-up review), such as one with only a merge conflict or
+  // bot threads to resolve, where the gate never ran on the head at all.
+  it("passes the failed-job log of a check the gate doesn't cover as CODEQL_LOG, noting the gate already passed", () => {
+    const args = followUpPromptArgs(issue, "feature/3-add-a-thing", 42, [], "already contains main.", "##[error] CS8600");
+
+    assert.match(String(args.CODEQL_LOG), /scripts\/gate\.sh.*passes/);
+    assert.match(String(args.CODEQL_LOG), /##\[error\] CS8600/);
+  });
+
+  it("still fills CODEQL_LOG when there's no log, since Sandcastle refuses an empty placeholder, without claiming the gate passed", () => {
+    const args = followUpPromptArgs(issue, "feature/3-add-a-thing", 42, [], "already contains main.");
+
+    assert.match(String(args.CODEQL_LOG), /no log/i);
+    assert.doesNotMatch(String(args.CODEQL_LOG), /gate\.sh/);
+  });
 });
 
 describe("critiquePromptArgs", () => {

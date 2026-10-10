@@ -5,6 +5,7 @@
 // working it out from the git remote of wherever it runs.
 
 import { execFileSync } from "node:child_process";
+import { endOf } from "./checkpoint.mts";
 import { COPILOT_REVIEWER, QUEUE_LABEL, SANDCASTLE_LABELS, type QueueScope, type SandcastleLabel } from "./config.mts";
 import type { CheckState, SweepPullRequest } from "./follow-up.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
@@ -211,13 +212,14 @@ export function openPullRequests(): OpenPullRequest[] {
 // name doesn't count.
 // Run gh with its stderr captured, and throw with that stderr in the message,
 // so a caller can say why it failed.
-function ghWithStderr(run: typeof execFileSync, args: string[], input?: string): string {
+function ghWithStderr(run: typeof execFileSync, args: string[], input?: string, maxBuffer?: number): string {
   try {
     return run("gh", args, {
       cwd: process.cwd(),
       encoding: "utf8",
       stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       ...(input === undefined ? {} : { input }),
+      ...(maxBuffer === undefined ? {} : { maxBuffer }),
     });
   } catch (error) {
     const stderr = (error as { stderr?: unknown }).stderr;
@@ -346,6 +348,7 @@ type CheckContext = {
   context?: string;
   state?: string;
   createdAt?: string;
+  checkSuite?: { workflowRun?: { databaseId?: number } | null } | null;
 };
 type SweepNode = {
   id: string;
@@ -577,6 +580,177 @@ type ReviewThreadsNode = {
     comments: Connection<{ author?: { __typename?: string; login?: string } | null; body?: string; url?: string }>;
   }>;
 };
+
+// One check on a PR's head as a follow-up pass reads it (#79): its
+// CheckState, and the id of the GitHub Actions run behind it, which is what
+// `gh run rerun` and `gh run view` take. A status, or a check run another
+// app made (such as code scanning's own "CodeQL" result), has none.
+export type HeadCheck = CheckState & { runId: number | undefined };
+
+const HEAD_CHECKS_QUERY = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      headRefOid
+      commits(last: 1) {
+        nodes {
+          commit {
+            oid
+            statusCheckRollup {
+              contexts(first: 100) {
+                pageInfo { hasNextPage }
+                nodes {
+                  __typename
+                  ... on CheckRun { name status conclusion completedAt checkSuite { workflowRun { databaseId } } }
+                  ... on StatusContext { context state createdAt }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+// The checks on PR `number`'s head, read fresh for a follow-up pass
+// (lib/follow-up-pass.mts#PassHost.checks), normalised as the sweep's are.
+// Throws, rather than deciding from part of them, when the list is
+// truncated, the answer names no such PR, or the checks read are on a commit
+// other than its head.
+export function headChecksOf(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): { headRefOid: string; checks: HeadCheck[] } {
+  const [owner, name] = repo.split("/") as [string, string];
+  const page = JSON.parse(
+    ghWithStderr(run, [
+      "api", "graphql", "-f", `query=${HEAD_CHECKS_QUERY}`, "-f", `owner=${owner}`, "-f", `name=${name}`, "-F", `number=${number}`,
+    ]),
+  ) as {
+    data?: {
+      repository?: {
+        pullRequest?: {
+          headRefOid?: string;
+          commits?: Connection<{ commit: { oid?: string; statusCheckRollup: { contexts: Connection<CheckContext> } | null } | null }>;
+        } | null;
+      };
+    };
+  };
+  const pr = page.data?.repository?.pullRequest;
+  if (!pr || typeof pr.headRefOid !== "string") {
+    throw new Error(`gh api graphql answered no such pull request #${number}: ${JSON.stringify(page)}`);
+  }
+  const head = nodesOf(pr.commits)[0]?.commit;
+  if (head?.oid !== pr.headRefOid) throw new Error(`Pull request #${number}'s checks weren't read from its head ${pr.headRefOid}`);
+  const contexts = head.statusCheckRollup?.contexts;
+  if (truncated(contexts)) throw new Error(`Pull request #${number}'s checks are truncated, so they can't be read in full`);
+  return {
+    headRefOid: pr.headRefOid,
+    checks: nodesOf(contexts).map((context) => ({ ...checkState(context), runId: context.checkSuite?.workflowRun?.databaseId })),
+  };
+}
+
+// The head checks named in `names`, each with the Actions run behind it. Reads
+// the checks afresh and refuses when the head has moved past `expectedHead`
+// (the commit a follow-up pass gated), rather than re-run or forward a check
+// read from a commit the pass never judged (#79).
+function namedRuns(
+  number: number,
+  names: readonly string[],
+  expectedHead: string,
+  run: typeof execFileSync,
+  repo: string,
+): { checks: HeadCheck[]; runIds: number[] } {
+  const { headRefOid, checks: allChecks } = headChecksOf(number, run, repo);
+  if (headRefOid !== expectedHead) {
+    throw new Error(`Pull request #${number}'s head moved to ${headRefOid}, so its checks aren't the ones gated at ${expectedHead}`);
+  }
+  // A head can carry a name in `names` from more than one Actions run, for
+  // example a workflow triggered by both `push` and `pull_request`: one run
+  // green, one red. Keeping only the failed ones here stops a caller from
+  // re-running, or reading the failed-job log of, a run that already passed
+  // (#259).
+  const checks = allChecks.filter((check) => names.includes(check.name) && check.completed && !check.green);
+  const runIds = [...new Set(checks.flatMap((check) => (check.runId === undefined ? [] : [check.runId])))];
+  return { checks, runIds };
+}
+
+// The check without its run id, as PassHost hands it back.
+function stateOf({ runId: _runId, ...state }: HeadCheck): CheckState {
+  return state;
+}
+
+// lib/follow-up-pass.mts#PassHost.rerunFailedChecks: re-runs, once, the
+// failed jobs of each Actions run behind the checks in `names`
+// (`gh run rerun --failed`), and reports those checks as running. It doesn't
+// wait for the re-run: a pass holds its issue's building label while it
+// runs, and the sweep already waits for running checks. So "once" is told
+// from the run itself, not remembered: a run on a later attempt has been
+// re-run already, by a pass or a person, and its checks are reported as they
+// stand, so one still red there hands the PR back. Throws for a named check
+// with no Actions run, which can't be re-run, or when the head has moved past
+// `expectedHead` since the pass gated it (#79).
+export function rerunFailedChecksOnce(
+  number: number,
+  names: readonly string[],
+  expectedHead: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): CheckState[] {
+  const { checks, runIds } = namedRuns(number, names, expectedHead, run, repo);
+  const runless = checks.filter((check) => check.runId === undefined).map((check) => check.name);
+  if (runless.length > 0) throw new Error(`No GitHub Actions run is behind ${runless.join(", ")}, so it can't be re-run`);
+  const states: CheckState[] = [];
+  for (const runId of runIds) {
+    const ofRun = checks.filter((check) => check.runId === runId);
+    const attempt = Number(ghWithStderr(run, ["api", `repos/${repo}/actions/runs/${runId}`, "--jq", ".run_attempt"]).trim());
+    if (!Number.isInteger(attempt) || attempt < 1) throw new Error(`gh api gave run ${runId} no attempt number`);
+    if (attempt > 1) {
+      states.push(...ofRun.map(stateOf));
+      continue;
+    }
+    ghWithStderr(run, ["run", "rerun", String(runId), "--failed", "--repo", repo]);
+    states.push(...ofRun.map((check) => ({ ...stateOf(check), completed: false, green: false, completedAt: null })));
+  }
+  return states;
+}
+
+// How much of a `gh run view --log-failed` answer failedCheckLogs reads: a
+// failed CodeQL job's log can run to megabytes, past execFileSync's default
+// buffer, and the caller keeps only its end.
+const FAILED_LOG_BUFFER = 256 * 1024 * 1024;
+
+// lib/follow-up-pass.mts#PassHost.failedCheckLog: `gh run view --log-failed`
+// for each Actions run behind the checks in `names`, read once per run under
+// a header naming its checks. A check with no Actions run gets a line saying
+// so rather than failing the pass: the follow-up role can still fix the rest.
+// Throws when the head has moved past `expectedHead` since the pass gated it
+// (#79), rather than quote a log for a commit the pass never judged. `limit`,
+// when given, keeps each run's own section to an even share of it (the end,
+// where its error is) rather than cutting the joined text as a whole: two
+// runs' logs otherwise compete for the same budget, and the later one in the
+// join can crowd the earlier one out of it entirely (#79).
+export function failedCheckLogs(
+  number: number,
+  names: readonly string[],
+  expectedHead: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  limit: number = Number.POSITIVE_INFINITY,
+): string {
+  const { checks, runIds } = namedRuns(number, names, expectedHead, run, repo);
+  const perRun = limit / Math.max(1, runIds.length);
+  const sections = runIds.map((runId) => {
+    const ofRun = checks.filter((check) => check.runId === runId).map((check) => check.name);
+    const log = ghWithStderr(run, ["run", "view", String(runId), "--log-failed", "--repo", repo], undefined, FAILED_LOG_BUFFER);
+    return `=== ${ofRun.join(", ")} (run ${runId}) ===\n${endOf(log.trim(), perRun)}`;
+  });
+  const runless = names.filter((name) => !checks.some((check) => check.name === name && check.runId !== undefined));
+  if (runless.length > 0) sections.push(`=== ${runless.join(", ")} ===\nThere's no GitHub Actions log for this check.`);
+  return sections.join("\n\n");
+}
 
 // Replies to a review thread (lib/follow-up-pass.mts#runPass), through
 // addPullRequestReviewThreadReply. The body travels as a GraphQL variable in
