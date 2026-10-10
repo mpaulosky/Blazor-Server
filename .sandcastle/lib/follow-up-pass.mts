@@ -15,9 +15,17 @@ import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRoleInSandbox } from "./agents.mts";
-import { createCheckedSandbox, isWorkflowPushRejection, publicErrorText, retryOnServerError } from "./build.mts";
+import { originGit, originRefs } from "./branches.mts";
+import {
+  BROKEN_COMMENT_OPEN,
+  createCheckedSandbox,
+  cutAtCharacter,
+  isWorkflowPushRejection,
+  publicErrorText,
+  retryOnServerError,
+} from "./build.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
-import { runCheckpoint, tail, type GateRun } from "./checkpoint.mts";
+import { ansiEscape, headOf, runCheckpoint, tail, type GateRun } from "./checkpoint.mts";
 import {
   BUILDING_LABEL,
   FOLLOW_UP_MARKER,
@@ -221,27 +229,24 @@ function resolutionOf(verdict: ThreadVerdict): Resolution {
 const VERDICT_WORDS: Record<ThreadVerdict["verdict"], string> = { fixed: "Fixed", declined: "Declined", outdated: "Outdated" };
 const RESOLUTION_WORDS: Record<Resolution, string> = { ADDRESSED: "addressed", WONT_FIX: "won't fix", INVALID: "invalid" };
 
-// What stands in for <!-- in model text the host posts, so a reason quoting a
-// host marker can't pass for the host's own comment (as lib/build.mts's
+// Model text the host posts with its <!-- broken, so a reason quoting a host
+// marker can't pass for the host's own comment (as lib/build.mts's
 // designComment does, #228).
 function withoutCommentOpeners(text: string): string {
-  return text.replaceAll("<!--", "<!\u200B--");
+  return text.replaceAll("<!--", BROKEN_COMMENT_OPEN);
 }
 
-// `text` cut to at most `limit` UTF-16 code units, without splitting a
-// surrogate pair: GitHub refuses a comment holding a lone surrogate.
-function cutToLimit(text: string, limit: number = COMMENT_LIMIT): string {
-  if (text.length <= limit) return text;
-  const cut = text.slice(0, limit);
-  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+// `text` cut to fit COMMENT_LIMIT (see lib/build.mts#cutAtCharacter).
+function cutToLimit(text: string): string {
+  return text.length <= COMMENT_LIMIT ? text : cutAtCharacter(text, COMMENT_LIMIT);
 }
 
 // The reply the host posts on a thread for `action` (runPass's step 12):
 // FOLLOW_UP_REPLY_MARKER, a first line naming the verdict (and, for a bot
-// thread, the resolution, such as "Resolved: won't fix"), then the reason —
-// through `publicError`, which breaks any @mention or #123 reference in the
-// model's text — and "Fixed in <commit>" when the verdict names one. Cut to
-// fit GitHub's comment limit.
+// thread, the resolution, such as "Resolved as won't fix."), then the reason
+// — through `publicError`, which hides a secret, with its <!-- and every
+// @mention or #123 reference outside code broken — and "Fixed in <commit>"
+// when the verdict names one. Cut to fit GitHub's comment limit.
 export function replyBody(action: ThreadAction, publicError: (text: string) => string): string {
   const { verdict, resolve } = action;
   const lead =
@@ -268,36 +273,29 @@ export type PassReport = {
   leftForHuman: number;
 };
 
+// How the pass summary says main was merged in, if it was.
+const MERGE_SENTENCES: Record<PassReport["merged"], string[]> = {
+  none: [],
+  clean: ["Merged `main` into the branch."],
+  conflicts: ["Merged `main` into the branch and resolved its conflicts."],
+};
+
 // The PR comment a pass posts once it's done (runPass's step 13):
 // FOLLOW_UP_MARKER, "Follow-up pass n of FOLLOW_UP_PASS_CAP", what was
 // pushed, and one line per thread action naming its verdict and resolution,
 // or "left open for the owner" for one that was only replied to.
 export function passSummaryComment(report: PassReport): string {
   const lines = [`${FOLLOW_UP_MARKER}\nSandcastle's follow-up pass ${report.pass} of ${FOLLOW_UP_PASS_CAP} on this PR.`];
-  const merged = {
-    none: [],
-    clean: ["Merged `main` into the branch."],
-    conflicts: ["Merged `main` into the branch and resolved its conflicts."],
-  }[report.merged];
-  lines.push(
-    [
-      ...merged,
-      report.pushed === undefined
-        ? "Nothing needed pushing."
-        : `Pushed \`${report.pushed}\`, which passed \`scripts/gate.sh\`.`,
-    ].join(" "),
-  );
+  const pushed =
+    report.pushed === undefined ? "Nothing needed pushing." : `Pushed \`${report.pushed}\`, which passed \`scripts/gate.sh\`.`;
+  lines.push([...MERGE_SENTENCES[report.merged], pushed].join(" "));
   if (report.actions.length > 0) {
-    lines.push(
-      ["Review threads:", ...report.actions.map(summaryLine)].join("\n"),
-    );
+    lines.push(["Review threads:", ...report.actions.map(summaryLine)].join("\n"));
   }
   if (report.ignored.length > 0) {
-    lines.push(
-      "Ignored verdicts for threads the follow-up role wasn't given, or already answered: " +
-        report.ignored.map((id) => plainText(id.slice(0, 100))).join(", ") +
-        ".",
-    );
+    // The ids are the role's text too, so they're kept plain and short.
+    const ids = report.ignored.map((id) => plainText(id.slice(0, 100))).join(", ");
+    lines.push(`Ignored verdicts for threads the follow-up role wasn't given, or already answered: ${ids}.`);
   }
   if (report.failedWrites.length > 0) {
     lines.push(`These GitHub writes failed: ${report.failedWrites.join("; ")}.`);
@@ -404,29 +402,16 @@ export type PassHost = {
   log(line: string): void;
 };
 
-// Whether `ancestor` is in `commit`'s history, in the main checkout: exit 1
-// is a definite no, and so is an object the repository doesn't have.
-function liveContains(commit: string, ancestor: string): boolean {
-  try {
-    git("merge-base", "--is-ancestor", ancestor, commit);
-    return true;
-  } catch (error) {
-    const status = ((error as { cause?: { status?: unknown } }).cause ?? {}).status;
-    if (status === 1 || /Not a valid (?:object|commit) name/.test(String(error))) return false;
-    throw error;
-  }
-}
-
 // The live PassHost.
 export const livePassHost: PassHost = {
-  fetchBranch: (branch) => void git("fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`),
+  fetchBranch: (branch) => originGit.fetch(branch),
   reviewThreads: (pr) => reviewThreadsOf(pr),
   isOwner: ownerCheck(
     () => signedInHostLogin(),
     (login) => pushAccess(login),
   ),
   passCount: (pr) => markerComments(pr, "sandcastle:needs-human", FOLLOW_UP_MARKER).length,
-  contains: liveContains,
+  contains: (commit, ancestor) => originRefs.contains(commit, ancestor),
   markBuilding: (issue) => claimBuildingLabel(issue),
   unmarkBuilding: (issue) => releaseBuildingLabel(issue),
   createSandbox: (branch) => createCheckedSandbox(branch),
@@ -458,18 +443,13 @@ function shellWord(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-// The gate's colour codes, which only get in the way of a prompt or a comment.
-const ansiEscape = /\u001b\[[0-9;]*[A-Za-z]/g;
-
-// A full commit id, SHA-1 or SHA-256.
-const commitId = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
-
 // One gate run for a pass. Like lib/checkpoint.mts#runGate, a passing gate
 // over a dirty worktree (an unfinished merge included) still fails, and the
 // gated commit is the HEAD the host then scans and pushes by its id. Unlike
-// runGate, HEAD is read once, after the gate has passed, rather than before
-// and after with a check that it didn't move: see this module's commit for
-// why. CI gates the pushed commit again on the PR.
+// runGate, HEAD is read once, after the gate has passed, with no check that
+// it didn't move while the gate ran: follow-up-pass.test.mts's sandboxFake
+// moves HEAD on every passing gate run, which that check would fail. CI
+// gates the pushed commit again on the PR.
 async function passGate(sandbox: Pick<sandcastle.Sandbox, "exec">): Promise<GateRun> {
   const { stdout, exitCode } = await sandbox.exec("scripts/gate.sh 2>&1");
   const output = stdout.replace(ansiEscape, "");
@@ -483,12 +463,11 @@ async function passGate(sandbox: Pick<sandcastle.Sandbox, "exec">): Promise<Gate
         `change, and finish any merge, so the pushed branch is exactly what the gate checked:\n${status.stdout}`,
     };
   }
-  const head = await sandbox.exec("git rev-parse HEAD");
-  const commit = head.stdout.trim();
-  if (head.exitCode !== 0 || !commitId.test(commit)) {
+  const head = await headOf(sandbox);
+  if (head === undefined) {
     return { passed: false, output: `${output}\n❌ The gate passed, but HEAD couldn't be read, so the commit it checked isn't known.` };
   }
-  return { passed: true, output, head: commit };
+  return { passed: true, output, head };
 }
 
 // Whether `ancestor` is in `commit`'s history, asked in the sandbox's
@@ -545,7 +524,8 @@ export async function runPass(
   // its worktree, and a build of the same issue stands aside meanwhile.
   if (!host.markBuilding(issue.number)) return skip(`another run marked #${issue.number} ${BUILDING_LABEL}`);
   try {
-    return await passOnMarkedIssue(target, issue, base, host, sorted.forRole, sorted.leftForHuman.length, needsMerge, passCount);
+    const plan = { forRole: sorted.forRole, leftForHuman: sorted.leftForHuman.length, needsMerge, passCount };
+    return await passOnMarkedIssue(target, issue, base, host, plan);
   } finally {
     try {
       host.unmarkBuilding(issue.number);
@@ -568,6 +548,11 @@ function giveUp(target: PassTarget, host: PassHost, reason: string, output: stri
   return { kind: "gave-up", reason };
 }
 
+// What runPass decided before marking the issue: the threads for the role,
+// how many were left for a person, whether main needs merging in, and how
+// many passes the PR has already had.
+type PassPlan = { forRole: PromptThread[]; leftForHuman: number; needsMerge: boolean; passCount: number };
+
 // runPass's work once the issue is marked: everything from creating the
 // sandbox to closing it.
 async function passOnMarkedIssue(
@@ -575,10 +560,7 @@ async function passOnMarkedIssue(
   issue: SandcastleIssue,
   base: string,
   host: PassHost,
-  forRole: PromptThread[],
-  leftForHuman: number,
-  needsMerge: boolean,
-  passCount: number,
+  { forRole, leftForHuman, needsMerge, passCount }: PassPlan,
 ): Promise<PassOutcome> {
   const branch = target.headRefName;
   const log = (line: string) => host.log(`  PR #${target.number} ${line}`);
@@ -706,25 +688,7 @@ async function passOnMarkedIssue(
     }
 
     const { actions, ignored } = threadActions(verdicts, forRole);
-    const failedWrites: string[] = [];
-    for (const action of actions) {
-      const id = action.thread.threadId;
-      try {
-        host.replyToThread(id, replyBody(action, (text) => host.publicError(text)));
-      } catch (error) {
-        log(`replying on thread ${id} failed: ${error}`);
-        failedWrites.push(`the reply on thread ${id}`);
-        // A thread isn't resolved without the reply that says why.
-        continue;
-      }
-      if (action.resolve === undefined) continue;
-      try {
-        host.resolveThread(id);
-      } catch (error) {
-        log(`resolving thread ${id} failed: ${error}`);
-        failedWrites.push(`resolving thread ${id}`);
-      }
-    }
+    const failedWrites = answerThreads(actions, host, log);
     try {
       host.commentOnPullRequest(
         target.number,
@@ -754,6 +718,32 @@ async function passOnMarkedIssue(
       await sandbox.close();
     }
   }
+}
+
+// Replies to each of `actions`' threads and resolves the bot threads among
+// them, carrying on past a write that fails. Returns the writes that failed,
+// for the pass summary.
+function answerThreads(actions: readonly ThreadAction[], host: PassHost, log: (line: string) => void): string[] {
+  const failedWrites: string[] = [];
+  for (const action of actions) {
+    const id = action.thread.threadId;
+    try {
+      host.replyToThread(id, replyBody(action, (text) => host.publicError(text)));
+    } catch (error) {
+      log(`replying on thread ${id} failed: ${error}`);
+      failedWrites.push(`the reply on thread ${id}`);
+      // A thread isn't resolved without the reply that says why.
+      continue;
+    }
+    if (action.resolve === undefined) continue;
+    try {
+      host.resolveThread(id);
+    } catch (error) {
+      log(`resolving thread ${id} failed: ${error}`);
+      failedWrites.push(`resolving thread ${id}`);
+    }
+  }
+  return failedWrites;
 }
 
 // main.mts's pass phase: fetches every target's branch serially first (a

@@ -72,7 +72,9 @@ export type RemoteGit = {
   fetch(branch: string): void;
 };
 
-const originGit: RemoteGit = {
+// The live RemoteGit, which lib/follow-up-pass.mts's pass phase fetches a
+// PR's branch through too.
+export const originGit: RemoteGit = {
   issueBranches: () =>
     parseHeads(git("ls-remote", "--heads", "origin", ...issuePrefixes.map((prefix) => `refs/heads/${prefix}/*`))),
   fetch: (branch) => {
@@ -127,7 +129,9 @@ function exitStatus(error: unknown): unknown {
   return ((error as { cause?: { status?: unknown } }).cause ?? {}).status;
 }
 
-const originRefs: BranchRefs = {
+// The live BranchRefs, whose `contains` lib/follow-up-pass.mts also asks
+// whether a PR's head already has main.
+export const originRefs: BranchRefs = {
   remoteHead: (branch) => git("ls-remote", "origin", `refs/heads/${branch}`).split(/\s/)[0] || undefined,
   localHead: (ref) => {
     try {

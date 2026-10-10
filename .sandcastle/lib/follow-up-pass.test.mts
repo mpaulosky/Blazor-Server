@@ -618,8 +618,8 @@ describe("runPass", () => {
 
     await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
-    const resetIndex = sandbox.execCalls.findIndex((call) => call.startsWith("git reset --hard"));
-    const mergeIndex = sandbox.execCalls.findIndex((call) => call.startsWith("git merge"));
+    const resetIndex = sandbox.steps.findIndex((step) => step.startsWith("git reset --hard"));
+    const mergeIndex = sandbox.steps.findIndex((step) => step.startsWith("git merge"));
     const roleIndex = sandbox.steps.indexOf("follow-up");
     assert.ok(resetIndex !== -1 && mergeIndex !== -1 && resetIndex < mergeIndex, "expected the merge to come after the reset");
     assert.ok(mergeIndex < roleIndex, "expected the merge to come before the follow-up role");
