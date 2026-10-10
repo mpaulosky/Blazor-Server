@@ -99,6 +99,7 @@ function recordingSplitGithub(firstChildNumber: number = 101) {
     unmarkSplitting: (issueNumber) => {
       calls.push({ fn: "unmarkSplitting", args: [issueNumber] });
     },
+    blockersOf: () => [],
   };
   return { calls, github };
 }
@@ -254,7 +255,8 @@ describe("applyVerdicts for a well-formed split verdict", () => {
 
     const created = split.calls.filter((call) => call.fn === "createChild");
     assert.equal(created.length, 3, JSON.stringify(split.calls));
-    assert.deepEqual(created.map((call) => call.args[2]), [["Sandcastle"], ["Sandcastle"], ["Sandcastle"]]);
+    const held = ["Sandcastle", "sandcastle:needs-human"];
+    assert.deepEqual(created.map((call) => call.args[2]), [held, held, held]);
     assert.deepEqual(created.map((call) => call.args[0]), wellFormedChildren.map((c) => c.title));
 
     const [child1, child2, child3] = [101, 102, 103];
@@ -274,7 +276,7 @@ describe("applyVerdicts for a well-formed split verdict", () => {
     const created = split.calls.filter((call) => call.fn === "createChild");
     assert.equal(created.length, 3);
     for (const call of created) {
-      assert.deepEqual(call.args[2], ["Sandcastle", "bug"]);
+      assert.deepEqual(call.args[2], ["Sandcastle", "bug", "sandcastle:needs-human"]);
     }
   });
 
@@ -371,7 +373,9 @@ describe("applyVerdicts for a split verdict beyond the acceptance criteria", () 
     assert.ok(fns.indexOf("comment") < fns.indexOf("unmarkSplitting"), fns.join(", "));
   });
 
-  it("leaves the issue unjudged, with nothing created, when marking it fails", () => {
+  // A label edit GitHub answered with an error may still have landed, and
+  // would then hold the issue back with nothing saying why (#234).
+  it("leaves the issue unjudged, with nothing created, and takes the mark back off, when marking it fails", () => {
     const gh = recordingGh();
     const report = new HandBackReport();
     const split = recordingSplitGithub();
@@ -382,10 +386,25 @@ describe("applyVerdicts for a split verdict beyond the acceptance criteria", () 
 
     applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", report, (line) => lines.push(line), split.github);
 
-    assert.deepEqual(split.calls, []);
+    assert.deepEqual(split.calls, [{ fn: "unmarkSplitting", args: [10] }]);
     assert.deepEqual(gh.calls.filter((call) => call.args[1] !== "view"), []);
     assert.equal(report.items().length, 0);
     assert.ok(lines.some((line) => line.includes("judged again")), lines.join("\n"));
+  });
+
+  it("logs that a person has to remove the mark when marking fails and taking it off fails too", () => {
+    const split = recordingSplitGithub();
+    split.github.markSplitting = () => {
+      throw new Error("HTTP 502");
+    };
+    split.github.unmarkSplitting = () => {
+      throw new Error("HTTP 502");
+    };
+    const lines: string[] = [];
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], recordingGh().run, "o/r", new HandBackReport(), (line) => lines.push(line), split.github);
+
+    assert.ok(lines.some((line) => /sandcastle:needs-human/.test(line) && /remove it by hand/.test(line)), lines.join("\n"));
   });
 
   // A create that fails may still have created the issue on GitHub (a 502
@@ -456,6 +475,71 @@ describe("applyVerdicts for a split verdict beyond the acceptance criteria", () 
     const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
     assert.doesNotMatch(comment, /add `Sandcastle` back/);
     assert.match(comment, /close this issue yourself/);
+  });
+
+  // The original is about to lose Sandcastle, so its own blockers stop
+  // holding anything back: the first child takes them over (#234).
+  it("links the first child as blocked by the original's blockers, native and in its body", () => {
+    const split = recordingSplitGithub();
+    split.github.blockersOf = (number) => (number === 10 ? [50] : []);
+    const original = { ...issue(10), body: "## Summary\n\nA thing.\n\nBlocked by #60" };
+
+    applyVerdicts([original], [splitVerdict(10)], recordingGh().run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const blockedBy = split.calls.filter((call) => call.fn === "addBlockedBy").map((call) => call.args);
+    assert.deepEqual(blockedBy, [[101, 50], [101, 60], [102, 101], [103, 102]]);
+  });
+
+  // Each child is held until the split finishes, so a partial split's
+  // children aren't built before a person has read the hand-back (#234).
+  it("takes the hold off every child and the original once the umbrella comment is posted", () => {
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], recordingGh().run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const unmarked = split.calls.filter((call) => call.fn === "unmarkSplitting").map((call) => call.args[0]);
+    assert.deepEqual(unmarked, [101, 102, 103, 10]);
+    const fns = split.calls.map((call) => call.fn);
+    assert.ok(fns.indexOf("comment") < fns.indexOf("unmarkSplitting"), fns.join(", "));
+  });
+
+  it("keeps every child it created held when the split fails partway, and says so", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const createChild = split.github.createChild;
+    let created = 0;
+    split.github.createChild = (title, body, labels) => {
+      if (++created === 3) throw new Error("HTTP 502");
+      return createChild(title, body, labels);
+    };
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    assert.ok(!split.calls.some((call) => call.fn === "unmarkSplitting"));
+    const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.match(comment, /carry `sandcastle:needs-human`/);
+    // Closing a sub-issue as completed would let the umbrella check close
+    // this issue as completed too.
+    assert.match(comment, /as not planned/);
+  });
+
+  // Mentions and references don't fire inside code, and a child's body is a
+  // build spec: a Razor directive there must reach the agent as written.
+  it("leaves code spans and fenced blocks in a child as written", () => {
+    const split = recordingSplitGithub();
+    const coded = {
+      title: "Add `@page \"/x\"` for @someone",
+      body: "## Summary\n\ncc @someone.\n\n```razor\n@inject IFoo Foo\n@code { }\n```\n\n## Acceptance criteria\n\n- [ ] The page has `@page \"/x\"` and `@media` rules.",
+    };
+
+    applyVerdicts([issue(10)], [splitVerdict(10, [coded])], recordingGh().run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const [title, body] = split.calls.find((call) => call.fn === "createChild")!.args as [string, string];
+    assert.ok(title.includes("`@page \"/x\"`"), title);
+    assert.doesNotMatch(title, /@someone/);
+    assert.ok(body.includes("```razor\n@inject IFoo Foo\n@code { }\n```"), body);
+    assert.ok(body.includes("`@page \"/x\"` and `@media`"), body);
+    assert.doesNotMatch(body, /cc @someone/);
   });
 
   // The children's bodies are model text posted from the host's account, so

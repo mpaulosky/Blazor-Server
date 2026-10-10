@@ -11,11 +11,12 @@ const child = (number: number, state: "open" | "closed", stateReason: string | n
 
 // An UmbrellaGitHub stub serving each umbrella number's children from
 // `umbrellas`, and recording every umbrella it's asked to close.
-function stubGithub(umbrellas: Record<number, SubIssue[]>) {
+function stubGithub(umbrellas: Record<number, SubIssue[]>, labels: Record<number, string[]> = {}) {
   const closed: number[] = [];
   const github: UmbrellaGitHub = {
     openUmbrellas: () => Object.keys(umbrellas).map(Number),
     subIssues: (parent) => umbrellas[parent] ?? [],
+    labels: (number) => labels[number] ?? [],
     closeCompleted: (number) => {
       closed.push(number);
     },
@@ -24,6 +25,20 @@ function stubGithub(umbrellas: Record<number, SubIssue[]>) {
 }
 
 describe("closeFinishedUmbrellas", () => {
+  // A split that failed after its umbrella comment landed is handed back, and
+  // a person may re-queue it; it isn't an umbrella to close any more (#234).
+  for (const label of ["Sandcastle", "sandcastle:needs-human"]) {
+    it(`leaves an umbrella open while it carries ${label}, and logs why`, () => {
+      const { github, closed } = stubGithub({ 10: [child(11, "closed", "completed")] }, { 10: [label] });
+      const lines: string[] = [];
+
+      closeFinishedUmbrellas(github, (line) => lines.push(line));
+
+      assert.deepEqual(closed, []);
+      assert.ok(lines.some((line) => line.includes("#10") && line.includes(label)), lines.join("\n"));
+    });
+  }
+
   it("closes an umbrella as completed once every child has closed as completed", () => {
     const { github, closed } = stubGithub({
       10: [child(11, "closed", "completed"), child(12, "closed", "completed")],

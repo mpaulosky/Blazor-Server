@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { UMBRELLA_MARKER } from "./config.mts";
-import { closeIssueAsCompleted, openIssuesWithComment, subIssuesOf, type SubIssue } from "./github.mts";
+import { closeIssueAsCompleted, issueLabels, openIssuesWithComment, subIssuesOf, type SubIssue } from "./github.mts";
 
 // The GitHub reads and writes closing an umbrella needs; tests pass a stub.
 export type UmbrellaGitHub = {
@@ -20,12 +20,15 @@ export type UmbrellaGitHub = {
   // The umbrella's children, with enough state to tell whether each closed
   // as completed.
   subIssues(parent: number): SubIssue[];
+  // The umbrella's labels (see closeFinishedUmbrellas).
+  labels(number: number): string[];
   closeCompleted(number: number): void;
 };
 
 export const liveUmbrellaGitHub: UmbrellaGitHub = {
   openUmbrellas: () => openIssuesWithComment(UMBRELLA_MARKER),
   subIssues: subIssuesOf,
+  labels: (number) => issueLabels(number),
   closeCompleted: closeIssueAsCompleted,
 };
 
@@ -43,6 +46,14 @@ export function closeFinishedUmbrellas(
     // One umbrella whose children can't be read, or that won't close, waits
     // for the next round without holding up the others.
     try {
+      // A split that failed after its umbrella comment landed is handed back
+      // with sandcastle:needs-human, and a person may re-queue it with
+      // Sandcastle: either way it isn't an umbrella to close (#234).
+      const held = github.labels(umbrella).find((label) => label === "Sandcastle" || label === "sandcastle:needs-human");
+      if (held) {
+        log(`  ☂ #${umbrella} stays open: it carries ${held}.`);
+        continue;
+      }
       const children = github.subIssues(umbrella);
       if (children.length === 0) {
         log(`  ☂ #${umbrella} stays open: it has no sub-issues yet.`);

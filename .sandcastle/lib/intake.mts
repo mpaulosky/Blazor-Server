@@ -19,7 +19,7 @@ import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, INTAKE_REFUSED_BATCHES_LIMIT, UMBRELLA_MARKER } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import { openPrReason } from "./gate.mts";
+import { bodyBlockers, liveGitHub as liveGateGitHub, openPrReason } from "./gate.mts";
 import {
   addBlockedBy,
   addIssueLabel,
@@ -68,14 +68,18 @@ export type SplitGitHub = {
   createChild(title: string, body: string, labels: readonly string[]): number;
   // Adds `child` as a sub-issue of `parent` (the original issue being split).
   addSubIssue(parent: number, child: number): void;
-  // Links `child` as blocked by the one before it in build order.
+  // Links `child` as blocked by `blocker`: the child before it in build
+  // order, or one of the original's own blockers.
   addBlockedBy(child: number, blocker: number): void;
+  // The original issue's native "blocked by" links (see lib/gate.mts).
+  blockersOf(issue: number): number[];
   // Removes Sandcastle from the original issue, which has become an umbrella.
   removeSandcastle(issue: number): void;
   comment(issue: number, body: string): void;
   // Adds and removes the mark (sandcastle:needs-human) that keeps the issue
   // out of intake while it's being split, so neither a concurrent run nor a
-  // later round splits it a second time (see applySplit).
+  // later round splits it a second time, and takes the same mark off each
+  // child once the split has finished (see applySplit).
   markSplitting(issue: number): void;
   unmarkSplitting(issue: number): void;
 };
@@ -84,6 +88,7 @@ export const liveSplitGitHub: SplitGitHub = {
   createChild: createIssue,
   addSubIssue,
   addBlockedBy,
+  blockersOf: (issue) => liveGateGitHub.nativeBlockers(issue).map((blocker) => blocker.number),
   removeSandcastle: (issue) => removeIssueLabel(issue, "Sandcastle"),
   comment: commentOnIssue,
   markSplitting: (issue) => addIssueLabel(issue, "sandcastle:needs-human"),
@@ -187,7 +192,7 @@ export function applyVerdicts(
         log(`  ⚠ Skipping intake's verdict on ${ref}: another run has judged it since this round read the queue.`);
         continue;
       }
-      log(`  ${applyVerdict(issue.number, verdict, run, repo, report, log, splitGithub)}`);
+      log(`  ${applyVerdict(issue, verdict, run, repo, report, log, splitGithub)}`);
     } catch (error) {
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again in a later round or run: ${error}`);
       counts.failed += 1;
@@ -219,7 +224,7 @@ export function applyVerdicts(
 //
 // A split verdict is applied by applySplit.
 function applyVerdict(
-  number: number,
+  issue: SandcastleIssue,
   verdict: IntakeVerdict,
   run: typeof execFileSync,
   repo: string,
@@ -227,13 +232,14 @@ function applyVerdict(
   log: (line: string) => void,
   splitGithub: SplitGitHub,
 ): string {
+  const number = issue.number;
   const bugNote = verdict.bug ? " (a bug)" : "";
   if (verdict.verdict === "needs-info") {
     if (verdict.bug) addIssueLabel(number, "bug", run, repo);
     handBack({ kind: "issue", number }, "sandcastle:needs-info", verdict.reason, needsInfoComment(verdict), run, repo, report);
     return `✋ Intake hands #${number} back with sandcastle:needs-info${bugNote}: ${verdict.reason}`;
   }
-  if (verdict.verdict === "split") return applySplit(number, verdict, run, repo, report, log, splitGithub);
+  if (verdict.verdict === "split") return applySplit(issue, verdict, run, repo, report, log, splitGithub);
   addIssueLabel(number, verdict.bug ? ["bug", "sandcastle:ready"] : "sandcastle:ready", run, repo);
   try {
     commentOnIssue(number, readyComment(verdict), run, repo);
@@ -258,17 +264,22 @@ function applyVerdict(
 // criteria, is malformed: nothing is created, and the issue is handed back
 // with sandcastle:needs-info and a question asking a human to split it.
 //
+// The first child also takes over the original's blockers, native and in its
+// body, since the original stops being built once it loses Sandcastle.
+//
 // Before the first child is created, the issue is marked with
 // sandcastle:needs-human, which intake and the gate leave alone, so neither a
-// concurrent run nor a later round splits it a second time; the mark comes off
-// once the umbrella comment is posted. A failure marking it leaves the issue
-// unjudged, with nothing created, so it's judged again later. Any failure
-// after that hands it back with sandcastle:needs-human, even before the first
-// child exists: a create that GitHub answered with an error may still have
-// created the child. When the hand-back fails too, the mark still keeps the
-// issue out of intake (#234).
+// concurrent run nor a later round splits it a second time. Each child is
+// created with the same mark, so none is built before the split has finished.
+// The marks come off, the children's first, once the umbrella comment is
+// posted. A failure marking the issue leaves it unjudged, with nothing
+// created, and the mark is taken back off in case GitHub added it anyway. Any
+// failure after that hands it back with sandcastle:needs-human, even before
+// the first child exists: a create that GitHub answered with an error may
+// still have created the child. When the hand-back fails too, the marks still
+// keep the issue and its children out of intake (#234).
 function applySplit(
-  number: number,
+  issue: SandcastleIssue,
   verdict: IntakeVerdict,
   run: typeof execFileSync,
   repo: string,
@@ -276,6 +287,7 @@ function applySplit(
   log: (line: string) => void,
   splitGithub: SplitGitHub,
 ): string {
+  const number = issue.number;
   const drafted = verdict.children ?? [];
   const problem = splitProblem(drafted);
   if (problem !== undefined) {
@@ -292,8 +304,19 @@ function applySplit(
     return `✋ Intake hands #${number} back with sandcastle:needs-info: it couldn't split it, since ${problem}.`;
   }
 
-  splitGithub.markSplitting(number);
-  const labels = verdict.bug ? ["Sandcastle", "bug"] : ["Sandcastle"];
+  try {
+    splitGithub.markSplitting(number);
+  } catch (error) {
+    // GitHub may have added the label despite the error, and would then hold
+    // the issue back with nothing saying why.
+    try {
+      splitGithub.unmarkSplitting(number);
+    } catch (unmarkError) {
+      log(`  ⚠ Marking #${number} for its split failed, and so did taking the mark back off: if it carries sandcastle:needs-human, remove it by hand: ${unmarkError}`);
+    }
+    throw error;
+  }
+  const labels = [...(verdict.bug ? ["Sandcastle", "bug"] : ["Sandcastle"]), "sandcastle:needs-human"];
   const children: SplitChild[] = [];
   let sandcastleRemoved = false;
   // The title of the child being created, while its create call runs.
@@ -307,7 +330,15 @@ function applySplit(
       const previous = children.at(-1);
       children.push(child);
       splitGithub.addSubIssue(number, child.number);
-      if (previous) splitGithub.addBlockedBy(child.number, previous.number);
+      if (previous) {
+        splitGithub.addBlockedBy(child.number, previous.number);
+      } else {
+        // The original is about to lose Sandcastle, so its own blockers stop
+        // holding anything back: the first child takes them over.
+        const blockers = new Set([...splitGithub.blockersOf(number), ...bodyBlockers(issue.body)]);
+        blockers.delete(number);
+        for (const blocker of blockers) splitGithub.addBlockedBy(child.number, blocker);
+      }
     }
     splitGithub.removeSandcastle(number);
     sandcastleRemoved = true;
@@ -330,10 +361,14 @@ function applySplit(
     }
     return `🛑 Intake's split of #${number} failed partway, so it's handed back with sandcastle:needs-human.`;
   }
-  try {
-    splitGithub.unmarkSplitting(number);
-  } catch (error) {
-    log(`  ⚠ #${number} is an umbrella now, but removing its sandcastle:needs-human mark failed, so a person has to: ${error}`);
+  // Each child carries the mark from its creation, so none is built before the
+  // split has finished; it comes off the children first, then the umbrella.
+  for (const held of [...children.map((child) => child.number), number]) {
+    try {
+      splitGithub.unmarkSplitting(held);
+    } catch (error) {
+      log(`  ⚠ #${number}'s split finished, but removing sandcastle:needs-human from #${held} failed, so a person has to: ${error}`);
+    }
   }
   const bugNote = verdict.bug ? " (a bug)" : "";
   return `✂ Intake splits #${number} into ${issueRefs(children)}${bugNote}: ${verdict.reason}`;
@@ -399,24 +434,28 @@ function malformedSplitComment(verdict: IntakeVerdict, problem: string): string 
 
 // The comment on an issue whose split failed partway: which children exist,
 // which one may exist without the host knowing (`unconfirmed`, the title of
-// the child whose create call failed, if one did), and how a
-// person recovers, which depends on whether the split had already removed
-// Sandcastle. The error itself is only logged, since this is a public issue.
+// the child whose create call failed, if one did), and how a person recovers,
+// which depends on whether the split had already removed Sandcastle. Every
+// child carries sandcastle:needs-human, so none is built meanwhile. Closing a
+// child as completed would let closeFinishedUmbrellas close this issue too,
+// so the steps say not planned. The error itself is only logged, since this
+// is a public issue.
 function partialSplitComment(children: readonly SplitChild[], unconfirmed: string | undefined, sandcastleRemoved: boolean): string {
   const created = children.length > 0
-    ? `These sub-issues were created:\n\n${children.map((child) => `- #${child.number} ${plainText(child.title)}`).join("\n")}`
+    ? `These sub-issues were created, and carry \`sandcastle:needs-human\` so Sandcastle doesn't build them meanwhile:\n\n${children.map((child) => `- #${child.number} ${plainText(child.title)}`).join("\n")}`
     : "No sub-issue was confirmed created.";
   const requeue = sandcastleRemoved
-    ? "close the sub-issues, add `Sandcastle` back (the split had already removed it), and remove `sandcastle:needs-human`"
-    : "close the sub-issues and remove `sandcastle:needs-human`";
+    ? "close each sub-issue as not planned and remove it from this issue's sub-issues, add `Sandcastle` back (the split had already removed it), and remove `sandcastle:needs-human`"
+    : "close each sub-issue as not planned and remove it from this issue's sub-issues, then remove `sandcastle:needs-human`";
   return [
     "Sandcastle's intake started splitting this issue into sub-issues, but a GitHub call failed partway, so it's handed back with `sandcastle:needs-human` " +
       "rather than split a second time. The run log has the error.",
     created +
       (unconfirmed === undefined ? "" : ` The call that failed may still have created one titled "${plainText(unconfirmed)}", so check the issue list for it too.`),
     `To have intake judge this issue again, ${requeue}.`,
-    "Or finish the split by hand: link each sub-issue to this one, each blocked by the one before it" +
-      `${sandcastleRemoved ? "" : ", and remove `Sandcastle` from this issue"}. Sandcastle doesn't close an umbrella finished by hand, so close this issue yourself once every sub-issue is done.`,
+    "Or finish the split by hand: link each sub-issue to this one, each blocked by the one before it, and remove `sandcastle:needs-human` from each" +
+      `${sandcastleRemoved ? "" : ", and remove `Sandcastle` from this issue"}. Sandcastle doesn't close an umbrella that carries \`sandcastle:needs-human\`, ` +
+      "so close this issue yourself once every sub-issue is done.",
   ].join("\n\n");
 }
 
@@ -445,9 +484,22 @@ function questionsOf(verdict: IntakeVerdict): string[] {
 // `text` from intake with every mention and cross-reference broken (see
 // plainText), but its Markdown kept: for a split's child issues, which need
 // their headings and checkboxes. A character reference is escaped, since
-// &#64; would otherwise render as an @ these rules never saw (#234).
+// &#64; would otherwise render as an @ these rules never saw. Code spans and
+// fenced blocks are left as written: mentions and references don't fire
+// there, and a child is a build spec, whose Razor directives (@page, @inject)
+// an agent must be able to copy as they are (#234).
 export function withoutReferences(text: string): string {
-  return breakReferences(text.replace(/&(?=#?[A-Za-z0-9]+;)/g, "&amp;"));
+  const prose = (part: string) => breakReferences(part.replace(/&(?=#?[A-Za-z0-9]+;)/g, "&amp;"));
+  // A fenced block (to its closing fence, or the end of the text), or a code
+  // span (a run of backticks to the next run of the same length).
+  const code = /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[^\S\n]*$|(?![\s\S]))|(`+)(?!`)[\s\S]*?(?<!`)\2(?!`)/gm;
+  let result = "";
+  let last = 0;
+  for (const match of text.matchAll(code)) {
+    result += prose(text.slice(last, match.index)) + match[0];
+    last = match.index + match[0].length;
+  }
+  return result + prose(text.slice(last));
 }
 
 // A zero-width space after @, a # or GH- before digits, and the dot of
