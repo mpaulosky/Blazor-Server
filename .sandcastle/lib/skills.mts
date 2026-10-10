@@ -7,6 +7,8 @@
 // Every sandbox also gets .git/config and .git/hooks read-only, over
 // Sandcastle's read-write mount of the shared .git directory, so no agent can
 // plant a command there for the host's git to run (see lib/host-safety.mts).
+// Those two go in through the provider's create(), not docker({ mounts }):
+// docker() refuses a file mount outside /home/agent, and .git/config is one.
 
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -58,6 +60,29 @@ export type SandboxHost<TProvider> = {
   log(message: string): void;
 };
 
+// The create() of a Sandcastle bind-mount provider, which docker() returns.
+// SandboxProvider's public type declares neither tag nor create(), so they're
+// checked at run time, and a provider without them is refused rather than run
+// without the .git mounts.
+type MountSpec = { hostPath: string; sandboxPath: string; readonly?: boolean };
+type BindMountProvider = { tag: "bind-mount"; create(options: { mounts: MountSpec[] }): Promise<unknown> };
+
+// The provider with `extra` added to the mounts Sandcastle creates each sandbox
+// with: the worktree and the shared .git directory, which docker() mounts as
+// given.
+export function withCreateMounts<TProvider>(provider: TProvider, extra: readonly ReadOnlyMount[]): TProvider {
+  const inner = provider as Partial<BindMountProvider>;
+  if (inner.tag !== "bind-mount" || typeof inner.create !== "function") {
+    throw new Error("The sandbox provider has no bind-mount create(), so .git/config and .git/hooks can't be mounted read-only.");
+  }
+  const create = inner.create.bind(provider);
+  return {
+    ...provider,
+    create: <TOptions extends { mounts: MountSpec[] }>(options: TOptions) =>
+      create({ ...options, mounts: [...options.mounts, ...extra] }),
+  };
+}
+
 // A factory for the Docker sandbox every role runs in, with the host's skills
 // mounted and .git/config and .git/hooks read-only. The skills are looked up on
 // the first call and reused after it, so a missing skill is reported once and
@@ -75,7 +100,7 @@ export function makeAgentSandbox<TProvider>(
       }
       hostSkills = mounts;
     }
-    return host.docker({ mounts: [...hostSkills, ...host.gitMounts()] });
+    return withCreateMounts(host.docker({ mounts: hostSkills }), host.gitMounts());
   };
 }
 

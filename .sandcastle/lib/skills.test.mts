@@ -39,14 +39,24 @@ describe("skillMounts", () => {
 });
 
 describe("makeAgentSandbox", () => {
+  type CreateOptions = { worktreePath: string; mounts: { hostPath: string; sandboxPath: string; readonly?: boolean }[] };
+
   function host(skillsDir: string) {
     const dockerCalls: { mounts: SkillMount[] }[] = [];
+    const createCalls: CreateOptions[] = [];
     const logs: string[] = [];
-    const provider = { name: "stub-docker" };
+    const provider = {
+      tag: "bind-mount" as const,
+      name: "stub-docker",
+      create: async (options: CreateOptions) => {
+        createCalls.push(options);
+        return { worktreePath: "/home/agent/workspace" };
+      },
+    };
     return {
       dockerCalls,
+      createCalls,
       logs,
-      provider,
       host: {
         skillsDir,
         gitMounts: () => [{ hostPath: "/repo/.git/config", sandboxPath: "/repo/.git/config", readonly: true as const }],
@@ -59,32 +69,51 @@ describe("makeAgentSandbox", () => {
     };
   }
 
+  const worktreeMounts = () => [
+    { hostPath: "/repo/.sandcastle/worktrees/fix-1", sandboxPath: "/home/agent/workspace" },
+    { hostPath: "/repo/.git", sandboxPath: "/repo/.git" },
+  ];
+
   it("passes the found skills' mounts to every Docker sandbox it creates", () => {
     const skillsDir = mkdtempSync(join(tmpdir(), "skills-"));
     skill(join(skillsDir, "dotnet-tdd"));
     const stub = host(skillsDir);
     const agentSandbox = makeAgentSandbox(stub.host, ["dotnet-tdd"]);
 
-    const first = agentSandbox();
-    const second = agentSandbox();
+    agentSandbox();
+    agentSandbox();
 
-    assert.equal(first, stub.provider);
-    assert.equal(second, stub.provider);
     assert.deepEqual(stub.dockerCalls.map((call) => call.mounts.map((mount) => mount.sandboxPath)), [
-      ["/home/agent/.claude/skills/dotnet-tdd", "/repo/.git/config"],
-      ["/home/agent/.claude/skills/dotnet-tdd", "/repo/.git/config"],
+      ["/home/agent/.claude/skills/dotnet-tdd"],
+      ["/home/agent/.claude/skills/dotnet-tdd"],
     ]);
   });
 
-  it("mounts the .git directory's config read-only in every sandbox, even with no skills found", () => {
+  // Sandcastle's docker() refuses a file mount outside /home/agent, such as
+  // .git/config, but not the mounts it passes to create() itself.
+  it("adds the .git directory's read-only mounts to the ones Sandcastle creates the sandbox with", async () => {
     const skillsDir = mkdtempSync(join(tmpdir(), "skills-"));
     const stub = host(skillsDir);
 
-    makeAgentSandbox(stub.host, ["dotnet-tdd"])();
+    await makeAgentSandbox(stub.host, ["dotnet-tdd"])().create({
+      worktreePath: "/repo/.sandcastle/worktrees/fix-1",
+      mounts: worktreeMounts(),
+    });
 
-    assert.deepEqual(stub.dockerCalls[0]?.mounts, [
+    assert.deepEqual(stub.dockerCalls[0]?.mounts, []);
+    assert.deepEqual(stub.createCalls[0]?.mounts, [
+      ...worktreeMounts(),
       { hostPath: "/repo/.git/config", sandboxPath: "/repo/.git/config", readonly: true },
     ]);
+    assert.equal(stub.createCalls[0]?.worktreePath, "/repo/.sandcastle/worktrees/fix-1");
+  });
+
+  it("refuses a provider it can't add the .git mounts to", () => {
+    const skillsDir = mkdtempSync(join(tmpdir(), "skills-"));
+    const stub = host(skillsDir);
+    const agentSandbox = makeAgentSandbox({ ...stub.host, docker: () => ({ tag: "isolated" as const, name: "x" }) }, []);
+
+    assert.throws(() => agentSandbox(), /read-only/);
   });
 
   it("reports missing skills once, however many sandboxes it creates", () => {
