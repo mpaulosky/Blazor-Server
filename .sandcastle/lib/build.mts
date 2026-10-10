@@ -3,6 +3,7 @@
 // Nothing is merged locally: every change reaches main through a reviewed PR.
 
 import { existsSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
@@ -26,15 +27,23 @@ import { agentSandbox } from "./skills.mts";
 // ride along, and without force: a push that doesn't fast-forward origin's
 // branch fails, and buildIssue reports it on the issue, rather than drop the
 // work already there.
-function publish(issue: SandcastleIssue, branch: string, commit: string, reviewed: boolean): string {
-  git("push", "--quiet", "origin", `${commit}:refs/heads/${branch}`);
-  return openPullRequest(
-    branch,
-    issue.title,
-    reviewed
-      ? `Closes #${issue.number}\n\nImplemented and reviewed by Sandcastle.`
-      : `Closes #${issue.number}\n\nImplemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.`,
-  );
+//
+// A GitHub server error (a 5xx or "Internal Server Error" in git's or gh's
+// output) is transient, so the push and the PR creation are each retried up to
+// PUBLISH_RETRY_ATTEMPTS times, with backoff, before giving up. Any other
+// failure, such as a stale --force-with-lease or a rejected push, isn't
+// retried: a person needs to look at it regardless.
+export async function publish(
+  issue: SandcastleIssue,
+  branch: string,
+  commit: string,
+  reviewed: boolean,
+  push: (branch: string, commit: string) => void = (pushBranch, pushCommit) =>
+    void git("push", "--quiet", "origin", `${pushCommit}:refs/heads/${pushBranch}`),
+  createPullRequest: (branch: string, title: string, body: string) => string = openPullRequest,
+  wait: (ms: number) => Promise<void> = (ms) => sleep(ms),
+): Promise<string> {
+  throw new Error("publish's retry on a GitHub server error isn't implemented yet");
 }
 
 // The issue comment for a tester or backend run that stopped the build.
@@ -102,17 +111,20 @@ const liveHost: BuildHost = {
 // runs again (checkpoint 2) before the branch is pushed and gets a pull request
 // that closes its issue. Returns the PR's URL, or undefined when a developer
 // run failed, the branch holds nothing to publish or a checkpoint's gate
-// stayed red.
+// stayed red. `publishFailed` is true only when the branch was gated and
+// reviewed but publishing it still failed, so the caller's round summary can
+// tell that apart from a round that built nothing.
 export async function buildIssue(
   issue: SandcastleIssue,
   branch: string,
   base: string,
   host: BuildHost = liveHost,
-): Promise<{ commits: { sha: string }[]; prUrl: string | undefined }> {
+): Promise<{ commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean }> {
   const sandbox = await host.createSandbox(branch);
 
   const promptArgs = issuePromptArgs(issue, branch);
   const commits: { sha: string }[] = [];
+  const notPublished = { commits, prUrl: undefined, publishFailed: false };
   const log = (line: string) => host.log(`  #${issue.number} ${line}`);
 
   // Run the tester or the backend developer. Returns false when the run threw,
@@ -169,8 +181,8 @@ export async function buildIssue(
   }
 
   try {
-    if (!(await developerFinishes("tester"))) return { commits, prUrl: undefined };
-    if (!(await developerFinishes("backend"))) return { commits, prUrl: undefined };
+    if (!(await developerFinishes("tester"))) return notPublished;
+    if (!(await developerFinishes("backend"))) return notPublished;
 
     // Gate, review and publish whenever the branch holds work that main
     // doesn't, not only when this run added commits: a re-run of a finished
@@ -178,13 +190,13 @@ export async function buildIssue(
     if (host.commitsAhead(branch, base) === 0) {
       const status = await sandbox.exec("git status --porcelain 2>&1");
       if (status.exitCode === 0 && status.stdout.trim() === "") {
-        return { commits, prUrl: undefined };
+        return notPublished;
       }
     }
 
-    if ((await gatePasses(1)) === undefined) return { commits, prUrl: undefined };
+    if ((await gatePasses(1)) === undefined) return notPublished;
     if (host.commitsAhead(branch, base) === 0) {
-      return { commits, prUrl: undefined };
+      return notPublished;
     }
 
     let reviewed = true;
@@ -203,7 +215,7 @@ export async function buildIssue(
     }
 
     const gated = await gatePasses(2);
-    if (gated === undefined) return { commits, prUrl: undefined };
+    if (gated === undefined) return notPublished;
 
     // The push is public, and the sandbox holds the Claude token or API key.
     // The comment doesn't say where the secret is, since the issue is public too.
@@ -216,14 +228,17 @@ export async function buildIssue(
           `\`git log -p ${BASE_BRANCH}..${branch}\` before anything pushes the branch, and rotate the secret if it has ` +
           "left this machine.",
       );
-      return { commits, prUrl: undefined };
+      return notPublished;
     }
 
-    // A push that doesn't fast-forward origin's branch (an agent rewrote a
-    // commit an earlier round pushed) fails, and so can gh. Either needs a
-    // person, so the issue gets git's or gh's error rather than only the run log.
+    // A push rejected for a reason other than a transient GitHub server error
+    // (an agent rewrote a commit an earlier round pushed), and so can gh,
+    // fails at once; a GitHub server error is retried inside host.publish.
+    // Either needs a person, so the issue gets git's or gh's error rather than
+    // only the run log.
     try {
-      return { commits, prUrl: host.publish(issue, branch, gated, reviewed) };
+      const prUrl = await host.publish(issue, branch, gated, reviewed);
+      return { commits, prUrl, publishFailed: false };
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);
       const detail = host.publicError(error);
@@ -234,7 +249,7 @@ export async function buildIssue(
           "local one doesn't (an agent rewrote one an earlier round pushed), the two need reconciling before Sandcastle " +
           `can push it.\n\n${fence}text\n${detail}\n${fence}`,
       );
-      return { commits, prUrl: undefined };
+      return { commits, prUrl: undefined, publishFailed: true };
     }
   } finally {
     // Sandcastle's close() runs git in the worktree; leave one that no longer

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
-import { buildIssue, publicErrorText, type BuildHost } from "./build.mts";
+import { buildIssue, publicErrorText, publish, type BuildHost } from "./build.mts";
+import { PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [] };
 const branch = "feature/69-run-the-gate";
@@ -95,7 +96,7 @@ function host(
       scanned.push(commit);
       return leaksSecret;
     },
-    publish: (_issue, publishedBranch, commit, reviewed) => {
+    publish: async (_issue, publishedBranch, commit, reviewed) => {
       if (publishError) throw new Error(publishError);
       pushed.push({ branch: publishedBranch, commit });
       steps.push(`publish${reviewed ? "" : " unreviewed"}`);
@@ -123,6 +124,7 @@ describe("buildIssue", () => {
       "close",
     ]);
     assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.equal(result.publishFailed, false);
     assert.deepEqual(comments, []);
   });
 
@@ -334,6 +336,19 @@ describe("buildIssue publishing", () => {
     assert.equal(steps.at(-1), "close");
   });
 
+  it("flags the result as a publish failure when publishing fails after its retries, unlike a round with nothing to publish", async () => {
+    const failed = await buildIssue(
+      issue,
+      branch,
+      base,
+      host([0, 0], { publishError: "gh pr create failed:\n remote: Internal Server Error" }).buildHost,
+    );
+    const nothingToPublish = await buildIssue(issue, branch, base, host([], { ahead: 0 }).buildHost);
+
+    assert.equal(failed.publishFailed, true);
+    assert.equal(nothingToPublish.publishFailed, false);
+  });
+
   it("closes the sandbox when its worktree still points at this repository", async () => {
     const { steps, buildHost } = host([0, 0]);
 
@@ -350,6 +365,83 @@ describe("buildIssue publishing", () => {
     assert.ok(!steps.includes("close"));
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /no longer points at this repository/);
+  });
+});
+
+describe("publish", () => {
+  // git's output for the Internal Server Error that #149 reports: a transient
+  // GitHub failure that's worth retrying.
+  const serverError =
+    "git push --quiet origin abc:refs/heads/x failed:\nremote: Internal Server Error\nremote: (request ID A83C:231712:11AADA:1D38A9:6AC6797C)";
+  // A push git itself refuses, not GitHub: retrying it would never help.
+  const nonFastForward = "git push --quiet origin abc:refs/heads/x failed:\n ! [rejected] abc -> x (non-fast-forward)";
+
+  // A push stub that throws `error` on its first `failures` calls, then
+  // succeeds. Records every call and every backoff the caller waited through.
+  function flaky(failures: number, error: string) {
+    let calls = 0;
+    const push = (_branch: string, _commit: string): void => {
+      calls++;
+      if (calls <= failures) throw new Error(error);
+    };
+    return { push, calls: () => calls };
+  }
+
+  function recordedWaits() {
+    const delays: number[] = [];
+    return { delays, wait: async (ms: number) => void delays.push(ms) };
+  }
+
+  const neverCreatePr = (): string => {
+    throw new Error("gh pr create shouldn't run");
+  };
+
+  it("retries a push that fails with a GitHub server error, and still publishes the PR", async () => {
+    const { push, calls } = flaky(2, serverError);
+    const { delays, wait } = recordedWaits();
+
+    const prUrl = await publish(issue, branch, "a".repeat(40), true, push, () => "https://github.com/o/r/pull/1", wait);
+
+    assert.equal(prUrl, "https://github.com/o/r/pull/1");
+    assert.equal(calls(), 3);
+    assert.equal(delays.length, 2);
+    assert.ok(delays.every((delay) => delay > 0), "backs off before each retry");
+  });
+
+  it("retries a gh pr create that fails with a GitHub server error, and still publishes the PR", async () => {
+    const { push, calls: pushCalls } = flaky(0, serverError);
+    let prCreateCalls = 0;
+    const createPullRequest = (): string => {
+      prCreateCalls++;
+      if (prCreateCalls <= 1) throw new Error("gh pr create failed:\nHTTP 503");
+      return "https://github.com/o/r/pull/2";
+    };
+    const { wait } = recordedWaits();
+
+    const prUrl = await publish(issue, branch, "a".repeat(40), true, push, createPullRequest, wait);
+
+    assert.equal(prUrl, "https://github.com/o/r/pull/2");
+    assert.equal(pushCalls(), 1);
+    assert.equal(prCreateCalls, 2);
+  });
+
+  it("doesn't retry a push rejected for a reason other than a GitHub server error", async () => {
+    const { push, calls } = flaky(1, nonFastForward);
+    const { wait } = recordedWaits();
+
+    await assert.rejects(
+      () => publish(issue, branch, "a".repeat(40), true, push, neverCreatePr, wait),
+      (error: unknown) => error instanceof Error && error.message === nonFastForward,
+    );
+    assert.equal(calls(), 1);
+  });
+
+  it("gives up and rethrows once every retry attempt still fails with a GitHub server error", async () => {
+    const { push, calls } = flaky(Infinity, serverError);
+    const { wait } = recordedWaits();
+
+    await assert.rejects(() => publish(issue, branch, "a".repeat(40), true, push, neverCreatePr, wait));
+    assert.equal(calls(), PUBLISH_RETRY_ATTEMPTS);
   });
 });
 
