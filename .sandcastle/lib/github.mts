@@ -173,7 +173,16 @@ export function ensureLabels(
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
 ): void {
-  throw new Error("Not implemented");
+  const existing = new Set(
+    (JSON.parse(ghWithStderr(run, ["label", "list", "--repo", repo, "--limit", "1000", "--json", "name", "--jq", "[.[].name]"])) as string[])
+      // GitHub matches label names case-insensitively, so creating one that
+      // differs only in case would fail.
+      .map((name) => name.toLowerCase()),
+  );
+  for (const label of labels) {
+    if (existing.has(label.name.toLowerCase())) continue;
+    ghWithStderr(run, ["label", "create", label.name, "--repo", repo, "--color", label.color, "--description", label.description]);
+  }
 }
 
 // One "labeled" or "unlabeled" event from an issue's or PR's timeline, the
@@ -199,7 +208,50 @@ export function markerCommentsSince(
   marker: string,
   createdAt: string,
 ): TimestampedComment[] {
-  throw new Error("Not implemented");
+  const since = Math.max(
+    timestamp(createdAt),
+    ...timeline.filter((event) => event.event === "unlabeled" && event.label === label).map((event) => timestamp(event.createdAt)),
+  );
+  return comments.filter((comment) => comment.body.includes(marker) && timestamp(comment.createdAt) >= since);
+}
+
+// An ISO 8601 time as milliseconds. Throws on one that doesn't parse rather
+// than let NaN quietly drop or keep a comment from the count.
+function timestamp(time: string): number {
+  const ms = Date.parse(time);
+  if (Number.isNaN(ms)) throw new Error(`GitHub returned a time that doesn't parse: ${JSON.stringify(time)}`);
+  return ms;
+}
+
+// The comments on the issue or PR `number` that carry `marker` and were posted
+// since `label` was last removed (see markerCommentsSince). Only the
+// repository owner's comments count: the host posts as the owner, and anyone
+// can comment on a public issue, so a stranger could otherwise paste the
+// marker in to hand the issue back early. PRs share the issues API, so this
+// covers both.
+export function markerComments(number: number, label: string, marker: string, repo: string = repoName()): TimestampedComment[] {
+  const lines = (output: string) =>
+    output
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .map((line) => JSON.parse(line) as unknown);
+  const owner = repoOwner();
+  // Each item is printed as one line of JSON (@json), so the pages
+  // --paginate fetches concatenate into lines that parse one at a time.
+  const comments = lines(
+    sh(
+      process.cwd(), "gh", "api", "--paginate", `repos/${repo}/issues/${number}/comments`,
+      "--jq", `.[] | select(.user.login == ${JSON.stringify(owner)}) | {body, createdAt: .created_at} | @json`,
+    ),
+  ) as TimestampedComment[];
+  const timeline = lines(
+    sh(
+      process.cwd(), "gh", "api", "--paginate", `repos/${repo}/issues/${number}/timeline`,
+      "--jq", '.[] | select(.event == "labeled" or .event == "unlabeled") | {event, label: .label.name, createdAt: .created_at} | @json',
+    ),
+  ) as TimelineLabelEvent[];
+  const createdAt = sh(process.cwd(), "gh", "api", `repos/${repo}/issues/${number}`, "--jq", ".created_at");
+  return markerCommentsSince(comments, timeline, label, marker, createdAt);
 }
 
 // A label only the host or a human applies to hand work back: the issue's or
@@ -224,5 +276,9 @@ export function handBack(
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
 ): void {
-  throw new Error("Not implemented");
+  const number = String(target.number);
+  const removeReady = target.kind === "issue" && label === "sandcastle:needs-human" ? ["--remove-label", "sandcastle:ready"] : [];
+  ghWithStderr(run, [target.kind, "edit", number, "--repo", repo, "--add-label", label, ...removeReady]);
+  ghWithStderr(run, [target.kind, "comment", number, "--repo", repo, "--body-file", "-"], body);
+  report.record({ target: `${target.kind} #${target.number}`, label, reason });
 }

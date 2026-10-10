@@ -238,6 +238,26 @@ describe("buildIssue", () => {
     });
   }
 
+  it("rethrows a usage-limit or time-budget stop from the gate-fixer instead of treating it as a failed attempt", async () => {
+    const stop = new UncountedStopError("time budget spent");
+    const { steps, recordBuildFailureCalls, buildHost } = host([1], { failing: ["gate-fixer"], failWith: { "gate-fixer": stop } });
+
+    await assert.rejects(() => buildIssue(issue, branch, base, buildHost), (error: unknown) => error === stop);
+
+    assert.equal(steps.filter((step) => step.startsWith("gate:")).length, 1);
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
+  it("rethrows a usage-limit or time-budget stop from the reviewer instead of publishing unreviewed", async () => {
+    const stop = new UncountedStopError("usage limit reached");
+    const { pushed, recordBuildFailureCalls, buildHost } = host([0], { failing: ["reviewer"], failWith: { reviewer: stop } });
+
+    await assert.rejects(() => buildIssue(issue, branch, base, buildHost), (error: unknown) => error === stop);
+
+    assert.deepEqual(pushed, []);
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
   it("treats a checkpoint that stays red after the gate-fixer's attempts as a failed build attempt", async () => {
     const { recordBuildFailureCalls, buildHost } = host([1, 1, 1]);
 

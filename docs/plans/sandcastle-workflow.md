@@ -286,6 +286,7 @@ don't count. Each failure posts an issue comment carrying `<!-- sandcastle:build
 number and the tail of the gate output or error. The first is retried next round; the second
 adds `sandcastle:needs-human` with a fuller comment. The count is the marker comments posted since `needs-human` was last removed, so it survives restarts and a re-queue resets it.
 A usage-limit stop and the time-budget stop never count.
+They end the issue's pipeline for the round from any role, the reviewer's included, so nothing is published unreviewed for want of usage or time.
 
 **Issue-level `needs-human` removes `sandcastle:ready`**, so a re-queue re-runs intake on the current text before the build starts from `main`. PR-level `needs-human` leaves `ready`
 alone.

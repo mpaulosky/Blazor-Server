@@ -8,8 +8,9 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
-import { BASE_BRANCH, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
-import { commentOnIssue, openPullRequest, type SandcastleIssue } from "./github.mts";
+import { BASE_BRANCH, BUILD_FAILED_MARKER, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
+import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
@@ -95,9 +96,9 @@ function developerFailureComment(failure: string, branch: string): string {
 }
 
 // Thrown by a role run that stopped because of the Claude usage limit or the
-// run's time budget, not because the role itself failed. developerFinishes
-// and gatePasses rethrow it rather than treating it as a failed build
-// attempt (see "Giving up and telling the human" in
+// run's time budget, not because the role itself failed. buildIssue rethrows
+// it from any role, the reviewer's included, rather than treating it as a
+// failed build attempt or publishing work a role didn't get to finish (see "Giving up and telling the human" in
 // docs/plans/sandcastle-workflow.md): a round that runs out of usage or time
 // must not spend one of the issue's two attempts for it.
 export class UncountedStopError extends Error {}
@@ -156,9 +157,13 @@ const liveHost: BuildHost = {
   commentOnIssue,
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
-  recordBuildFailure: () => {
-    throw new Error("Not implemented");
-  },
+  recordBuildFailure: (issueNumber, branch, detail) =>
+    recordFailedAttempt(
+      issueNumber,
+      branch,
+      detail,
+      markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
+    ),
   publish,
   worktreeProblems,
   log: console.log,
@@ -194,7 +199,8 @@ export async function buildIssue(
   // timed out or used up its iterations without signalling completion: the
   // tests aren't written or aren't green, so the issue stops for this round.
   // Whatever the run committed stays on the branch for the next round, and the
-  // issue gets a comment, as it does when a checkpoint stays red.
+  // failure counts as one of the issue's build attempts, as a checkpoint that
+  // stays red does. An UncountedStopError is rethrown instead.
   async function developerFinishes(role: "tester" | "backend"): Promise<boolean> {
     let failure: string;
     try {
@@ -209,17 +215,19 @@ export async function buildIssue(
       }
       failure = `the ${role} ran out of iterations unfinished`;
     } catch (error) {
+      if (error instanceof UncountedStopError) throw error;
       failure = `the ${role} failed: ${error}`;
     }
     console.error(`  ✗ #${issue.number}: ${failure}, so ${branch} isn't published.`);
-    host.commentOnIssue(issue.number, developerFailureComment(failure, branch));
+    host.recordBuildFailure(issue.number, branch, developerFailureComment(failure, branch));
     return false;
   }
 
   // Run a gate checkpoint, with the gate-fixer while the gate is red. Returns
   // the commit the gate passed on. When it's still red past the fixer's
-  // attempts, nothing is published: the branch keeps its commits, and the issue
-  // gets the tail of the gate output.
+  // attempts, nothing is published: the branch keeps its commits, and the
+  // issue's failed build attempt is recorded with the tail of the gate output.
+  // A gate-fixer run that stopped with UncountedStopError is rethrown.
   async function gatePasses(checkpoint: Checkpoint): Promise<string | undefined> {
     const result = await runCheckpoint(
       checkpoint,
@@ -232,12 +240,13 @@ export async function buildIssue(
           });
           commits.push(...fixer.commits);
         },
+        uncounted: (error) => error instanceof UncountedStopError,
       },
       log,
     );
     if (!result.passed || result.head === undefined) {
       console.error(`  ✗ #${issue.number}: the gate is still red at checkpoint ${checkpoint}, so ${branch} isn't published.`);
-      host.commentOnIssue(issue.number, gateFailureComment(checkpoint, branch, result.output));
+      host.recordBuildFailure(issue.number, branch, gateFailureComment(checkpoint, branch, result.output));
       return undefined;
     }
     return result.head;
@@ -271,6 +280,9 @@ export async function buildIssue(
       commits.push(...review.commits);
       log("reviewer finished");
     } catch (error) {
+      // Out of usage or time, the review didn't fail: leave the branch for a
+      // later round to review rather than publish it unreviewed.
+      if (error instanceof UncountedStopError) throw error;
       // A failed review shouldn't strand finished work: publish anyway and
       // say so in the PR, which gets a human review regardless.
       console.error(`  ⚠ #${issue.number}: reviewer failed, publishing unreviewed: ${error}`);
