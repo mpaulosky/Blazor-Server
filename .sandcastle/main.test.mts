@@ -268,6 +268,37 @@ describe("main.mts's early-exit wiring", () => {
   });
 });
 
+// #78: a settled PR the sweep marked as needing a follow-up pass gets one
+// before intake runs, since a pass starts an agent the same way intake does,
+// and findWork's early exit already counted it as this round's work.
+describe("main.mts's follow-up pass wiring", () => {
+  it("runs the follow-up pass phase after findWork and before intake, fetching main first", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+    const findWorkCall = mainMts.indexOf("findWork(", loop);
+    const fetchMainCall = mainMts.indexOf("fetchMain()", loop);
+    const passPhaseCall = mainMts.indexOf("followUpPassPhase(", loop);
+    const intakeCall = mainMts.indexOf("intakePhase(", loop);
+
+    assert.notEqual(passPhaseCall, -1, "main.mts doesn't call followUpPassPhase(");
+    assert.ok(findWorkCall < fetchMainCall, "main.mts doesn't fetch main before the follow-up pass phase");
+    assert.ok(fetchMainCall < passPhaseCall, "main.mts doesn't fetch main before calling followUpPassPhase(");
+    assert.ok(passPhaseCall < intakeCall, "main.mts doesn't run the follow-up pass phase before intake");
+  });
+});
+
+// The follow-up role writes its verdicts to this gitignored file
+// (.sandcastle/roles/follow-up.md, lib/follow-up-pass.mts); without it in
+// .gitignore the gate's clean-worktree check would fail every pass.
+describe(".sandcastle/.gitignore follow-up.json", () => {
+  it("ignores .sandcastle/follow-up.json", () => {
+    assert.doesNotThrow(
+      () => execFileSync("git", ["check-ignore", "--quiet", ".sandcastle/follow-up.json"], { cwd: repoRoot }),
+      "expected git to ignore .sandcastle/follow-up.json",
+    );
+  });
+});
+
 // #147: SANDCASTLE_BUDGET_MINUTES reaches the sandbox like every other key in
 // this file, and the host reads the budget from its own environment instead,
 // so it must stay commented out, as SANDCASTLE_ISSUE and SANDCASTLE_LABEL do.

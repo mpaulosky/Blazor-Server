@@ -861,20 +861,22 @@ describe("followUpPhase", () => {
       () => {},
     );
 
-    assert.deepEqual(result, { needsPass: [] });
+    assert.deepEqual(result, { needsPass: [], passes: [] });
   });
 
   it("returns the sweep's result when it succeeds", () => {
-    const result = followUpPhase(() => ({ needsPass: [101, 102] }));
+    const result = followUpPhase(() => ({ needsPass: [101, 102], passes: [] }));
 
-    assert.deepEqual(result, { needsPass: [101, 102] });
+    assert.deepEqual(result, { needsPass: [101, 102], passes: [] });
   });
 });
 
 // #147: the early exit needs the PRs the sweep found needing a follow-up
 // pass, and only those, so it doesn't start an agent for a PR the sweep
-// already updated or is still waiting on.
-describe("sweepPullRequests' needsPass result", () => {
+// already updated or is still waiting on. #78: the pass pipeline
+// (lib/follow-up-pass.mts#followUpPassPhase) needs those same PRs as
+// PassTargets, so it never has to re-read what the sweep already read.
+describe("sweepPullRequests' needsPass and passes result", () => {
   it("collects the PR numbers logged as needing a follow-up pass, and only those", () => {
     const needsPassPr = pr({ number: 101, mergeStateStatus: "DIRTY" });
     const updatedPr = pr({
@@ -903,7 +905,7 @@ describe("sweepPullRequests' needsPass result", () => {
 
     const result = sweepPullRequests(github, () => {}, NOW);
 
-    assert.deepEqual(result, { needsPass: [101] });
+    assert.deepEqual(result.needsPass, [101]);
   });
 
   it("is empty when nothing needs a follow-up pass", () => {
@@ -911,7 +913,30 @@ describe("sweepPullRequests' needsPass result", () => {
 
     const result = sweepPullRequests(github, () => {}, NOW);
 
-    assert.deepEqual(result, { needsPass: [] });
+    assert.deepEqual(result, { needsPass: [], passes: [] });
+  });
+
+  // #78: runPass reads PassTarget.id, headRefName, headRefOid and
+  // issueNumber to start a sandbox on the PR's own head, and reasons to
+  // explain a give-up; the pass pipeline must never have to read the PR
+  // again from GitHub just to learn them.
+  it("carries a PassTarget for each PR logged as needing a follow-up pass, with the sweep's reasons", () => {
+    const needsPassPr = pr({ number: 101, id: "PR_101", headRefName: BRANCH, headRefOid: "b".repeat(40), mergeStateStatus: "DIRTY" });
+    const { github } = stubGithub({ prs: [needsPassPr] });
+
+    const result = sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(result.passes, [
+      { number: 101, id: "PR_101", headRefName: BRANCH, headRefOid: "b".repeat(40), issueNumber: 42, reasons: ["it has merge conflicts"] },
+    ]);
+  });
+
+  it("returns no passes when nothing needs a follow-up pass", () => {
+    const { github } = stubGithub({ prs: [pr({ mergeStateStatus: "BEHIND" })] });
+
+    const result = sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(result.passes, []);
   });
 });
 

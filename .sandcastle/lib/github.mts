@@ -494,6 +494,61 @@ export function updatePullRequestBranch(
   ghWithStderr(run, ["api", "--method", "PUT", `repos/${repo}/pulls/${number}/update-branch`, "-f", `expected_head_sha=${expectedHeadSha}`]);
 }
 
+// One comment in a review thread, first comment first (lib/github.mts#reviewThreadsOf).
+// byBot: whether its author.__typename is "Bot".
+export type ThreadComment = { author: string | null; byBot: boolean; body: string; url: string };
+
+// One review thread on a pull request (lib/follow-up-pass.mts#threadsForRole),
+// with its comments, first comment first.
+export type ReviewThread = {
+  id: string;
+  resolved: boolean;
+  outdated: boolean;
+  path: string | null;
+  line: number | null;
+  comments: ThreadComment[];
+};
+
+// The PR's head and every open-or-not review thread
+// (lib/follow-up-pass.mts#runPass), through one GraphQL query. Throws when
+// any nested list (threads or a thread's comments) is truncated, or the
+// answer names no such PR, so a pass never decides from partial information
+// (#78, fail closed as lib/github.mts#bodyEdits already does for issues).
+export function reviewThreadsOf(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): { headRefOid: string; threads: ReviewThread[] } {
+  throw new Error("Not implemented");
+}
+
+// Replies to a review thread (lib/follow-up-pass.mts#runPass), through
+// addPullRequestReviewThreadReply. The body travels as a GraphQL variable,
+// never interpolated into the query: it carries the role's reasoning,
+// unchecked model text.
+export function replyToReviewThread(threadId: string, body: string, run: typeof execFileSync = execFileSync): void {
+  throw new Error("Not implemented");
+}
+
+// Resolves a review thread (lib/follow-up-pass.mts#runPass), through
+// resolveReviewThread. GitHub's mutation takes only the thread id: there's no
+// ADDRESSED/WONT_FIX/INVALID argument, so that resolution travels in the
+// reply and the pass summary instead (#78).
+export function resolveReviewThread(threadId: string, run: typeof execFileSync = execFileSync): void {
+  throw new Error("Not implemented");
+}
+
+// Posts the follow-up pass's summary comment on a pull request
+// (lib/follow-up-pass.mts#runPass#passSummaryComment), through gh pr comment.
+export function commentOnPullRequest(
+  number: number,
+  body: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  throw new Error("Not implemented");
+}
+
 // The paths an open PR changes.
 export function pullRequestFiles(pr: number): string[] {
   return JSON.parse(
