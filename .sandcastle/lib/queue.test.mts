@@ -123,10 +123,14 @@ describe("labelOriginFixes", () => {
     assert.deepEqual(unknown, []);
   });
 
-  it("removes a trusted-add label with no labeled event at all", () => {
-    const { fixes } = labelOriginFixes(["sandcastle:ready"], [], OWNER_AND_STRANGER, rules);
+  // GitHub's events list may not show a label intake added a moment ago, or
+  // an issue's history may lack it (after a transfer): a gap in the answer
+  // holds the issue for a round, it never drives a write.
+  it("names a trusted-add label with no labeled event as unknown, rather than removing it", () => {
+    const { fixes, unknown } = labelOriginFixes(["sandcastle:ready"], [], OWNER_AND_STRANGER, rules);
 
-    assert.deepEqual(fixes.map((fix) => fix.action), ["remove"]);
+    assert.deepEqual(fixes, []);
+    assert.deepEqual(unknown, ["sandcastle:ready"]);
   });
 
   it("leaves a trusted-add label alone when the owner's own add is its most recent", () => {
@@ -345,6 +349,17 @@ describe("loadQueue", () => {
     const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(needsIntake(kept).map((i) => i.number), []);
+  });
+
+  it("holds an issue whose sandcastle:ready has no labeled event yet, writing nothing", () => {
+    const events = { 50: [{ event: "labeled" as const, actor: "owner", label: "Sandcastle", createdAt: "2026-10-01T00:00:00Z" }] };
+    const { github, removed, added } = stubQueueGithub({ issues: [issue(50, ["Sandcastle", "sandcastle:ready"])], events });
+
+    const kept = loadQueue({ kind: "label", label: "Sandcastle" }, github, () => {}, new Set(), new Map());
+
+    assert.deepEqual(kept, []);
+    assert.deepEqual(removed, []);
+    assert.deepEqual(added, []);
   });
 
   it("removes a stranger-added sandcastle:ready label and lets the issue go through intake", () => {

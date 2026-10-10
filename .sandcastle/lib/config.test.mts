@@ -85,6 +85,14 @@ describe("queueScopeFrom", () => {
     assert.throws(() => queueScopeFrom({ SANDCASTLE_LABEL: "" }), QueueScopeError);
   });
 
+  // gh's --label is a CSV list: a comma splits the label in two, and a stray
+  // quote fails gh's parse.
+  for (const label of ["Sandcastle,dev", 'Sandcastle"dev']) {
+    it(`throws when SANDCASTLE_LABEL is ${JSON.stringify(label)}, which gh's --label would split or fail to parse`, () => {
+      assert.throws(() => queueScopeFrom({ SANDCASTLE_LABEL: label }), /SANDCASTLE_LABEL can't contain/);
+    });
+  }
+
   for (const managed of ["sandcastle:ready", "Sandcastle:Ready", "bug", "BUG", "sandcastle:building", "sandcastle:needs-info", "sandcastle:needs-human"]) {
     it(`throws when SANDCASTLE_LABEL names the host-managed label "${managed}"`, () => {
       assert.throws(() => queueScopeFrom({ SANDCASTLE_LABEL: managed }), QueueScopeError);

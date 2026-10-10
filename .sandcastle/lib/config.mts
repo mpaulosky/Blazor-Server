@@ -147,6 +147,9 @@ export function queueScopeFrom(env: Record<string, string | undefined>): QueueSc
   }
   if (label === undefined) throw scopeError("A local run needs SANDCASTLE_ISSUE or SANDCASTLE_LABEL.");
   if (label.length > 50) throw scopeError("SANDCASTLE_LABEL is longer than GitHub's 50-character limit for a label.");
+  // gh's --label is a CSV list: a comma would split the label in two, and a
+  // quote would fail gh's parse.
+  if (/[,"]/.test(label)) throw scopeError(`SANDCASTLE_LABEL can't contain a comma or a double quote, which gh reads as a list: "${label}".`);
   const managed = [...SANDCASTLE_LABELS.map((managedLabel) => managedLabel.name), "bug"];
   if (managed.some((name) => name.toLowerCase() === label.toLowerCase())) {
     throw scopeError(`SANDCASTLE_LABEL can't be "${label}": Sandcastle adds and removes that label itself.`);

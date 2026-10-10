@@ -120,11 +120,11 @@ export type LabelFix = { action: "remove" | "restore"; label: string; reason: st
 // Which of the issue's trust-sensitive labels need fixing, because their
 // most recent add or removal wasn't the repository owner's (see
 // docs/plans/sandcastle-workflow.md, "Labels"): a label in `rules.trustAdds`
-// the issue carries, added by someone other than the owner (or with no
-// `labeled` event at all), is fixed by removing it; a label in
-// `rules.trustRemovals` the issue doesn't carry, most recently removed by
-// someone other than the owner, is fixed by restoring it. An unknown actor
-// anywhere leaves that label out of `fixes` and names it in `unknown`
+// the issue carries, added by someone other than the owner, is fixed by
+// removing it; a label in `rules.trustRemovals` the issue doesn't carry, most
+// recently removed by someone other than the owner, is fixed by restoring
+// it. An unknown actor anywhere, or a trusted-add label with no `labeled`
+// event at all, leaves that label out of `fixes` and names it in `unknown`
 // instead, so the caller holds the issue back rather than fix or trust a
 // label on a guess.
 export function labelOriginFixes(
@@ -138,8 +138,12 @@ export function labelOriginFixes(
   const carries = (label: string) => labels.some((name) => sameLabel(name, label));
   for (const label of rules.trustAdds.filter(carries)) {
     const added = latest(events, (event) => event.event === "labeled" && sameLabel(event.label, label));
+    // GitHub's events list may not show an add made a moment ago (intake's
+    // own, just before the gate reloads the queue), and an issue's history
+    // can lack it: a gap holds the issue for a round rather than drive a
+    // write.
     if (added === undefined) {
-      fixes.push({ action: "remove", label, reason: `removed ${label}: nothing shows who added it` });
+      unknown.push(label);
       continue;
     }
     const owner = isOwner(added.actor);
