@@ -90,4 +90,23 @@ describe("closeFinishedUmbrellas", () => {
 
     assert.ok(lines.some((line) => line.includes("#10") && line.includes("#11")), lines.join("\n"));
   });
+
+  it("still closes the other finished umbrellas when one umbrella's children can't be read", () => {
+    const { github, closed } = stubGithub({
+      10: [child(11, "closed", "completed")],
+      30: [child(31, "closed", "completed")],
+    });
+    const subIssues = github.subIssues;
+    github.subIssues = (parent) => {
+      if (parent === 10) throw new Error("HTTP 502");
+      return subIssues(parent);
+    };
+    const lines: string[] = [];
+
+    const result = closeFinishedUmbrellas(github, (line) => lines.push(line));
+
+    assert.deepEqual(closed, [30]);
+    assert.deepEqual(result, [30]);
+    assert.ok(lines.some((line) => line.includes("#10") && line.includes("HTTP 502")), lines.join("\n"));
+  });
 });

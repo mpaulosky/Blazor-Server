@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { BUILDING_LABEL, hooks } from "./config.mts";
+import { BUILDING_LABEL, hooks, UMBRELLA_MARKER } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { openPrReason } from "./gate.mts";
 import {
@@ -58,8 +58,8 @@ export type IntakeVerdict = z.infer<typeof intakeSchema>["verdicts"][number];
 
 // The GitHub writes applying a split verdict needs; tests pass a stub. Each
 // child is created and linked before the original loses Sandcastle and gets
-// the umbrella comment, so a failure partway through leaves the issue
-// unsplit rather than an umbrella with missing children.
+// the umbrella comment, so a failure partway through never leaves an umbrella
+// with missing children (see applySplit for what it leaves instead).
 export type SplitGitHub = {
   // Creates one child with `labels` already on it. Returns its number.
   createChild(title: string, body: string, labels: readonly string[]): number;
@@ -126,9 +126,11 @@ const runIntake: IntakeRun = intakeRunner();
 // sandcastle:ready with one comment saying why. A needs-info verdict hands
 // the issue back (lib/github.mts#handBack) with sandcastle:needs-info and one
 // comment of numbered questions, recording the hand-back in `report` for the
-// run's summary; the issue keeps Sandcastle either way. Either verdict can
-// also add the bug label, when it carries bug: true. A verdict for an id that
-// wasn't sent to intake is ignored and logged.
+// run's summary; the issue keeps Sandcastle either way. A split verdict
+// creates the drafted children through `splitGithub` and turns the original
+// into an umbrella (see applySplit). Any verdict can also add the bug label,
+// when it carries bug: true. A verdict for an id that wasn't sent to intake
+// is ignored and logged.
 export function applyVerdicts(
   issues: readonly SandcastleIssue[],
   verdicts: readonly IntakeVerdict[],
@@ -173,17 +175,11 @@ export function applyVerdicts(
         log(`  ⚠ Skipping intake's verdict on ${ref}: another run has judged it since this round read the queue.`);
         continue;
       }
-      applyVerdict(issue.number, verdict, run, repo, report, log, splitGithub);
+      log(`  ${applyVerdict(issue.number, verdict, run, repo, report, log, splitGithub)}`);
     } catch (error) {
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again in a later round or run: ${error}`);
       continue;
     }
-    const bugNote = verdict.bug ? " (a bug)" : "";
-    log(
-      verdict.verdict === "ready"
-        ? `  ✓ Intake marks ${ref} ready${bugNote}: ${verdict.reason}`
-        : `  ✋ Intake hands ${ref} back with sandcastle:needs-info${bugNote}: ${verdict.reason}`,
-    );
   }
 
   for (const id of sent.keys()) {
@@ -191,7 +187,8 @@ export function applyVerdicts(
   }
 }
 
-// Adds the verdict's labels and posts its one comment.
+// Adds the verdict's labels and posts its one comment, and returns the line
+// to log saying what it did.
 //
 // A ready verdict adds bug, when it carries bug: true, and sandcastle:ready in
 // one edit, so the issue never gets built on a feature/ branch, and the
@@ -204,6 +201,8 @@ export function applyVerdicts(
 // questions before adding sandcastle:needs-info, as everywhere handBack is
 // used: a label without its questions would leave the author nothing to
 // answer, which is worse than the second comment a failed label edit can cost.
+//
+// A split verdict is applied by applySplit.
 function applyVerdict(
   number: number,
   verdict: IntakeVerdict,
@@ -212,26 +211,160 @@ function applyVerdict(
   report: HandBackReport,
   log: (line: string) => void,
   splitGithub: SplitGitHub,
-): void {
+): string {
+  const bugNote = verdict.bug ? " (a bug)" : "";
   if (verdict.verdict === "needs-info") {
     if (verdict.bug) addIssueLabel(number, "bug", run, repo);
     handBack({ kind: "issue", number }, "sandcastle:needs-info", verdict.reason, needsInfoComment(verdict), run, repo, report);
-    return;
+    return `✋ Intake hands #${number} back with sandcastle:needs-info${bugNote}: ${verdict.reason}`;
   }
-  if (verdict.verdict === "split") {
-    // A split with no children, or a child with no acceptance criteria, is
-    // treated as needs-info with a question asking a human to split the
-    // issue (#75's "malformed split falls back to needs-info" criterion).
-    // Creating the children, linking them and turning the original into an
-    // umbrella isn't implemented yet.
-    throw new Error("Not implemented");
-  }
+  if (verdict.verdict === "split") return applySplit(number, verdict, run, repo, report, log, splitGithub);
   addIssueLabel(number, verdict.bug ? ["bug", "sandcastle:ready"] : "sandcastle:ready", run, repo);
   try {
     commentOnIssue(number, readyComment(verdict), run, repo);
   } catch (error) {
     log(`  ⚠ #${number} is marked sandcastle:ready, but posting intake's reason failed: ${error}`);
   }
+  return `✓ Intake marks #${number} ready${bugNote}: ${verdict.reason}`;
+}
+
+// Applies a split verdict, and returns the line to log saying what it did.
+//
+// A well-formed split creates each drafted child in build order with
+// Sandcastle (and bug, when the verdict carries bug: true), adds it as a
+// sub-issue of the original, and links it as blocked by the child before it.
+// Only then does the original lose Sandcastle and get the umbrella comment
+// listing its children, which lib/umbrella.mts finds it by in later rounds.
+// The children go through intake on their own in the next round.
+//
+// A split with no children, or a child without a title or acceptance
+// criteria, is malformed: nothing is created, and the issue is handed back
+// with sandcastle:needs-info and a question asking a human to split it.
+//
+// A failure before the first child exists leaves the issue unjudged, so it's
+// judged again later. A failure after it hands the issue back with
+// sandcastle:needs-human instead: judging it again would split it again,
+// creating a second set of children every round.
+function applySplit(
+  number: number,
+  verdict: IntakeVerdict,
+  run: typeof execFileSync,
+  repo: string,
+  report: HandBackReport,
+  log: (line: string) => void,
+  splitGithub: SplitGitHub,
+): string {
+  const drafted = verdict.children ?? [];
+  const problem = splitProblem(drafted);
+  if (problem !== undefined) {
+    if (verdict.bug) addIssueLabel(number, "bug", run, repo);
+    handBack(
+      { kind: "issue", number },
+      "sandcastle:needs-info",
+      `intake couldn't split it: ${problem}`,
+      malformedSplitComment(verdict, problem),
+      run,
+      repo,
+      report,
+    );
+    return `✋ Intake hands #${number} back with sandcastle:needs-info: it couldn't split it, since ${problem}.`;
+  }
+
+  const labels = verdict.bug ? ["Sandcastle", "bug"] : ["Sandcastle"];
+  const children: SplitChild[] = [];
+  try {
+    for (const draft of drafted) {
+      const child = { number: splitGithub.createChild(draft.title.trim(), draft.body, labels), title: draft.title.trim() };
+      const previous = children.at(-1);
+      children.push(child);
+      splitGithub.addSubIssue(number, child.number);
+      if (previous) splitGithub.addBlockedBy(child.number, previous.number);
+    }
+    splitGithub.removeSandcastle(number);
+    splitGithub.comment(number, umbrellaComment(verdict, children));
+  } catch (error) {
+    if (children.length === 0) throw error;
+    log(`  ⚠ Splitting #${number} failed after creating ${children.map((child) => `#${child.number}`).join(", ")}: ${error}`);
+    handBack(
+      { kind: "issue", number },
+      "sandcastle:needs-human",
+      "splitting it into child issues failed partway",
+      partialSplitComment(children),
+      run,
+      repo,
+      report,
+    );
+    return `🛑 Intake's split of #${number} failed partway, so it's handed back with sandcastle:needs-human.`;
+  }
+  const bugNote = verdict.bug ? " (a bug)" : "";
+  return `✂ Intake splits #${number} into ${children.map((child) => `#${child.number}`).join(", ")}${bugNote}: ${verdict.reason}`;
+}
+
+type SplitChild = { number: number; title: string };
+
+// Why a split verdict's drafted children can't be applied, or undefined when
+// they can. Each child must carry acceptance criteria, since a child without
+// any would only be handed back by intake next round.
+function splitProblem(drafted: readonly { title: string; body: string }[]): string | undefined {
+  if (drafted.length === 0) return "it drafted no child issues";
+  const untitled = drafted.findIndex((draft) => draft.title.trim() === "");
+  if (untitled !== -1) return `its drafted child ${untitled + 1} has no title`;
+  const withoutCriteria = drafted.find((draft) => !hasAcceptanceCriteria(draft.body));
+  if (withoutCriteria) return `its drafted child "${withoutCriteria.title.trim()}" has no acceptance criteria`;
+  return undefined;
+}
+
+// Whether `body` has an "Acceptance criteria" heading with something under
+// it before the next heading, as intake-prompt.md asks each child to have.
+function hasAcceptanceCriteria(body: string): boolean {
+  const lines = body.split("\n").map((line) => line.trim());
+  const start = lines.findIndex((line) => /^#{1,6}\s+acceptance criteri(a|on)\b/i.test(line));
+  if (start === -1) return false;
+  const section = lines.slice(start + 1);
+  const end = section.findIndex((line) => /^#{1,6}\s/.test(line));
+  return section.slice(0, end === -1 ? undefined : end).some((line) => line !== "");
+}
+
+// The umbrella comment on a split issue: UMBRELLA_MARKER, which
+// lib/umbrella.mts finds it by, the children in build order, and why.
+export function umbrellaComment(verdict: IntakeVerdict, children: readonly SplitChild[]): string {
+  const bugNote = verdict.bug ? ", each labelled `bug` (so its branch is `fix/`)" : "";
+  return [
+    UMBRELLA_MARKER,
+    "Sandcastle's intake found this issue meets the Definition of Ready but is too big for one pull request, " +
+      `so it split it into these sub-issues${bugNote}. They're built in this order, each blocked by the one before it:`,
+    children.map((child, i) => `${i + 1}. #${child.number} ${child.title}`).join("\n"),
+    `**Reason:** ${verdict.reason}`,
+    "This issue no longer carries `Sandcastle`, so it isn't built itself. Sandcastle closes it as completed once every sub-issue has closed as completed.",
+  ].join("\n\n");
+}
+
+// The one comment on an issue intake meant to split but couldn't: why, and
+// the question asking a human to split it, with how to re-queue it.
+function malformedSplitComment(verdict: IntakeVerdict, problem: string): string {
+  const bugNote = verdict.bug ? " and labelled `bug` (so its branch is `fix/`)" : "";
+  return handBackComment(
+    `Sandcastle's intake found this issue too big for one pull request, but couldn't split it: ${problem}. ` +
+      `So it's handed back with \`sandcastle:needs-info\`${bugNote}. Sandcastle won't build it while it carries that label.`,
+    verdict.reason,
+    [
+      "Can you split this issue into smaller issues that each fit one pull request, each with a Summary and its own share of these acceptance criteria, " +
+        "or narrow this issue so it fits one?",
+    ],
+  );
+}
+
+// The comment on an issue whose split failed partway: which children exist,
+// and what a human has to do. The error itself is only logged, since this is
+// a public issue.
+function partialSplitComment(children: readonly SplitChild[]): string {
+  return [
+    "Sandcastle's intake started splitting this issue into sub-issues, but a GitHub call failed partway, so it's handed back with `sandcastle:needs-human` " +
+      "rather than split a second time. The run log has the error.",
+    `These sub-issues were created:\n\n${children.map((child) => `- #${child.number} ${child.title}`).join("\n")}`,
+    "Please finish the split by hand (each sub-issue linked to this one, and blocked by the one before it), or close the sub-issues and remove " +
+      "`sandcastle:needs-human` to have intake judge this issue again.",
+  ].join("\n\n");
 }
 
 // The comment on an issue intake judged ready: what the host did, and why.
@@ -257,12 +390,21 @@ function questionsOf(verdict: IntakeVerdict): string[] {
 // The one comment on an issue intake handed back: why, the numbered
 // questions a person must answer, and how to put it back in the queue.
 export function needsInfoComment(verdict: IntakeVerdict): string {
-  const questions = questionsOf(verdict);
   const bugNote = verdict.bug ? " and labelled `bug` (so its branch is `fix/`)" : "";
-  return [
+  return handBackComment(
     `Sandcastle's intake found this issue doesn't meet the Definition of Ready yet, so it's handed back with \`sandcastle:needs-info\`${bugNote}. ` +
       "Sandcastle won't build it while it carries that label.",
-    `**Reason:** ${verdict.reason}`,
+    verdict.reason,
+    questionsOf(verdict),
+  );
+}
+
+// A sandcastle:needs-info comment: what the host did, why, the numbered
+// questions, and how to put the issue back in the queue.
+function handBackComment(lead: string, reason: string, questions: readonly string[]): string {
+  return [
+    lead,
+    `**Reason:** ${reason}`,
     ...(questions.length > 0
       ? ["Please answer these questions by editing the issue:", questions.map((question, i) => `${i + 1}. ${question}`).join("\n")]
       : []),

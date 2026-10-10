@@ -39,5 +39,39 @@ export function closeFinishedUmbrellas(
   github: UmbrellaGitHub = liveUmbrellaGitHub,
   log: (line: string) => void = console.log,
 ): number[] {
-  throw new Error("Not implemented");
+  const closed: number[] = [];
+  for (const umbrella of github.openUmbrellas()) {
+    // One umbrella whose children can't be read, or that won't close, waits
+    // for the next round without holding up the others.
+    try {
+      const children = github.subIssues(umbrella);
+      if (children.length === 0) {
+        log(`  ☂ #${umbrella} stays open: it has no sub-issues yet.`);
+        continue;
+      }
+      const unfinished = children.filter((child) => !closedAsCompleted(child));
+      if (unfinished.length > 0) {
+        log(`  ☂ #${umbrella} stays open: ${unfinished.map(describeUnfinished).join(", ")}.`);
+        continue;
+      }
+      github.closeCompleted(umbrella);
+      log(`  ☂ Closed #${umbrella} as completed: every child (${children.map((child) => `#${child.number}`).join(", ")}) has.`);
+      closed.push(umbrella);
+    } catch (error) {
+      log(`  ⚠ Couldn't check whether umbrella #${umbrella} is finished, so it's checked again next round: ${error}`);
+    }
+  }
+  return closed;
+}
+
+// GitHub reports state and state_reason in lower case over REST, but upper
+// case over GraphQL, so neither is assumed.
+function closedAsCompleted(child: SubIssue): boolean {
+  return child.state.toLowerCase() === "closed" && child.state_reason?.toLowerCase() === "completed";
+}
+
+function describeUnfinished(child: SubIssue): string {
+  return child.state.toLowerCase() === "closed"
+    ? `#${child.number} closed as ${child.state_reason ?? "an unknown reason"}`
+    : `#${child.number} is still open`;
 }
