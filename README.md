@@ -90,6 +90,17 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
    dotnet run --project src/UI
    ```
 
+   Or run it through the Aspire AppHost, which starts the UI as `WebApp` and opens the Aspire dashboard with its logs,
+   traces and metrics. `aspire run` needs the [Aspire CLI](https://aspire.dev/get-started/install-cli/); `dotnet run`
+   works without it, and the `http` profile needs no developer certificate:
+
+   ```bash
+   aspire run
+   dotnet run --project src/AppHost --launch-profile http
+   ```
+
+   In Development, the UI reports its health at `/health` and `/alive`.
+
    While editing markup, `pnpm --dir src/UI run watch:css` rebuilds the CSS as you save.
 
 4. Optionally enable the git hooks in `.github/hooks` (markdownlint on commit, and `scripts/gate.sh` on push):
@@ -117,15 +128,19 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
 ## Project layout
 
 ```text
+src/AppHost/                     -- Aspire AppHost: runs the UI as the WebApp resource
 src/Domain/                      -- Shared Kernel: Result, Result<T>, ApplicationConstants
+src/ServiceDefaults/             -- Aspire service defaults: OpenTelemetry and health checks
 src/UI/                          -- Blazor Web App (server-rendered)
 src/UI/Components/Features/      -- One folder per feature slice (e.g. Home)
 src/UI/Styles/                   -- Tailwind CSS v4 source
+tests/AppHost.Tests.Integration/ -- AppHost integration tests (Aspire.Hosting.Testing)
 tests/Architecture.Tests/        -- Architecture rules (Domain's dependencies, UI's references, slice boundaries)
 tests/Domain.Tests.Unit/         -- Shared Kernel unit tests
 tests/UI.Tests.Unit/             -- UI component tests (bUnit)
 tests/UI.Tests.Integration/      -- UI integration tests (WebApplicationFactory)
 docs/adr/                        -- Architecture decision records
+aspire.config.json               -- Aspire CLI settings, pointing at src/AppHost
 CONTEXT.md                       -- Domain language
 .sandcastle/                     -- Sandcastle agent setup
 docs/CODING_STANDARDS.md         -- Coding standards
