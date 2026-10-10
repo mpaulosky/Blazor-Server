@@ -189,10 +189,11 @@ export function ensureLabels(
 export type TimelineLabelEvent = { event: "labeled" | "unlabeled"; label: string; createdAt: string };
 
 // One comment, with when it was posted, so markerCommentsSince can tell
-// which side of a label's removal it falls on.
-export type TimestampedComment = { body: string; createdAt: string };
+// which side of a label's removal it falls on, and who posted it.
+export type TimestampedComment = { body: string; createdAt: string; author: string };
 
-// The comments in `comments` that carry `marker`, posted after `label` was
+// The comments in `comments` that `owner` posted and that carry `marker`,
+// posted after `label` was
 // last removed from this issue or PR (its most recent "unlabeled" event
 // naming `label` in `timeline`), or since `createdAt` when `label` was never
 // removed. Counting from the timeline rather than a running counter means the
@@ -205,12 +206,15 @@ export function markerCommentsSince(
   label: string,
   marker: string,
   createdAt: string,
+  owner: string,
 ): TimestampedComment[] {
   const since = Math.max(
     timestamp(createdAt),
     ...timeline.filter((event) => event.event === "unlabeled" && event.label === label).map((event) => timestamp(event.createdAt)),
   );
-  return comments.filter((comment) => comment.body.includes(marker) && timestamp(comment.createdAt) >= since);
+  return comments.filter(
+    (comment) => comment.author === owner && comment.body.includes(marker) && timestamp(comment.createdAt) >= since,
+  );
 }
 
 // An ISO 8601 time as milliseconds. Throws on one that doesn't parse rather
@@ -239,7 +243,7 @@ export function markerComments(number: number, label: string, marker: string, re
   const comments = lines(
     sh(
       process.cwd(), "gh", "api", "--paginate", `repos/${repo}/issues/${number}/comments`,
-      "--jq", `.[] | select(.user.login == ${JSON.stringify(owner)}) | {body, createdAt: .created_at} | @json`,
+      "--jq", ".[] | {body, createdAt: .created_at, author: .user.login} | @json",
     ),
   ) as TimestampedComment[];
   const timeline = lines(
@@ -249,7 +253,7 @@ export function markerComments(number: number, label: string, marker: string, re
     ),
   ) as TimelineLabelEvent[];
   const createdAt = sh(process.cwd(), "gh", "api", `repos/${repo}/issues/${number}`, "--jq", ".created_at");
-  return markerCommentsSince(comments, timeline, label, marker, createdAt);
+  return markerCommentsSince(comments, timeline, label, marker, createdAt, owner);
 }
 
 // A label only the host or a human applies to hand work back: the issue's or

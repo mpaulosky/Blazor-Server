@@ -145,7 +145,7 @@ describe("ensureLabels", () => {
 
 describe("markerCommentsSince", () => {
   const marker = "<!-- sandcastle:build-failed -->";
-  const comment = (body: string, createdAt: string): TimestampedComment => ({ body, createdAt });
+  const comment = (body: string, createdAt: string, author = "owner"): TimestampedComment => ({ body, createdAt, author });
   const unlabeled = (label: string, createdAt: string): TimelineLabelEvent => ({ event: "unlabeled", label, createdAt });
 
   it("drops a marker comment posted before the label was last removed", () => {
@@ -155,7 +155,7 @@ describe("markerCommentsSince", () => {
     ];
     const timeline = [unlabeled("sandcastle:needs-human", "2026-01-02T00:00:00Z")];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
 
     assert.deepEqual(kept, [comments[1]]);
   });
@@ -164,16 +164,30 @@ describe("markerCommentsSince", () => {
     const comments = [comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z")];
     const timeline: TimelineLabelEvent[] = [];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
 
     assert.deepEqual(kept, comments);
+  });
+
+  // The host posts as the repository owner, and anyone can comment on a public
+  // issue, so a stranger pasting the marker in mustn't hand the issue back.
+  it("drops a marker comment that someone other than the owner posted", () => {
+    const comments = [
+      comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z", "stranger"),
+      comment(`${marker} attempt 1`, "2026-01-02T00:00:00Z"),
+    ];
+    const timeline: TimelineLabelEvent[] = [];
+
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
+
+    assert.deepEqual(kept, [comments[1]]);
   });
 
   it("drops a comment that doesn't carry the marker", () => {
     const comments = [comment("A plain comment.", "2026-01-05T00:00:00Z")];
     const timeline: TimelineLabelEvent[] = [];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
 
     assert.deepEqual(kept, []);
   });
@@ -188,7 +202,7 @@ describe("markerCommentsSince", () => {
       unlabeled("sandcastle:needs-human", "2026-01-03T00:00:00Z"),
     ];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
 
     assert.deepEqual(kept, [comments[1]]);
   });
@@ -197,7 +211,7 @@ describe("markerCommentsSince", () => {
     const comments = [comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z")];
     const timeline = [unlabeled("sandcastle:needs-info", "2026-01-02T00:00:00Z")];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
 
     assert.deepEqual(kept, comments);
   });
