@@ -246,6 +246,40 @@ describe("decide", () => {
     });
   });
 
+  // A rerun job, or the review check a label adds, completes after the
+  // sweep's request on the same head; that mustn't make the head unasked.
+  it("doesn't ask again when a check on the same head completes after the recorded request", () => {
+    const firstDoneAt = new Date(NOW - 3 * 60 * 60 * 1000).toISOString();
+    const requestedAt = new Date(NOW - 2 * 60 * 60 * 1000).toISOString();
+    const rerunDoneAt = new Date(NOW - 90 * 60 * 1000).toISOString();
+    const result = decide(
+      pr({
+        reviews: [],
+        checks: [
+          { name: "build", completed: true, green: true, completedAt: firstDoneAt },
+          { name: "claude-review", completed: true, green: true, completedAt: rerunDoneAt },
+        ],
+        copilotRequestedAt: [requestedAt],
+      }),
+      NOW,
+    );
+
+    assert.equal(result.action, "wait");
+  });
+
+  // The request GitHub makes when the PR opens comes before any check on the
+  // head completes, so it isn't the sweep's one re-request.
+  it("asks again when the only request came before any check on the head completed", () => {
+    const requestedAt = new Date(NOW - 4 * 60 * 60 * 1000).toISOString();
+    const completedAt = new Date(NOW - 3 * 60 * 60 * 1000).toISOString();
+    const result = decide(
+      pr({ reviews: [], checks: [{ name: "build", completed: true, green: true, completedAt }], copilotRequestedAt: [requestedAt] }),
+      NOW,
+    );
+
+    assert.deepEqual(result, { action: "request-review" });
+  });
+
   // GitHub can drop the one re-request (Copilot's review budget, ADR 0004),
   // and a PR that waits on a review that never comes would otherwise hide a
   // conflict or a red check for good.
@@ -753,11 +787,27 @@ describe("followUpPhase", () => {
 describe("startFromMain", () => {
   const issueNumber = 42;
   const base = "m".repeat(40);
+  const closedHead = "c".repeat(40);
+  // A person removed sandcastle:needs-human after the closed PR's closedAt
+  // (closedPr's default), re-queueing the issue to rebuild.
+  const requeued: TimelineLabelEvent[] = [{ event: "unlabeled", label: "sandcastle:needs-human", createdAt: "2026-10-02T00:00:00Z" }];
 
-  function stubFollowUpGithub(closed: ClosedPullRequest[], host = HOST): Pick<FollowUpGitHub, "hostLogin" | "closedPullRequests"> {
-    return { hostLogin: () => host, closedPullRequests: () => closed };
+  function stubFollowUpGithub(closed: ClosedPullRequest[], timeline: TimelineLabelEvent[] = requeued, failHandBack?: Error) {
+    const handBacks: { issueNumber: number; reason: string; body: string }[] = [];
+    const github: Pick<FollowUpGitHub, "hostLogin" | "closedPullRequests" | "labelTimeline" | "handBack"> = {
+      hostLogin: () => HOST,
+      closedPullRequests: () => closed,
+      labelTimeline: () => timeline,
+      handBack: (number, reason, body) => {
+        handBacks.push({ issueNumber: number, reason, body });
+        if (failHandBack) throw failHandBack;
+      },
+    };
+    return { github, handBacks };
   }
 
+  // Every ref holds the closed head and base has none of it, so a call that
+  // reaches the deletes deletes all three.
   function recordingRefs() {
     const calls: string[] = [];
     const refs: BranchRefs = {
@@ -771,11 +821,14 @@ describe("startFromMain", () => {
       },
       contains: (commit, ancestor) => {
         calls.push(`contains ${commit} ${ancestor}`);
-        return true;
+        return false;
       },
       hasCommit: () => true,
       fetchPullHead: (number) => void calls.push(`fetchPullHead ${number}`),
-      mergeBase: (commit) => commit,
+      mergeBase: (commit, other) => {
+        calls.push(`mergeBase ${commit} ${other}`);
+        return other;
+      },
       deleteLocalBranch: (b) => void calls.push(`deleteLocalBranch ${b}`),
       deleteRef: (ref) => void calls.push(`deleteRef ${ref}`),
       deleteRemote: (b, sha) => void calls.push(`deleteRemote ${b} ${sha}`),
@@ -786,27 +839,50 @@ describe("startFromMain", () => {
   it("returns undefined when the issue has no PR closed without merging", () => {
     const { refs } = recordingRefs();
 
-    const result = startFromMain(issueNumber, BRANCH, base, stubFollowUpGithub([]), refs);
+    const result = startFromMain(issueNumber, BRANCH, base, stubFollowUpGithub([]).github, refs);
 
     assert.equal(result, undefined);
   });
 
   it("returns undefined when the closed PR's branch isn't the one being built", () => {
     const { refs } = recordingRefs();
-    const github = stubFollowUpGithub([closedPr({ headRefName: "feature/42-another-attempt" })]);
+    const { github } = stubFollowUpGithub([closedPr({ headRefName: "feature/42-another-attempt" })]);
 
     const result = startFromMain(issueNumber, BRANCH, base, github, refs);
 
     assert.equal(result, undefined);
   });
 
-  it("discards the closed PR's work and returns its number", () => {
+  it("discards the closed PR's work, judged against its head, once a person re-queued the issue", () => {
     const { refs, calls } = recordingRefs();
-    const github = stubFollowUpGithub([closedPr({ number: 99, headRefOid: "c".repeat(40) })]);
+    const { github, handBacks } = stubFollowUpGithub([closedPr({ number: 99, headRefOid: closedHead })]);
 
     const result = startFromMain(issueNumber, BRANCH, base, github, refs);
 
-    assert.equal(result?.pr, 99);
-    assert.ok(calls.some((call) => call.includes("c".repeat(40))), calls.join("\n"));
+    assert.deepEqual(result, { pr: 99, deleted: [`refs/heads/${BRANCH}`, `refs/remotes/origin/${BRANCH}`, `origin/${BRANCH}`] });
+    assert.ok(calls.includes(`contains ${base} ${closedHead}`), calls.join("\n"));
+    assert.ok(calls.includes(`mergeBase ${"l".repeat(40)} ${closedHead}`), calls.join("\n"));
+    assert.deepEqual(handBacks, []);
+  });
+
+  // The PR closed after this round's sweep, or the sweep's hand-back failed:
+  // nobody agreed to a rebuild, so the work stays and the issue goes back.
+  it("hands the issue back and stops the build, deleting nothing, when nobody re-queued it since the PR closed", () => {
+    const { refs, calls } = recordingRefs();
+    const { github, handBacks } = stubFollowUpGithub([closedPr({ number: 99, closedAt: "2026-10-03T00:00:00Z" })]);
+
+    assert.throws(() => startFromMain(issueNumber, BRANCH, base, github, refs), /PR #99 was closed without merging/);
+    assert.deepEqual(handBacks, [
+      { issueNumber, reason: "PR #99 was closed without merging", body: closedPrHandBackComment(closedPr({ number: 99 })) },
+    ]);
+    assert.ok(!calls.some((call) => call.startsWith("delete")), calls.join("\n"));
+  });
+
+  it("still stops the build, deleting nothing, when that hand-back fails", () => {
+    const { refs, calls } = recordingRefs();
+    const { github } = stubFollowUpGithub([closedPr({ number: 99 })], [], new Error("gh: HTTP 502"));
+
+    assert.throws(() => startFromMain(issueNumber, BRANCH, base, github, refs), /HTTP 502/);
+    assert.ok(!calls.some((call) => call.startsWith("delete")), calls.join("\n"));
   });
 });

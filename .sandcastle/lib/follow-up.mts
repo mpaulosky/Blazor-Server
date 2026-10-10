@@ -143,15 +143,20 @@ export function decide(pr: SweepPullRequest, now: number): SweepDecision {
 
   // A completed check with no time can't say when CI finished, so it leaves
   // ciDoneAt NaN and the PR is never re-requested on a guess.
-  const ciDoneAt = Math.max(...pr.checks.map((check) => (check.completedAt === null ? NaN : timestamp(check.completedAt))));
+  const doneAt = pr.checks.map((check) => (check.completedAt === null ? NaN : timestamp(check.completedAt)));
+  const ciDoneAt = Math.max(...doneAt);
   const reviewed = pr.reviews.some((review) => isCopilot(review.author) && review.commitOid === pr.headRefOid);
   if (pr.reviewRequests.some(isCopilot)) return { action: "wait", reason: "Copilot's review is pending" };
 
   if (!reviewed) {
-    // A request recorded after CI finished means this head was already asked
-    // about, whether or not GitHub kept the request: that's what makes it
-    // once per head, and why the log then says a person has to step in.
-    const askedSince = pr.copilotRequestedAt.some((requestedAt) => timestamp(requestedAt) >= ciDoneAt);
+    // A request recorded after the head's first check completed means this
+    // head was already asked about, whether or not GitHub kept the request:
+    // that's what makes it once per head, and why the log then says a person
+    // has to step in. The first completion, not the last, because a rerun
+    // job or a label's review check can complete after the request on the
+    // same head; the request GitHub makes when the PR opens comes before any.
+    const firstDoneAt = Math.min(...doneAt);
+    const askedSince = pr.copilotRequestedAt.some((requestedAt) => timestamp(requestedAt) >= firstDoneAt);
     if (askedSince) {
       return { action: "wait", reason: "Copilot hasn't reviewed the head since the one re-request, so a person needs to ask it" };
     }
@@ -186,6 +191,23 @@ export function closedPrHandBackComment(pr: ClosedPullRequest): string {
     `PR #${pr.number} was closed without merging; remove the label to rebuild. ` +
     `Its branch \`${pr.headRefName}\` is deleted when the issue is next built, so the rebuild starts from \`main\`.`
   );
+}
+
+// Whether a person removed sandcastle:needs-human after `pr` closed, which
+// is how they re-queue an issue the closed PR handed back, agreeing to
+// rebuild it from main.
+function requeuedSince(pr: ClosedPullRequest, timeline: readonly TimelineLabelEvent[]): boolean {
+  const requeuedAt = Math.max(
+    -Infinity,
+    ...timeline
+      .filter((event) => event.event === "unlabeled" && event.label.toLowerCase() === NEEDS_HUMAN)
+      .map((event) => timestamp(event.createdAt)),
+  );
+  return timestamp(pr.closedAt) <= requeuedAt;
+}
+
+function closedPrReason(pr: ClosedPullRequest): string {
+  return `PR #${pr.number} was closed without merging`;
 }
 
 // What the follow-up sweep needs from GitHub; tests pass a stub.
@@ -255,18 +277,9 @@ export function sweepPullRequests(
     try {
       const pr = closedWithoutMerging(closed, issue.number, host);
       if (pr === undefined) continue;
-      // A person who removes sandcastle:needs-human after the PR closed has
-      // re-queued the issue to rebuild it: the same closed PR mustn't hand it
-      // back again.
-      const requeuedAt = Math.max(
-        -Infinity,
-        ...github
-          .labelTimeline(issue.number)
-          .filter((event) => event.event === "unlabeled" && event.label.toLowerCase() === NEEDS_HUMAN)
-          .map((event) => timestamp(event.createdAt)),
-      );
-      if (timestamp(pr.closedAt) <= requeuedAt) continue;
-      github.handBack(issue.number, `PR #${pr.number} was closed without merging`, closedPrHandBackComment(pr));
+      // The same closed PR mustn't hand back an issue a person re-queued.
+      if (requeuedSince(pr, github.labelTimeline(issue.number))) continue;
+      github.handBack(issue.number, closedPrReason(pr), closedPrHandBackComment(pr));
       log(`  ✋ #${issue.number}: PR #${pr.number} was closed without merging, so the issue is handed back.`);
     } catch (error) {
       log(`  ⚠ Couldn't check whether #${issue.number}'s last PR closed without merging, so it's checked again next round: ${error}`);
@@ -310,20 +323,28 @@ export function followUpPhase(sweep: () => void = () => sweepPullRequests(), war
 }
 
 // Deletes the refs of `branch` that still hold the work of `issueNumber`'s
-// latest Sandcastle PR, when that PR was closed without merging, so the
-// build starts from main. Returns undefined when there's no such PR, or when
-// its branch isn't the one being built (the build's branch never held that
-// work). Called from lib/build.mts#buildMarkedIssue, before createSandbox(),
-// so a throw from discardClosedWork propagates before any sandbox exists.
+// latest Sandcastle PR, when that PR was closed without merging and a person
+// has since re-queued the issue, so the build starts from main. Returns
+// undefined when there's no such PR, or when its branch isn't the one being
+// built (the build's branch never held that work). When nobody re-queued the
+// issue since the PR closed (it closed after this round's sweep, or the
+// sweep's hand-back failed), hands it back instead and throws, deleting
+// nothing: the hand-back's comment is the only consent to discarding the
+// work. Called from lib/build.mts#buildMarkedIssue, before createSandbox(),
+// so a throw stops the build, uncounted, before any sandbox exists.
 export function startFromMain(
   issueNumber: number,
   branch: string,
   base: string,
-  github: Pick<FollowUpGitHub, "hostLogin" | "closedPullRequests"> = liveFollowUpGitHub,
+  github: Pick<FollowUpGitHub, "hostLogin" | "closedPullRequests" | "labelTimeline" | "handBack"> = liveFollowUpGitHub,
   refs?: BranchRefs,
 ): { pr: number; deleted: string[] } | undefined {
   const host = github.hostLogin();
   const pr = closedWithoutMerging(github.closedPullRequests(host), issueNumber, host);
   if (pr === undefined || pr.headRefName !== branch) return undefined;
+  if (!requeuedSince(pr, github.labelTimeline(issueNumber))) {
+    github.handBack(issueNumber, closedPrReason(pr), closedPrHandBackComment(pr));
+    throw new Error(`${closedPrReason(pr)} and nobody has re-queued #${issueNumber} since, so it's handed back rather than rebuilt`);
+  }
   return { pr: pr.number, deleted: discardClosedWork(branch, pr, base, refs) };
 }

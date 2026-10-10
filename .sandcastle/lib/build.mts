@@ -240,10 +240,11 @@ export type BuildHost = {
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
   leaksSecret(base: string, commit: string): boolean;
   // Deletes the refs of `branch` that still hold the work of the issue's
-  // latest Sandcastle PR, when that PR was closed without merging, so the
-  // build starts from main (#77). Returns that PR's number and the refs it
-  // deleted, or undefined when there was nothing to do. Throws when a ref
-  // can't be deleted.
+  // latest Sandcastle PR, when that PR was closed without merging and a
+  // person has since re-queued the issue, so the build starts from main
+  // (#77). Returns that PR's number and the refs it deleted, or undefined
+  // when there was nothing to do. Throws when nobody re-queued the issue
+  // (handing it back first) or a ref can't be deleted.
   startFromMain(issueNumber: number, branch: string, base: string): { pr: number; deleted: string[] } | undefined;
   publish: typeof publish;
   // What's wrong with how the worktree finds its repository (see
