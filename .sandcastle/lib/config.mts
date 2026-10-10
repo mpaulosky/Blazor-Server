@@ -64,6 +64,25 @@ export const BASE_BRANCH = "origin/main";
 // Raise this if your backlog is large; lower it for a quick smoke-test run.
 export const MAX_ITERATIONS = 10;
 
+// The default for SANDCASTLE_BUDGET_MINUTES: no new round starts, and no role
+// run starts, once this many minutes have passed since the run started. The
+// job's timeout-minutes is 350 ("Trigger and run environment" in
+// docs/plans/sandcastle-workflow.md).
+export const DEFAULT_BUDGET_MINUTES = 240;
+
+// Thrown by budgetMinutesFrom for a value that isn't a positive whole number
+// of minutes.
+export class BudgetError extends Error {}
+
+// SANDCASTLE_BUDGET_MINUTES from `env`: unset or blank gives
+// DEFAULT_BUDGET_MINUTES. Otherwise it must match /^[1-9]\d*$/ after trim.
+// Anything else ("0", "-5", "1.5", "4h") throws BudgetError rather than
+// falling back to the default. Allowed in GitHub Actions too, unlike the
+// scope variables.
+export function budgetMinutesFrom(env: Record<string, string | undefined>): number {
+  throw new Error("Not implemented");
+}
+
 // How many issues one intake run judges. A malformed or truncated <intake>
 // block costs every verdict in it, so a large backlog is judged in several
 // runs of this many issues each (#224, #227).
