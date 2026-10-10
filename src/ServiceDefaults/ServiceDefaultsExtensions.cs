@@ -8,7 +8,16 @@
 // =============================================
 
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 
 namespace ServiceDefaults;
 
@@ -18,6 +27,12 @@ namespace ServiceDefaults;
 /// </summary>
 public static class ServiceDefaultsExtensions
 {
+	private const string HealthEndpointPath = "/health";
+
+	private const string AlivenessEndpointPath = "/alive";
+
+	private const string LiveTag = "live";
+
 	/// <summary>
 	///     Adds OpenTelemetry logging, metrics and tracing, and a <c>self</c> health check tagged <c>live</c>, to
 	///     <paramref name="builder" />.
@@ -30,7 +45,12 @@ public static class ServiceDefaultsExtensions
 	{
 		ArgumentNullException.ThrowIfNull(builder);
 
-		throw new NotImplementedException();
+		ConfigureOpenTelemetry(builder);
+
+		builder.Services.AddHealthChecks()
+			.AddCheck("self", () => HealthCheckResult.Healthy(), [LiveTag]);
+
+		return builder;
 	}
 
 	/// <summary>
@@ -42,6 +62,52 @@ public static class ServiceDefaultsExtensions
 	{
 		ArgumentNullException.ThrowIfNull(app);
 
-		throw new NotImplementedException();
+		// Health endpoints in production leak state and invite probing, so a deployed Generated App adds its own
+		// protected ones when its host needs them (https://aka.ms/dotnet/aspire/healthchecks).
+		if (app.Environment.IsDevelopment())
+		{
+			// /health requires every check to pass; /alive only the "live" ones, so a slow dependency doesn't get a
+			// healthy process restarted.
+			app.MapHealthChecks(HealthEndpointPath);
+			app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
+			{
+				Predicate = registration => registration.Tags.Contains(LiveTag)
+			});
+		}
+
+		return app;
+	}
+
+	private static void ConfigureOpenTelemetry(IHostApplicationBuilder builder)
+	{
+		builder.Logging.AddOpenTelemetry(logging =>
+		{
+			logging.IncludeFormattedMessage = true;
+			logging.IncludeScopes = true;
+		});
+
+		OpenTelemetryBuilder openTelemetry = builder.Services.AddOpenTelemetry()
+			.WithMetrics(metrics => metrics
+				.AddAspNetCoreInstrumentation()
+				.AddHttpClientInstrumentation()
+				.AddRuntimeInstrumentation())
+			.WithTracing(tracing => tracing
+				.AddSource(builder.Environment.ApplicationName)
+				.AddAspNetCoreInstrumentation(options =>
+					// Probes hit the health endpoints every few seconds; tracing them would bury the real requests.
+					options.Filter = context => !IsHealthEndpoint(context.Request.Path))
+				.AddHttpClientInstrumentation());
+
+		// The AppHost sets the endpoint to its dashboard; without one there is nowhere to export to.
+		if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+		{
+			openTelemetry.UseOtlpExporter();
+		}
+	}
+
+	private static bool IsHealthEndpoint(PathString path)
+	{
+		return path.StartsWithSegments(HealthEndpointPath, StringComparison.OrdinalIgnoreCase)
+			|| path.StartsWithSegments(AlivenessEndpointPath, StringComparison.OrdinalIgnoreCase);
 	}
 }

@@ -9,6 +9,11 @@
 		<PackageVersion Include="Auth0.AspNetCore.Authentication" Version="1.11.0" />
 		<PackageVersion Include="FluentValidation" Version="12.1.1" />
 		<PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+		<PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
+		<PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+		<PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
+		<PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
+		<PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
 	</ItemGroup>
 
 	<ItemGroup Label="Testing">
