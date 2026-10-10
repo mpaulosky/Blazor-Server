@@ -80,7 +80,14 @@ export async function runRoleInSandbox(
   return result;
 }
 
-const TIMEOUT_NAME = /TimeoutError$/;
+// Exact names a role's own timeout carries: AbortSignal.timeout's
+// TimeoutError, the same wrapped in an Effect FiberFailure, and Sandcastle's
+// AgentIdleTimeoutError (by _tag, not name). A suffix match such as
+// /TimeoutError$/ would also catch undici's ConnectTimeoutError,
+// HeadersTimeoutError and BodyTimeoutError, which Node's fetch throws on a
+// host-side network timeout that has nothing to do with the role.
+const TIMEOUT_NAMES = new Set(["TimeoutError", "(FiberFailure) TimeoutError"]);
+const TIMEOUT_TAG = "AgentIdleTimeoutError";
 const TIMEOUT_MESSAGE = /aborted due to timeout|Agent idle for/;
 
 // Whether a role run's error is its own timeout: ROLE_AGENTS' timeoutMinutes
@@ -92,7 +99,8 @@ export function isRoleTimeout(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth <= MAX_CAUSE_DEPTH && typeof current === "object" && current !== null; depth++) {
     const { name, _tag, message } = current as { name?: unknown; _tag?: unknown; message?: unknown };
-    if ([name, _tag].some((text) => typeof text === "string" && TIMEOUT_NAME.test(text))) return true;
+    if (typeof name === "string" && TIMEOUT_NAMES.has(name)) return true;
+    if (_tag === TIMEOUT_TAG) return true;
     if (typeof message === "string" && TIMEOUT_MESSAGE.test(message)) return true;
     current = (current as { cause?: unknown }).cause;
   }

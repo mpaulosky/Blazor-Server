@@ -162,6 +162,13 @@ describe("isRoleTimeout", () => {
   it("is false for an ordinary error", () => {
     assert.equal(isRoleTimeout(new Error("the backend failed: a real bug")), false);
   });
+
+  it("is false for a network ConnectTimeoutError cause from a fetch failure", () => {
+    const cause = Object.assign(new Error("Connect Timeout Error"), { name: "ConnectTimeoutError" });
+    const error = Object.assign(new TypeError("fetch failed"), { cause });
+
+    assert.equal(isRoleTimeout(error), false);
+  });
 });
 
 describe("withSharedRules", () => {
