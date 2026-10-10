@@ -194,15 +194,16 @@ describe("threadsForRole", () => {
     assert.deepEqual(forRole.map((thread) => thread.threadId), ["RT_owner"]);
   });
 
-  it("sends a bot thread the host already answered to resolveOnly, not back to the role", () => {
+  it("drops a bot thread the host already answered, leaving it to a person rather than answering or resolving it again", () => {
     const answered = botThread({
       comments: [...botThread().comments, { author: HOST_LOGIN, byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nFixed.`, url: "https://github.com/o/r/pull/7#discussion_r4" }],
     });
 
-    const { forRole, resolveOnly } = threadsForRole([answered], isOwner, HOST_LOGIN);
+    const { forRole, leftForHuman, unknown } = threadsForRole([answered], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole, []);
-    assert.deepEqual(resolveOnly, ["RT_bot"]);
+    assert.deepEqual(leftForHuman, []);
+    assert.deepEqual(unknown, []);
   });
 
   it("gives a bot thread back to the role when the bot comments again after the host's reply", () => {
@@ -214,10 +215,9 @@ describe("threadsForRole", () => {
       ],
     });
 
-    const { forRole, resolveOnly } = threadsForRole([followedUp], isOwner, HOST_LOGIN);
+    const { forRole } = threadsForRole([followedUp], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole.map((thread) => thread.threadId), ["RT_bot"]);
-    assert.deepEqual(resolveOnly, []);
   });
 
   it("drops a resolved thread outright, whoever opened it", () => {
@@ -917,27 +917,41 @@ describe("runPass", () => {
     assert.ok(!sandbox.execCalls.some((call) => call.startsWith("git merge ")), sandbox.execCalls.join("\n"));
   });
 
-  it("resolves a bot thread whose reply posted but whose resolve failed, on the next pass, without replying again or running the role", async () => {
-    // First pass: the reply posts, the resolve fails.
-    const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "declined", reason: "Out of scope." }]) });
-    const first = passHostFake({ threads: [botThread()], containsBase: true, sandbox });
-    first.passHost.resolveThread = () => {
-      throw new Error("gh api graphql failed");
-    };
-    await runPass(passTarget(), issue, BASE, first.passHost);
-    const reply = first.calls.replyToThread[0]!;
-
-    // Second pass: GitHub now shows the host's reply on the thread.
+  it("leaves a bot thread the host answered alone on the next pass, whether its resolve failed or the owner unresolved it", async () => {
     const answered = botThread({
-      comments: [...botThread().comments, { author: HOST_LOGIN, byBot: false, body: reply.body, url: "https://github.com/o/r/pull/7#discussion_r4" }],
+      comments: [...botThread().comments, { author: HOST_LOGIN, byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\n**Declined.** Resolved as won't fix.`, url: "https://github.com/o/r/pull/7#discussion_r4" }],
     });
-    const second = passHostFake({ threads: [answered], containsBase: true });
-    const outcome = await runPass(passTarget(), issue, BASE, second.passHost);
+    const { passHost, calls } = passHostFake({ threads: [answered], containsBase: true });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
 
     assert.equal(outcome.kind, "skipped");
-    assert.deepEqual(second.calls.resolveThread, ["RT_bot"]);
-    assert.deepEqual(second.calls.replyToThread, []);
-    assert.deepEqual(second.calls.createSandbox, []);
+    assert.deepEqual(calls.resolveThread, []);
+    assert.deepEqual(calls.replyToThread, []);
+    assert.deepEqual(calls.createSandbox, []);
+  });
+
+  it("doesn't hand the PR back from the read before the claim, even at the cap", async () => {
+    const { passHost, calls } = passHostFake({ threads: [botThread()], passCount: FOLLOW_UP_PASS_CAP, markBuildingResult: false });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.handBack, []);
+  });
+
+  it("hands the PR back when its sandbox can't be created, rather than failing the same way every round", async () => {
+    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true });
+    passHost.createSandbox = async () => {
+      throw new Error("the worktree no longer points at this repository");
+    };
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /creating the sandbox failed/);
+    assert.match(calls.handBack[0]!.body, /no longer points at this repository/);
+    assert.deepEqual(calls.unmarkBuilding, [ISSUE_NUMBER]);
   });
 
   it("skips a PR that needs no merge and has no thread for the role, without creating a sandbox", async () => {

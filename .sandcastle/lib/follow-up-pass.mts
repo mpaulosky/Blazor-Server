@@ -89,9 +89,10 @@ export type PromptThread = {
 // rather than handed to the role again. Comments by anyone else don't count
 // either way, so a stranger can neither hide an owner thread by quoting the
 // marker nor reopen one by replying after the host. A bot thread whose last
-// comment by a bot, the owner or the host is the host's own reply goes to
-// `resolveOnly` instead: the host answered it, but resolving it failed, so
-// it's resolved again rather than answered twice. Any other thread,
+// comment by a bot, the owner or the host is the host's own reply is dropped
+// too: it's open again only because resolving it failed (the pass summary
+// says so) or the owner unresolved it, and either way it's a person's now,
+// not the role's to answer twice. Any other thread,
 // including one with no author at all, goes to `leftForHuman`
 // (lib/report.mts#recordHumanThread records each one). A thread whose first
 // author `isOwner` can't answer for goes to `unknown`, so a pass never
@@ -102,11 +103,10 @@ export function threadsForRole(
   threads: readonly ReviewThread[],
   isOwner: IsOwner,
   hostLogin: string,
-): { forRole: PromptThread[]; leftForHuman: ReviewThread[]; unknown: ReviewThread[]; resolveOnly: string[] } {
+): { forRole: PromptThread[]; leftForHuman: ReviewThread[]; unknown: ReviewThread[] } {
   const forRole: PromptThread[] = [];
   const leftForHuman: ReviewThread[] = [];
   const unknown: ReviewThread[] = [];
-  const resolveOnly: string[] = [];
   const hostReply = (comment: ReviewThread["comments"][number] | undefined) =>
     comment?.author === hostLogin && comment.body.startsWith(FOLLOW_UP_REPLY_MARKER);
   for (const thread of threads) {
@@ -117,10 +117,7 @@ export function threadsForRole(
       const last = thread.comments.findLast(
         (comment) => comment.byBot || comment.author === hostLogin || isOwner(comment.author) === true,
       );
-      if (hostReply(last)) {
-        resolveOnly.push(thread.id);
-        continue;
-      }
+      if (hostReply(last)) continue;
       from = "bot";
     } else {
       const owner = first === undefined ? false : isOwner(first.author);
@@ -149,7 +146,7 @@ export function threadsForRole(
         .map((comment) => ({ author: comment.author, body: comment.body })),
     });
   }
-  return { forRole, leftForHuman, unknown, resolveOnly };
+  return { forRole, leftForHuman, unknown };
 }
 
 // One entry of the follow-up role's .sandcastle/follow-up.json, one per
@@ -604,14 +601,14 @@ export async function runPass(
   // labelled every round, and read again once the claim is held: another run
   // may have passed on the PR in between, so what it decides from must be
   // read while no other run can change it.
-  const before = planPass(target, base, host, skip);
+  const before = planPass(target, base, host, skip, false);
   if (!("forRole" in before)) return before;
 
   // Claimed as a build claims it, so two runs never pass on one PR or share
   // its worktree, and a build of the same issue stands aside meanwhile.
   if (!host.markBuilding(issue.number)) return skip(`another run marked #${issue.number} ${BUILDING_LABEL}`);
   try {
-    const plan = planPass(target, base, host, skip);
+    const plan = planPass(target, base, host, skip, true);
     if (!("forRole" in plan)) return plan;
     return await passOnMarkedIssue(target, issue, base, host, plan);
   } finally {
@@ -627,13 +624,16 @@ export async function runPass(
 // read from GitHub. Returns the plan for a pass, or the outcome when there's
 // to be none: skipped (the head moved since the sweep read it, an author's
 // ownership is unknown, or there's nothing a pass handles) or handed back
-// (the PR has had FOLLOW_UP_PASS_CAP passes). Records each thread left for a
-// person.
+// (the PR has had FOLLOW_UP_PASS_CAP passes). Only a read made while the
+// claim is held (`claimed`) checks the cap: one before it may be stale, so
+// the hand-back is left to the read after the claim.
+// Records each thread left for a person.
 function planPass(
   target: PassTarget,
   base: string,
   host: PassHost,
   skip: (reason: string) => PassOutcome,
+  claimed: boolean,
 ): PassPlan | PassOutcome {
   const { headRefOid, threads } = host.reviewThreads(target.number);
   if (headRefOid !== target.headRefOid) return skip("its head moved since the sweep read it");
@@ -642,16 +642,6 @@ function planPass(
   for (const thread of sorted.leftForHuman) {
     const first = thread.comments[0];
     host.recordHumanThread({ pr: target.number, author: first?.author ?? null, url: first?.url ?? "" });
-  }
-  // Resolving is idempotent, so it's safe before the claim too. One that
-  // fails again is tried again next round.
-  for (const threadId of sorted.resolveOnly) {
-    try {
-      host.resolveThread(threadId);
-      host.log(`  PR #${target.number} resolved thread ${threadId}, which the host had already answered`);
-    } catch (error) {
-      host.log(`  PR #${target.number} resolving thread ${threadId} failed again, so it's tried next round: ${error}`);
-    }
   }
   // Only a needed merge or a bot thread starts a pass. A PR that's only red
   // on CI waits for #79, and one with only owner threads keeps the sweep's
@@ -666,7 +656,7 @@ function planPass(
   }
 
   const passCount = host.passCount(target.number);
-  if (passCount >= FOLLOW_UP_PASS_CAP) {
+  if (claimed && passCount >= FOLLOW_UP_PASS_CAP) {
     return giveUp(
       target,
       host,
@@ -707,7 +697,14 @@ async function passOnMarkedIssue(
   const branch = target.headRefName;
   const log = (line: string) => host.log(`  PR #${target.number} ${line}`);
   const stop = (reason: string, output?: string) => giveUp(target, host, reason, output);
-  const sandbox = await host.createSandbox(branch);
+  let sandbox: sandcastle.Sandbox;
+  try {
+    sandbox = await host.createSandbox(branch);
+  } catch (error) {
+    // Such as a leftover worktree that no longer points at this repository:
+    // it fails the same way every round, so it goes to a person.
+    return stop("creating the sandbox failed", String(error));
+  }
   try {
     // GitHub's head is the PR's state: a reused worktree can hold a stopped
     // pass's unpushed commits, a half-done merge or an earlier verdicts file.
