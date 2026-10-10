@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [feat(sandcastle): Follow-up passes resolve review threads and merge conflicts](2026-10-10-pr-243-feat-sandcastle-follow-up-passes-resolve-review-threads-and-merge-conflicts.md) | release,automation |
 | 2026-10-10 | [chore(sandcastle): Install Chromium's system libraries in the sandbox image](2026-10-10-pr-248-chore-sandcastle-install-chromium-s-system-libraries-in-the-sandbox-image.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Stop unattended runs cleanly when there's no work, time or usage left](2026-10-10-pr-241-feat-sandcastle-stop-unattended-runs-cleanly-when-there-s-no-work-time-or-usage-left.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Scope the queue to work the repository owner approved](2026-10-10-pr-239-feat-sandcastle-scope-the-queue-to-work-the-repository-owner-approved.md) | release,automation |
