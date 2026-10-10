@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.114">v0.0.114</a></td>
+                <td>2026-10-10</td>
+                <td>chore(sandcastle): Install Chromium&#x27;s system libraries in the sandbox image</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-248-chore-sandcastle-install-chromium-s-system-libraries-in-the-sandbox-image.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.113">v0.0.113</a></td>
                 <td>2026-10-10</td>
                 <td>feat(sandcastle): Stop unattended runs cleanly when there&#x27;s no work, time or usage left</td>
@@ -282,12 +288,6 @@
                 <td>feat(sandcastle): Intake judges each issue against the Definition of Ready</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-222-feat-sandcastle-intake-judges-each-issue-against-the-definition-of-ready.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.104">v0.0.104</a></td>
-                <td>2026-10-10</td>
-                <td>feat(sandcastle): Mark an issue while Sandcastle builds it</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-219-feat-sandcastle-mark-an-issue-while-sandcastle-builds-it.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.114</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-248-chore-sandcastle-install-chromium-s-system-libraries-in-the-sandbox-image.md">chore(sandcastle): Install Chromium&#x27;s system libraries in the sandbox image</a></h3>
+              <p class="post-excerpt">scripts/gate.sh runs every test project, so once the Playwright E2E tests from #247 exist, the sandbox&#x27;s gate has to launch Chromium. The sandbox image had neither Chromium nor the system libraries…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/248">PR #248</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.113</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-222-feat-sandcastle-intake-judges-each-issue-against-the-definition-of-ready.md">feat(sandcastle): Intake judges each issue against the Definition of Ready</a></h3>
               <p class="post-excerpt">Sandcastle built whatever carried the Sandcastle label, even when the issue was unclear, so the tester and backend developer had to guess at what was wanted. This PR adds an intake step before the…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/222">PR #222</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.104</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-219-feat-sandcastle-mark-an-issue-while-sandcastle-builds-it.md">feat(sandcastle): Mark an issue while Sandcastle builds it</a></h3>
-              <p class="post-excerpt">While Sandcastle built an issue, GitHub showed no sign of it until the PR opened. On 2026-10-07 a manual /implement-spec #71 started while Sandcastle was already building #71. Only the run log…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/219">PR #219</a></p>
             </article>
           </li>
         </ul>
