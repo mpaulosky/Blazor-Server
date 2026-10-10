@@ -32,6 +32,12 @@ export type SandcastleIssue = Omit<GhIssue, "comments"> & {
   comments: string[];
 };
 
+// Whether the issue carries `label`. GitHub matches label names
+// case-insensitively, so a hand-made "Sandcastle:Ready" is the same label.
+export function hasLabel(issue: Pick<SandcastleIssue, "labels">, label: string): boolean {
+  return issue.labels.some((name) => name.toLowerCase() === label.toLowerCase());
+}
+
 // Keep only the comments of authors with admin, maintain or write permission
 // on `repo`, so text from anyone else never reaches a role's prompt.
 // Permission rather than the owner's login decides this, because in a

@@ -13,6 +13,7 @@ import {
   cacheHostLogin,
   hostLogin,
   handBack,
+  hasLabel,
   markerComments,
   markerCommentsSince,
   openPullRequest,
@@ -695,5 +696,15 @@ describe("handBack", () => {
     assert.deepEqual(calls[1]!.args, ["pr", "edit", "17", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
     assert.equal(calls[0]!.input, "Giving up on this PR.");
     assert.deepEqual(report.items(), [{ target: "pr #17", label: "sandcastle:needs-human", reason: "follow-up gave up" }]);
+  });
+});
+
+describe("hasLabel", () => {
+  it("matches a label whatever its case, as GitHub does", () => {
+    assert.equal(hasLabel({ labels: ["Sandcastle", "Sandcastle:Ready"] }, "sandcastle:ready"), true);
+  });
+
+  it("doesn't match a label the issue doesn't carry", () => {
+    assert.equal(hasLabel({ labels: ["Sandcastle"] }, "sandcastle:ready"), false);
   });
 });

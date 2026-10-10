@@ -7,12 +7,15 @@
 // blocker is finished only when it closed as completed (for an issue) or was
 // merged (for a PR). An open blocker, one closed as not planned or duplicate,
 // or a PR closed without merging keeps the dependent issue blocked, since the
-// code it needs never reached main.
+// code it needs never reached main. The gate also holds back an issue intake
+// hasn't cleared (no sandcastle:ready) or that's handed back to a human
+// (sandcastle:needs-info or sandcastle:needs-human), so the planner never
+// sees one (#74).
 // ---------------------------------------------------------------------------
 
 import { isIssueBranch } from "./branches.mts";
 import { BUILDING_LABEL } from "./config.mts";
-import { listSandcastleIssues, openPullRequests, repoName, type OpenPullRequest, type SandcastleIssue } from "./github.mts";
+import { hasLabel, listSandcastleIssues, openPullRequests, repoName, type OpenPullRequest, type SandcastleIssue } from "./github.mts";
 import { sh } from "./shell.mts";
 
 export type Blocker = {
@@ -94,7 +97,12 @@ export function unfinishedReason(blocker: Blocker): string | undefined {
 // marked sandcastle:ready, or it's labelled sandcastle:needs-info or
 // sandcastle:needs-human (#74).
 export function readinessReason(issue: SandcastleIssue): string | undefined {
-  throw new Error("Not implemented");
+  // The hand-back labels come first: an issue can carry sandcastle:ready and
+  // still be handed back, and the reason should name what a human must do.
+  if (hasLabel(issue, "sandcastle:needs-human")) return "it's handed back with sandcastle:needs-human";
+  if (hasLabel(issue, "sandcastle:needs-info")) return "it's waiting for answers to intake's questions (sandcastle:needs-info)";
+  if (!hasLabel(issue, "sandcastle:ready")) return "intake hasn't marked it sandcastle:ready yet";
+  return undefined;
 }
 
 // Why an issue waits for review rather than an agent, or undefined when no open
@@ -116,8 +124,9 @@ function prReason(pr: OpenPullRequest): string {
 export type HeldBackIssue = { issue: SandcastleIssue; reasons: string[]; pr?: OpenPullRequest };
 
 // Split the open Sandcastle issues into those ready to plan and those waiting
-// on an unfinished blocker, an open PR or another run building them
-// (sandcastle:building), with the reasons for each held-back issue and its
+// on intake or a human (see readinessReason), an unfinished blocker, an open
+// PR or another run building them (sandcastle:building), with the reasons for
+// each held-back issue and its
 // open PR, which the critique compares the round's picks with.
 // Blockers are resolved afresh on every call: an issue whose blocker's PR
 // merged during the previous round becomes ready now.
@@ -140,10 +149,8 @@ export function gateIssues(
       continue;
     }
 
-    // Another Sandcastle run is building it right now (#150). GitHub matches
-    // label names case-insensitively, so a hand-made "Sandcastle:Building"
-    // is the same label.
-    if (issue.labels.some((label) => label.toLowerCase() === BUILDING_LABEL)) {
+    // Another Sandcastle run is building it right now (#150).
+    if (hasLabel(issue, BUILDING_LABEL)) {
       blocked.push({ issue, reasons: ["it's already being built"] });
       continue;
     }

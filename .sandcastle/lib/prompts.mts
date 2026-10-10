@@ -37,7 +37,7 @@ export function plannerPromptArgs(ready: SandcastleIssue[]) {
 // in-scope issue that has none of sandcastle:ready, sandcastle:needs-info and
 // sandcastle:needs-human yet (see lib/intake.mts#needsIntake).
 export function intakePromptArgs(issues: SandcastleIssue[]): { ISSUES_JSON: string } {
-  throw new Error("Not implemented");
+  return { ISSUES_JSON: JSON.stringify(issues) };
 }
 
 // An open Sandcastle issue whose PR is waiting for review, with the files that
