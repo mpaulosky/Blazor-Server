@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [fix(sandcastle): Judge every intake batch each round, and keep intake's text from hiding or cross-referencing](2026-10-10-pr-229-fix-sandcastle-judge-every-intake-batch-each-round-and-keep-intake-s-text-from-hiding-or-cross-referencing.md) | release,automation |
 | 2026-10-10 | [fix(sandcastle): Close the design note's edge cases from #228's review](2026-10-10-pr-232-fix-sandcastle-close-the-design-note-s-edge-cases-from-228-s-review.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Add architect, UI developer and scribe roles picked by the planner](2026-10-10-pr-228-feat-sandcastle-add-architect-ui-developer-and-scribe-roles-picked-by-the-planner.md) | release,automation |
 | 2026-10-10 | [fix(sandcastle): Keep one bad intake verdict from costing the batch, and post intake's text as plain text](2026-10-10-pr-225-fix-sandcastle-keep-one-bad-intake-verdict-from-costing-the-batch-and-post-intake-s-text-as-plain-text.md) | release,automation |
