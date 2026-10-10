@@ -424,6 +424,10 @@ function sandboxFake(
     worktreePath: "/worktree",
     exec: async (command: string) => {
       execCalls.push(command);
+      // Every exec call lands here too, alongside role runs, so a test can
+      // compare an exec's position against a role's in one timeline instead
+      // of mixing this array with execCalls, which only ever grows.
+      steps.push(command);
       if (command.startsWith("rm -f")) return { stdout: "", stderr: "", exitCode: 0 };
       if (command.startsWith("git reset --hard")) return { stdout: "", stderr: "", exitCode: 0 };
       if (command === "git rev-parse HEAD") return { stdout: `${head}\n`, stderr: "", exitCode: 0 };
@@ -439,7 +443,6 @@ function sandboxFake(
         return options.followUpJson === undefined ? { stdout: "", stderr: "", exitCode: 1 } : { stdout: options.followUpJson, stderr: "", exitCode: 0 };
       }
       if (command.startsWith("git status")) return { stdout: "", stderr: "", exitCode: 0 };
-      steps.push(`gate: ${command}`);
       const exitCode = gateExitCodes.shift();
       if (exitCode === undefined) throw new Error("the gate ran more often than the test expected");
       if (exitCode === 0) head = nextHead();
