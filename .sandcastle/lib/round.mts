@@ -3,11 +3,11 @@
 import { UncountedStopError } from "./errors.mts";
 import type { OutcomeEntry } from "./report.mts";
 
-// What the summary needs from each build's result; see buildIssue. `outcome`
-// and `detail` are set once lib/build.mts#BuildResult carries them (#81); they
-// stay optional here so a build that hasn't been updated yet still satisfies
-// this type.
-type BuildResult = { prUrl: string | undefined; publishFailed: boolean; outcome?: OutcomeEntry["outcome"]; detail?: string };
+// What the summary needs from each build's result; see buildIssue.
+type BuildResult = { prUrl: string | undefined; publishFailed: boolean };
+
+// What the run report needs from each build's result; see buildIssue.
+type BuildOutcome = Pick<OutcomeEntry, "outcome" | "detail">;
 
 // The summary's lines: each pull request the round opened, then each branch
 // that passed both checkpoints but couldn't be pushed or get a PR. That work is
@@ -69,8 +69,16 @@ export function roundSummary(
 // "stopped" with its message, and any other rejection as "not published",
 // since the build threw rather than return a result.
 export function roundOutcomes(
-  _work: readonly { issue: { number: number }; branch: string }[],
-  _settled: readonly PromiseSettledResult<BuildResult>[],
+  work: readonly { issue: { number: number }; branch: string }[],
+  settled: readonly PromiseSettledResult<BuildResult & BuildOutcome>[],
 ): OutcomeEntry[] {
-  throw new Error("Not implemented");
+  return work.flatMap(({ issue }, i): OutcomeEntry[] => {
+    const result = settled[i];
+    if (result === undefined) return [];
+    const target = { kind: "issue", number: issue.number } as const;
+    if (result.status === "fulfilled") return [{ ...target, outcome: result.value.outcome, detail: result.value.detail }];
+    return result.reason instanceof UncountedStopError
+      ? [{ ...target, outcome: "stopped", detail: result.reason.message }]
+      : [{ ...target, outcome: "not published", detail: "the build stopped on an error; see the run log" }];
+  });
 }

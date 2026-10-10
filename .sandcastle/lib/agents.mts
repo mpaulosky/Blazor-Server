@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { ROLE_AGENTS, type Role } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import { RunLimits, runLimits, usageLimitLine } from "./limits.mts";
+import { MAX_CAUSE_DEPTH, RunLimits, runLimits, usageLimitLine } from "./limits.mts";
 import { usageReport } from "./report.mts";
 
 // The options a role fixes; callers supply everything else.
@@ -80,13 +80,23 @@ export async function runRoleInSandbox(
   return result;
 }
 
+const TIMEOUT_NAME = /TimeoutError$/;
+const TIMEOUT_MESSAGE = /aborted due to timeout|Agent idle for/;
+
 // Whether a role run's error is its own timeout: ROLE_AGENTS' timeoutMinutes
 // (AbortSignal.timeout's TimeoutError, which Sandcastle dies with, possibly
 // wrapped in an Effect FiberFailure) or Sandcastle's AgentIdleTimeoutError.
 // Reads name, _tag and message along the cause chain, MAX_CAUSE_DEPTH deep, as
 // lib/limits.mts#usageLimitLine does for a usage-limit line.
-export function isRoleTimeout(_error: unknown): boolean {
-  throw new Error("Not implemented");
+export function isRoleTimeout(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && typeof current === "object" && current !== null; depth++) {
+    const { name, _tag, message } = current as { name?: unknown; _tag?: unknown; message?: unknown };
+    if ([name, _tag].some((text) => typeof text === "string" && TIMEOUT_NAME.test(text))) return true;
+    if (typeof message === "string" && TIMEOUT_MESSAGE.test(message)) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 // Runs one role through `start`, refusing to start once `limits` say stop. A
