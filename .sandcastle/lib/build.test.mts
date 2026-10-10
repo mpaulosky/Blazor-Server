@@ -576,6 +576,36 @@ describe("buildIssue and the usage limit", () => {
 
     assert.deepEqual(pushed, []);
   });
+
+  // The stop above is recorded before the tester starts, so it never reaches
+  // the publish step. Here another build in the round hits the limit only
+  // after this one's reviewer has finished, so only the check before publish
+  // can hold the gated work back.
+  it("rejects with UncountedStopError and doesn't publish when another build hits the usage limit after this one's reviewer finished", async () => {
+    const { pushed, comments, recordBuildFailureCalls, steps, buildHost } = host([0, 0]);
+    const createSandbox = buildHost.createSandbox;
+    buildHost.createSandbox = async (sandboxBranch) => {
+      const sandbox = await createSandbox(sandboxBranch);
+      return {
+        ...sandbox,
+        run: async (options: SandboxRunOptions) => {
+          const result = await sandbox.run(options);
+          if (options.name === "reviewer") buildHost.limits.hitUsageLimit("usage limit reached during #70's backend run");
+          return result;
+        },
+      } as Sandbox;
+    };
+
+    await assert.rejects(
+      () => buildIssue(issue, branch, base, buildHost),
+      (error: unknown) => error instanceof UncountedStopError && /not published/.test(error.message),
+    );
+
+    assert.ok(steps.includes("reviewer"), steps.join(", "));
+    assert.deepEqual(pushed, []);
+    assert.deepEqual(comments, []);
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
 });
 
 // #147: a push GitHub refuses because it touches .github/workflows/** without
