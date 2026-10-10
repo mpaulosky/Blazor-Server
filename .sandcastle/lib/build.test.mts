@@ -13,7 +13,8 @@ import {
   publish,
   UncountedStopError,
   type BuildHost,
-  workflowDiffArgs,
+  workflowFilesFrom,
+  workflowLogArgs,
 } from "./build.mts";
 import {
   BUILD_FAILED_MARKER,
@@ -1339,10 +1340,21 @@ describe("latestDesignNote", () => {
   });
 });
 
-// A two-dot diff compares trees, so a base newer than the branch's fork
-// point would list workflow files main changed, not the branch.
-describe("workflowDiffArgs", () => {
-  it("lists only the branch side's workflow changes, through a merge-base (three-dot) diff", () => {
-    assert.deepEqual(workflowDiffArgs("origin/main", "abc123"), ["diff", "--name-only", "origin/main...abc123", "--", ".github/workflows/"]);
+// GitHub refuses a push when any pushed commit touches a workflow file,
+// even one a later commit reverts, so the files come from the commits, not
+// from the net diff, which would list nothing for an edit and its revert.
+describe("workflowLogArgs", () => {
+  it("lists the workflow files each commit on the branch side touches", () => {
+    assert.deepEqual(workflowLogArgs("origin/main", "abc123"), [
+      "log", "--name-only", "--format=", "origin/main..abc123", "--", ".github/workflows/",
+    ]);
+  });
+});
+
+describe("workflowFilesFrom", () => {
+  it("names each file once, in first-seen order, without blank lines", () => {
+    const output = "\n.github/workflows/ci.yml\n\n.github/workflows/release.yml\n.github/workflows/ci.yml\n";
+
+    assert.deepEqual(workflowFilesFrom(output), [".github/workflows/ci.yml", ".github/workflows/release.yml"]);
   });
 });

@@ -256,7 +256,7 @@ export type BuildHost = {
   // The run's limits (#147): buildIssue runs every role through
   // runRoleInSandbox(..., host.limits), and checks it before publishing.
   limits: RunLimits;
-  // The .github/workflows/ files the commits from `base` to `commit` change,
+  // The .github/workflows/ files the commits from `base` to `commit` touch,
   // for the hand-back comment of a push GitHub refused for them.
   workflowFiles(base: string, commit: string): string[];
   // Hands the issue back with sandcastle:needs-human after a push GitHub
@@ -276,12 +276,18 @@ export function publicErrorText(text: string, holdsSecret: (text: string) => boo
   return holdsSecret(cleaned) ? "(This text isn't shown: it looked like it held a secret. See the run log.)" : cleaned;
 }
 
-// The git arguments listing the .github/workflows/ files the commits from
-// `from` to `to` change. A merge-base (three-dot) diff, so a `from` newer than
-// the branch's fork point (origin/main after fetchMain) doesn't list workflow
-// files main changed, which the hand-back would ask a person to redo.
-export function workflowDiffArgs(from: string, to: string): string[] {
-  return ["diff", "--name-only", `${from}...${to}`, "--", ".github/workflows/"];
+// The git arguments listing the .github/workflows/ files each commit from
+// `from` to `to` touches. GitHub refuses a push when any pushed commit
+// creates or updates a workflow file, even one a later commit reverts, so the
+// files come from the commits (a two-dot range: the branch side only), not
+// from the net diff, which would list nothing for an edit and its revert.
+export function workflowLogArgs(from: string, to: string): string[] {
+  return ["log", "--name-only", "--format=", `${from}..${to}`, "--", ".github/workflows/"];
+}
+
+// The files in workflowLogArgs' output, each once, in first-seen order.
+export function workflowFilesFrom(output: string): string[] {
+  return [...new Set(output.split("\n").map((line) => line.trim()).filter(Boolean))];
 }
 
 // Whether a failed push was GitHub refusing a change to a workflow file
@@ -335,7 +341,7 @@ const liveHost: BuildHost = {
   worktreeProblems,
   log: console.log,
   limits: runLimits,
-  workflowFiles: (from, to) => git(...workflowDiffArgs(from, to)).split("\n").filter(Boolean),
+  workflowFiles: (from, to) => workflowFilesFrom(git(...workflowLogArgs(from, to))),
   handBackWorkflowChange: (issueNumber, branch, detail, change) => handBackWorkflowChange(issueNumber, branch, detail, change),
 };
 

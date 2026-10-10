@@ -129,7 +129,7 @@ export function recordFailedAttempt(
 // doesn't hold this attempt's commits, and an ephemeral runner's checkout is
 // gone once the job ends: the comment says so, rather than send a person to
 // edit a branch that lacks them, and names what they need to redo by hand,
-// the workflow files (`change.files`, from the base to the refused head) and
+// the workflow files (`change.files`, those the refused commits touch) and
 // the head commit. Says Sandcastle's token has no Workflows permission, so a
 // person must make the change, and how to re-queue the issue: land the
 // workflow change in its own PR, then remove sandcastle:needs-human. Ends
@@ -140,7 +140,7 @@ export function workflowHandBackComment(branch: string, detail: string, change: 
   const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
   const what =
     change.files.length > 0
-      ? `it changes ${change.files.map((file) => `\`${file}\``).join(", ")}`
+      ? `its commits touch ${change.files.map(codeSpan).join(", ")}`
       : "it changes a file under `.github/workflows/`";
   return (
     `Sandcastle couldn't push \`${branch}\`: ${what}, and GitHub refuses that change without the Workflows ` +
@@ -153,9 +153,21 @@ export function workflowHandBackComment(branch: string, detail: string, change: 
   );
 }
 
+// `text` as a Markdown code span it can't break out of: on one line, inside a
+// backtick run longer than any in it, padded with spaces when it holds one.
+// A workflow file's name comes from the sandboxed agent's commits, and the
+// comment is public, so a backtick in it mustn't end the span and let the rest
+// render as Markdown, a link or an @mention.
+function codeSpan(text: string): string {
+  const line = text.replace(/[\r\n]+/g, " ");
+  const longest = Math.max(0, ...[...line.matchAll(/`+/g)].map((match) => match[0].length));
+  const ticks = "`".repeat(longest + 1);
+  return longest === 0 ? `${ticks}${line}${ticks}` : `${ticks} ${line} ${ticks}`;
+}
+
 // What a refused workflow push carried, for its hand-back comment: the head
-// commit, and the .github/workflows/ files it changes from the base (empty
-// when they couldn't be listed).
+// commit, and the .github/workflows/ files its commits touch (empty when they
+// couldn't be listed).
 export type WorkflowChange = { head: string; files: string[] };
 
 // handBack({ kind: "issue", number }, "sandcastle:needs-human", `a push to

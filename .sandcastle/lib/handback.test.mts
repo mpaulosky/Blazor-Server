@@ -167,6 +167,25 @@ describe("workflowHandBackComment", () => {
     assert.match(comment, /once it has merged, remove `sandcastle:needs-human`/);
   });
 
+  // The names come from the sandboxed agent's commits, and the comment is
+  // public: a backtick in a name mustn't end its code span and let the rest
+  // render as Markdown, a link or an @mention.
+  it("keeps a file name with backticks inside its code span", () => {
+    const hostile = ".github/workflows/x` @org/team [link](https://example.com) `.yml";
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, { head: change.head, files: [hostile] });
+
+    assert.ok(comment.includes(`\`\` ${hostile} \`\``), comment);
+  });
+
+  it("puts a file name with a newline on one line", () => {
+    const comment = workflowHandBackComment("feature/69-run-the-gate", detail, {
+      head: change.head,
+      files: [".github/workflows/a\n@org/team.yml"],
+    });
+
+    assert.ok(comment.includes("`.github/workflows/a @org/team.yml`"), comment);
+  });
+
   it("still reads when the workflow files couldn't be listed", () => {
     const comment = workflowHandBackComment("feature/69-run-the-gate", detail, { head: change.head, files: [] });
 
