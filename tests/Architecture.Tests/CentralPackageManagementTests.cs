@@ -18,6 +18,12 @@ public partial class CentralPackageManagementTests
 	[GeneratedRegex("<PackageReference[^>]*\\sVersion\\s*=")]
 	private static partial Regex VersionedPackageReferencePattern();
 
+	[GeneratedRegex("Project\\s+Sdk\\s*=\\s*\"Aspire\\.AppHost\\.Sdk/([^\"]+)\"")]
+	private static partial Regex AppHostSdkVersionPattern();
+
+	[GeneratedRegex("<PackageVersion\\s+Include\\s*=\\s*\"Aspire\\.Hosting\\.AppHost\"\\s+Version\\s*=\\s*\"([^\"]+)\"")]
+	private static partial Regex AspireHostingAppHostVersionPattern();
+
 	[Fact]
 	public void SourceProjectFiles_PackageReferences_HaveNoVersionAttribute()
 	{
@@ -49,5 +55,26 @@ public partial class CentralPackageManagementTests
 		// Assert
 		referencesResilienceOrServiceDiscovery.Should().BeFalse(
 			"no service in this template calls another service yet, so HTTP resilience and service discovery packages stay out (issue #246)");
+	}
+
+	[Fact]
+	public void AppHostCsproj_SdkVersion_MatchesAspireHostingAppHostPackageVersion()
+	{
+		// Arrange
+		string repositoryRoot = ProjectReferenceRule.FindRepositoryRoot();
+		string appHostCsprojPath = Path.Combine(repositoryRoot, "src", "AppHost", "AppHost.csproj");
+		string packagesPropsPath = Path.Combine(repositoryRoot, "Directory.Packages.props");
+		Match sdkMatch = AppHostSdkVersionPattern().Match(File.ReadAllText(appHostCsprojPath));
+		Match packageMatch = AspireHostingAppHostVersionPattern().Match(File.ReadAllText(packagesPropsPath));
+
+		// Act
+		string sdkVersion = sdkMatch.Groups[1].Value;
+		string packageVersion = packageMatch.Groups[1].Value;
+
+		// Assert
+		sdkMatch.Success.Should().BeTrue("AppHost.csproj pins the Aspire.AppHost.Sdk version in its Sdk attribute");
+		packageMatch.Success.Should().BeTrue("Directory.Packages.props pins the Aspire.Hosting.AppHost package version");
+		sdkVersion.Should().Be(packageVersion,
+			"the AppHost SDK restores the dashboard and DCP packages that must match Aspire.Hosting.AppHost; a drift between the two is hard to trace as a build warning or a runtime orchestration failure");
 	}
 }
