@@ -40,6 +40,11 @@ function host(
   const logs: string[] = [];
   const comments: { issueNumber: number; body: string }[] = [];
   const recordBuildFailureCalls: { issueNumber: number; branch: string; detail: string }[] = [];
+  // Every role run and markBuilding/unmarkBuilding call, in the order they
+  // happened, so a test can check the label is added before the first role
+  // runs and removed however the build stopped, without the other tests'
+  // `steps` assertions having to account for it.
+  const order: string[] = [];
   const aheadCounts = Array.isArray(ahead) ? [...ahead] : [ahead];
   const worktreeStatuses = [...statuses];
   let aheadIndex = 0;
@@ -59,6 +64,7 @@ function host(
       runs.push(options);
       headNumber++;
       steps.push(role === "gate-fixer" ? `gate-fixer ${options.promptArgs?.CHECKPOINT}` : role);
+      order.push(role);
       if (failing.includes(role)) throw failWith[role] ?? new Error(`${role} timed out`);
       return {
         iterations: [],
@@ -81,9 +87,11 @@ function host(
     },
     close: async () => {
       steps.push("close");
+      order.push("close");
       return {};
     },
   } as unknown as Sandbox;
+  const buildingCalls: number[] = [];
   const buildHost: BuildHost = {
     createSandbox: async () => sandbox,
     commitsAhead: (aheadBranch, aheadBase) => {
@@ -101,6 +109,14 @@ function host(
       // don't have to care which host method produced it.
       comments.push({ issueNumber, body: detail });
     },
+    markBuilding: (issueNumber) => {
+      buildingCalls.push(issueNumber);
+      order.push("mark");
+    },
+    unmarkBuilding: (issueNumber) => {
+      buildingCalls.push(issueNumber);
+      order.push("unmark");
+    },
     log: (line) => void logs.push(line),
     leaksSecret: (scanBase, commit) => {
       scannedBases.push(scanBase);
@@ -116,7 +132,10 @@ function host(
     worktreeProblems: () => worktreeProblems,
     publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), () => false),
   };
-  return { steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head };
+  return {
+    steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
+    order, buildingCalls,
+  };
 }
 
 describe("buildIssue", () => {
@@ -457,6 +476,72 @@ describe("buildIssue publishing", () => {
     assert.ok(!steps.includes("close"));
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /no longer points at this repository/);
+  });
+});
+
+describe("buildIssue marking the issue as building", () => {
+  it("marks the issue as building before the first role runs", async () => {
+    const { order, buildingCalls, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(order[0], "mark");
+    assert.equal(order.indexOf("mark"), 0);
+    assert.ok(order.indexOf("mark") < order.indexOf("tester"));
+    assert.deepEqual(buildingCalls, [69, 69]);
+  });
+
+  it("unmarks the issue as building after a successful build, before the sandbox closes", async () => {
+    const { order, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(order.slice(-2), ["unmark", "close"]);
+  });
+
+  for (const role of ["tester", "backend"]) {
+    it(`unmarks the issue as building when the ${role} fails`, async () => {
+      const { order, buildHost } = host([], { failing: [role] });
+
+      await buildIssue(issue, branch, base, buildHost);
+
+      assert.ok(order.includes("unmark"));
+    });
+
+    it(`unmarks the issue as building even when the ${role} throws an uncounted stop error`, async () => {
+      const stop = new UncountedStopError("usage limit reached");
+      const { order, buildHost } = host([], { failing: [role], failWith: { [role]: stop } });
+
+      await assert.rejects(() => buildIssue(issue, branch, base, buildHost));
+
+      assert.ok(order.includes("unmark"));
+    });
+  }
+
+  it("unmarks the issue as building when a checkpoint stays red past the gate-fixer's attempts", async () => {
+    const { order, buildHost } = host([1, 1, 1]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(order.includes("unmark"));
+  });
+
+  it("unmarks the issue as building when publishing fails", async () => {
+    const { order, buildHost } = host([0, 0], {
+      publishError: "git push --quiet origin abc:refs/heads/x failed:\n ! [rejected] abc -> x (non-fast-forward)",
+    });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(order.includes("unmark"));
+  });
+
+  it("marks the issue as building exactly once and unmarks it exactly once per build", async () => {
+    const { order, buildHost } = host([0, 0]);
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(order.filter((entry) => entry === "mark" || entry === "unmark"), ["mark", "unmark"]);
   });
 });
 

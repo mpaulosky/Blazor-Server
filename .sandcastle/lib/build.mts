@@ -115,6 +115,13 @@ export type BuildHost = {
   // (see lib/handback.mts#recordFailedAttempt). Never called for a role run
   // that threw UncountedStopError.
   recordBuildFailure(issueNumber: number, branch: string, detail: string): void;
+  // Adds sandcastle:building to the issue, so the gate (lib/gate.mts) holds it
+  // back for a second Sandcastle run while this one builds it (#150).
+  markBuilding(issueNumber: number): void;
+  // Removes sandcastle:building, however the build stopped: called from
+  // buildIssue's finally, so a failed, red-gated or thrown-out build doesn't
+  // leave the issue held back forever.
+  unmarkBuilding(issueNumber: number): void;
   // Whether what the commits from `base` to `commit` publish (see
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
   leaksSecret(base: string, commit: string): boolean;
@@ -159,6 +166,12 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
+  markBuilding: () => {
+    throw new Error("Not implemented");
+  },
+  unmarkBuilding: () => {
+    throw new Error("Not implemented");
+  },
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,

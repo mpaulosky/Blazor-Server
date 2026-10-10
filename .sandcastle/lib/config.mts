@@ -58,10 +58,27 @@ export const PUBLISH_RETRY_ATTEMPTS = 4;
 // have it yet (see docs/plans/sandcastle-workflow.md, "Labels").
 export type SandcastleLabel = { name: string; color: string; description: string };
 
+// Marks an issue while a sandbox is building it (see lib/build.mts#buildIssue
+// and lib/gate.mts), so a second Sandcastle run doesn't start building the
+// same issue too (#150, a near-miss on #71).
+export const BUILDING_LABEL = "sandcastle:building";
+
+// How long sandcastle:building can carry a crashed run's label before startup
+// clears it (see lib/building.mts#clearStaleBuildingLabels), chosen to run
+// longer than any real build: every role's timeoutMinutes, even with two
+// gate-fixer attempts at each of the two checkpoints, adds up to well under
+// 6 hours.
+export const BUILDING_LABEL_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
 // Every label from the Labels table that the host, not a human, is
 // responsible for creating. `Sandcastle` and `bug` are a human's to add.
 export const SANDCASTLE_LABELS: readonly SandcastleLabel[] = [
   { name: "sandcastle:ready", color: "0E8A16", description: "The issue passed the Definition of Ready and isn't re-checked." },
+  {
+    name: BUILDING_LABEL,
+    color: "1D76DB",
+    description: "Sandcastle is building this issue right now. Leave it alone until the label clears.",
+  },
   {
     name: "sandcastle:needs-info",
     color: "FBCA04",
