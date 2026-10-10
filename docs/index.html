@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.97">v0.0.97</a></td>
+                <td>2026-10-10</td>
+                <td>docs(claude): Add Sandcastle and Baseline rules for agents</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-207-docs-claude-add-sandcastle-and-baseline-rules-for-agents.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.96">v0.0.96</a></td>
                 <td>2026-10-10</td>
                 <td>build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image</td>
@@ -282,12 +288,6 @@
                 <td>chore(claude): Remove the shared .claude/settings.json</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-184-chore-claude-remove-the-shared-claude-settings-json.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.87">v0.0.87</a></td>
-                <td>2026-10-08</td>
-                <td>fix(sandcastle): Name bug branches fix/ rather than hotfix/</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.97</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-207-docs-claude-add-sandcastle-and-baseline-rules-for-agents.md">docs(claude): Add Sandcastle and Baseline rules for agents</a></h3>
+              <p class="post-excerpt">Sandcastle&#x27;s agents load CLAUDE.md and the path-scoped rules in .claude/rules/. Two kinds of work had no rule:</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/207">PR #207</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.96</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-184-chore-claude-remove-the-shared-claude-settings-json.md">chore(claude): Remove the shared .claude/settings.json</a></h3>
               <p class="post-excerpt">The repo-ci-baseline Template stopped shipping Claude Code settings: permissions are set per user, so the Baseline says not to add .claude/settings.json back. It was deleted in the primary checkout…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/184">PR #184</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-08">8 Oct 2026</time><span class="post-tag">v0.0.87</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-183-fix-sandcastle-name-bug-branches-fix-rather-than-hotfix.md">fix(sandcastle): Name bug branches fix/ rather than hotfix/</a></h3>
-              <p class="post-excerpt">Sandcastle named every bug issue&#x27;s branch hotfix/{n}-{slug}. The branch standard in docs/PROCESS.md uses fix/{issue}-{slug} for a bug fix and keeps hotfix/ for an urgent fix, and no label in this…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/183">PR #183</a></p>
             </article>
           </li>
         </ul>
