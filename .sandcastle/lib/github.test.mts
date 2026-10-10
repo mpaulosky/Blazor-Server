@@ -3,8 +3,12 @@ import { describe, it } from "node:test";
 import type { execFileSync } from "node:child_process";
 import { SANDCASTLE_LABELS } from "./config.mts";
 import {
+  addIssueLabel,
   commentOnIssue,
   ensureLabels,
+  issuesWithLabel,
+  labelTimeline,
+  removeIssueLabel,
   cacheHostLogin,
   hostLogin,
   handBack,
@@ -223,6 +227,48 @@ describe("markerComments", () => {
       ["api", "--paginate", "repos/o/r/issues/69/timeline", "--jq"],
       ["api", "repos/o/r/issues/69", "--jq", ".created_at"],
     ]);
+  });
+});
+
+describe("issue labels", () => {
+  it("adds a label to an issue in the named repository", () => {
+    const { calls, run } = recordingGh();
+
+    addIssueLabel(150, "sandcastle:building", run, "o/r");
+
+    assert.deepEqual(calls.map((call) => call.args), [["issue", "edit", "150", "--repo", "o/r", "--add-label", "sandcastle:building"]]);
+  });
+
+  it("removes a label from an issue in the named repository", () => {
+    const { calls, run } = recordingGh();
+
+    removeIssueLabel(150, "sandcastle:building", run, "o/r");
+
+    assert.deepEqual(calls.map((call) => call.args), [["issue", "edit", "150", "--repo", "o/r", "--remove-label", "sandcastle:building"]]);
+  });
+
+  it("lists the open issues carrying a label", () => {
+    const { calls, run } = recordingGh(["[71,150]\n"]);
+
+    const numbers = issuesWithLabel("sandcastle:building", run, "o/r");
+
+    assert.deepEqual(numbers, [71, 150]);
+    assert.deepEqual(calls[0]!.args.slice(0, 8), ["issue", "list", "--repo", "o/r", "--state", "open", "--label", "sandcastle:building"]);
+  });
+});
+
+describe("labelTimeline", () => {
+  // Recorded gh output: one line of JSON per label event, with the blank line
+  // --paginate leaves between pages.
+  it("reads the issue's label events from its paginated timeline", () => {
+    const labeled = { event: "labeled", label: "sandcastle:building", createdAt: "2026-10-10T05:00:00Z" };
+    const unlabeled = { event: "unlabeled", label: "sandcastle:building", createdAt: "2026-10-10T06:00:00Z" };
+    const { calls, run } = recordingGh([`${JSON.stringify(labeled)}\n\n${JSON.stringify(unlabeled)}\n`]);
+
+    const timeline = labelTimeline(150, run, "o/r");
+
+    assert.deepEqual(timeline, [labeled, unlabeled]);
+    assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/issues/150/timeline"]);
   });
 });
 

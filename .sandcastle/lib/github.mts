@@ -192,8 +192,67 @@ export function ensureLabels(
   }
 }
 
+// Adds `label` to the issue `number`. The repository must already have the
+// label (see ensureLabels).
+export function addIssueLabel(
+  number: number,
+  label: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, "--add-label", label]);
+}
+
+// Removes `label` from the issue `number`.
+export function removeIssueLabel(
+  number: number,
+  label: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, "--remove-label", label]);
+}
+
+// The numbers of the open issues carrying `label`. As with
+// listSandcastleIssues, the cap sits far above any real queue.
+export function issuesWithLabel(
+  label: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): number[] {
+  return JSON.parse(
+    ghWithStderr(run, [
+      "issue", "list", "--repo", repo, "--state", "open", "--label", label, "--limit", "1000", "--json", "number", "--jq", "[.[].number]",
+    ]),
+  ) as number[];
+}
+
 // One "labeled" or "unlabeled" event from an issue's or PR's REST timeline.
 export type TimelineLabelEvent = { event: "labeled" | "unlabeled"; label: string; createdAt: string };
+
+// gh output printed as one line of JSON per item (@json), parsed item by item.
+// The pages --paginate fetches concatenate into lines, so they parse alike.
+function jsonLines(output: string): unknown[] {
+  return output
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line) as unknown);
+}
+
+// Every "labeled" and "unlabeled" event on the issue or PR `number`, oldest
+// first. PRs share the issues API, so this covers both.
+export function labelTimeline(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): TimelineLabelEvent[] {
+  return jsonLines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${number}/timeline`,
+      "--jq", '.[] | select(.event == "labeled" or .event == "unlabeled") | {event, label: .label.name, createdAt: .created_at} | @json',
+    ]),
+  ) as TimelineLabelEvent[];
+}
 
 // One comment, with when it was posted, so markerCommentsSince can tell
 // which side of a label's removal it falls on, and who posted it.
@@ -224,8 +283,9 @@ export function markerCommentsSince(
 }
 
 // An ISO 8601 time as milliseconds. Throws on one that doesn't parse rather
-// than let NaN quietly drop or keep a comment from the count.
-function timestamp(time: string): number {
+// than let NaN quietly drop or keep a comment from the count, or decide
+// whether a label is stale (lib/building.mts).
+export function timestamp(time: string): number {
   const ms = Date.parse(time);
   if (Number.isNaN(ms)) throw new Error(`GitHub returned a time that doesn't parse: ${JSON.stringify(time)}`);
   return ms;
@@ -261,25 +321,13 @@ export function markerComments(
   run: typeof execFileSync = execFileSync,
   poster: string = (signedInLogin ??= hostLogin(run)),
 ): TimestampedComment[] {
-  const lines = (output: string) =>
-    output
-      .split("\n")
-      .filter((line) => line.trim() !== "")
-      .map((line) => JSON.parse(line) as unknown);
-  // Each item is printed as one line of JSON (@json), so the pages
-  // --paginate fetches concatenate into lines that parse one at a time.
-  const comments = lines(
+  const comments = jsonLines(
     ghWithStderr(run, [
       "api", "--paginate", `repos/${repo}/issues/${number}/comments`,
       "--jq", ".[] | {body, createdAt: .created_at, author: .user.login} | @json",
     ]),
   ) as TimestampedComment[];
-  const timeline = lines(
-    ghWithStderr(run, [
-      "api", "--paginate", `repos/${repo}/issues/${number}/timeline`,
-      "--jq", '.[] | select(.event == "labeled" or .event == "unlabeled") | {event, label: .label.name, createdAt: .created_at} | @json',
-    ]),
-  ) as TimelineLabelEvent[];
+  const timeline = labelTimeline(number, run, repo);
   const createdAt = ghWithStderr(run, ["api", `repos/${repo}/issues/${number}`, "--jq", ".created_at"]).trim();
   return markerCommentsSince(comments, timeline, label, marker, createdAt, poster);
 }

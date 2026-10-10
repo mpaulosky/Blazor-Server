@@ -8,9 +8,16 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
-import { BASE_BRANCH, BUILD_FAILED_MARKER, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import { BASE_BRANCH, BUILD_FAILED_MARKER, BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
+import {
+  addIssueLabel,
+  commentOnIssue,
+  markerComments,
+  openPullRequest,
+  removeIssueLabel,
+  type SandcastleIssue,
+} from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
@@ -166,12 +173,8 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
-  markBuilding: () => {
-    throw new Error("Not implemented");
-  },
-  unmarkBuilding: () => {
-    throw new Error("Not implemented");
-  },
+  markBuilding: (issueNumber) => addIssueLabel(issueNumber, BUILDING_LABEL),
+  unmarkBuilding: (issueNumber) => removeIssueLabel(issueNumber, BUILDING_LABEL),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
@@ -267,6 +270,11 @@ export async function buildIssue(
   }
 
   try {
+    // Before any role runs, so a second Sandcastle run's gate holds the issue
+    // back (#150). A label that can't be added stops the build: building
+    // unmarked is how two runs end up on one issue.
+    host.markBuilding(issue.number);
+
     if (!(await developerFinishes("tester"))) return notPublished;
     if (!(await developerFinishes("backend"))) return notPublished;
 
@@ -345,6 +353,18 @@ export async function buildIssue(
       return { commits, prUrl: undefined, publishFailed: true };
     }
   } finally {
+    // A label that can't be removed mustn't replace the build's own outcome or
+    // keep the sandbox from closing. It holds the issue back until a later
+    // startup clears it as stale (lib/building.mts).
+    try {
+      host.unmarkBuilding(issue.number);
+    } catch (error) {
+      console.error(
+        `  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so the issue stays held back until a run starts ` +
+          `after the label is ${BUILDING_LABEL_MAX_AGE_MS / 3_600_000} hours old: ${error}`,
+      );
+    }
+
     // Sandcastle's close() runs git in the worktree; leave one that no longer
     // points at this repository, with its sandbox, for a person to look at.
     const problems = host.worktreeProblems(sandbox.worktreePath);

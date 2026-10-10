@@ -536,6 +536,18 @@ describe("buildIssue marking the issue as building", () => {
     assert.ok(order.includes("unmark"));
   });
 
+  it("still returns the PR and closes the sandbox when removing the label fails", async () => {
+    const { order, buildHost } = host([0, 0]);
+    buildHost.unmarkBuilding = () => {
+      throw new Error("gh issue edit failed:\nHTTP 502: Bad Gateway");
+    };
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.equal(order.at(-1), "close");
+  });
+
   it("marks the issue as building exactly once and unmarks it exactly once per build", async () => {
     const { order, buildHost } = host([0, 0]);
 
