@@ -19,7 +19,7 @@ import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, INTAKE_REFUSED_BATCHES_LIMIT, UMBRELLA_MARKER } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import { bodyBlockers, liveGitHub as liveGateGitHub, openPrReason } from "./gate.mts";
+import { bodyBlockers, openPrReason } from "./gate.mts";
 import {
   addBlockedBy,
   addIssueLabel,
@@ -31,6 +31,7 @@ import {
   issueLabels,
   removeIssueLabel,
   repoName,
+  sameRepoBlockers,
   type OpenPullRequest,
   type SandcastleIssue,
 } from "./github.mts";
@@ -68,10 +69,9 @@ export type SplitGitHub = {
   createChild(title: string, body: string, labels: readonly string[]): number;
   // Adds `child` as a sub-issue of `parent` (the original issue being split).
   addSubIssue(parent: number, child: number): void;
-  // Links `child` as blocked by `blocker`: the child before it in build
-  // order, or one of the original's own blockers.
+  // Links `child` as blocked by the one before it in build order.
   addBlockedBy(child: number, blocker: number): void;
-  // The original issue's native "blocked by" links (see lib/gate.mts).
+  // The original issue's native "blocked by" links in this repository.
   blockersOf(issue: number): number[];
   // Removes Sandcastle from the original issue, which has become an umbrella.
   removeSandcastle(issue: number): void;
@@ -88,7 +88,7 @@ export const liveSplitGitHub: SplitGitHub = {
   createChild: createIssue,
   addSubIssue,
   addBlockedBy,
-  blockersOf: (issue) => liveGateGitHub.nativeBlockers(issue).map((blocker) => blocker.number),
+  blockersOf: (issue) => sameRepoBlockers(issue),
   removeSandcastle: (issue) => removeIssueLabel(issue, "Sandcastle"),
   comment: commentOnIssue,
   markSplitting: (issue) => addIssueLabel(issue, "sandcastle:needs-human"),
@@ -265,7 +265,12 @@ function applyVerdict(
 // with sandcastle:needs-info and a question asking a human to split it.
 //
 // The first child also takes over the original's blockers, native and in its
-// body, since the original stops being built once it loses Sandcastle.
+// body, since the original stops being built once it loses Sandcastle. They're
+// read before anything is created, and go in the child's body as a "Blocked
+// by" line the gate reads (lib/gate.mts#bodyBlockers) rather than as native
+// links: GitHub may refuse to link one (a typo, a pull request), which would
+// fail the split partway. A failure reading them leaves the issue unjudged,
+// with nothing created.
 //
 // Before the first child is created, the issue is marked with
 // sandcastle:needs-human, which intake and the gate leave alone, so neither a
@@ -304,6 +309,9 @@ function applySplit(
     return `✋ Intake hands #${number} back with sandcastle:needs-info: it couldn't split it, since ${problem}.`;
   }
 
+  const blockers = new Set([...splitGithub.blockersOf(number), ...bodyBlockers(issue.body)]);
+  blockers.delete(number);
+  const blockedByLine = blockers.size > 0 ? `\n\nBlocked by ${[...blockers].map((blocker) => `#${blocker}`).join(", ")}` : "";
   try {
     splitGithub.markSplitting(number);
   } catch (error) {
@@ -325,20 +333,14 @@ function applySplit(
     for (const draft of drafted) {
       const title = withoutReferences(draft.title.trim());
       creating = title;
-      const child = { number: splitGithub.createChild(title, withoutReferences(draft.body), labels), title };
+      // Added after withoutReferences, which would otherwise break its refs.
+      const body = withoutReferences(draft.body) + (children.length === 0 ? blockedByLine : "");
+      const child = { number: splitGithub.createChild(title, body, labels), title };
       creating = undefined;
       const previous = children.at(-1);
       children.push(child);
       splitGithub.addSubIssue(number, child.number);
-      if (previous) {
-        splitGithub.addBlockedBy(child.number, previous.number);
-      } else {
-        // The original is about to lose Sandcastle, so its own blockers stop
-        // holding anything back: the first child takes them over.
-        const blockers = new Set([...splitGithub.blockersOf(number), ...bodyBlockers(issue.body)]);
-        blockers.delete(number);
-        for (const blocker of blockers) splitGithub.addBlockedBy(child.number, blocker);
-      }
+      if (previous) splitGithub.addBlockedBy(child.number, previous.number);
     }
     splitGithub.removeSandcastle(number);
     sandcastleRemoved = true;
@@ -490,9 +492,13 @@ function questionsOf(verdict: IntakeVerdict): string[] {
 // an agent must be able to copy as they are (#234).
 export function withoutReferences(text: string): string {
   const prose = (part: string) => breakReferences(part.replace(/&(?=#?[A-Za-z0-9]+;)/g, "&amp;"));
-  // A fenced block (to its closing fence, or the end of the text), or a code
-  // span (a run of backticks to the next run of the same length).
-  const code = /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[^\S\n]*$|(?![\s\S]))|(`+)(?!`)[\s\S]*?(?<!`)\2(?!`)/gm;
+  // As CommonMark reads them: a fenced block, to its closing fence or the end
+  // of the text, whose opener, if backticks, has no backtick in its info
+  // string; or a code span, from a run of backticks with no unescaped
+  // backslash before it to the next run of the same length, without crossing
+  // a blank line or the start of a block (a heading, list item or quote).
+  const code =
+    /^ {0,3}(`{3,}(?=[^`\n]*$)|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[^\S\n]*$|(?![\s\S]))|(?<!(?<!\\)(?:\\\\)*\\)(`+)(?!`)(?:(?!\n[ \t]*(?:\n|#|[-*+>] |\d+[.)] ))[\s\S])*?(?<!`)\2(?!`)/gm;
   let result = "";
   let last = 0;
   for (const match of text.matchAll(code)) {

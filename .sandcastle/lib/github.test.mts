@@ -5,27 +5,28 @@ import { SANDCASTLE_LABELS } from "./config.mts";
 import {
   addIssueLabel,
   addSubIssue,
+  cacheHostLogin,
   closeIssueAsCompleted,
   commentOnIssue,
   createIssue,
   ensureLabels,
+  type GhIssue,
+  handBack,
+  hasLabel,
+  hostLogin,
   issueLabels,
   issuesWithLabel,
   labelTimeline,
-  removeIssueLabel,
-  cacheHostLogin,
-  hostLogin,
-  handBack,
-  hasLabel,
+  listSandcastleIssues,
   markerComments,
   markerCommentsSince,
   openIssuesWithComment,
   openPullRequest,
-  listSandcastleIssues,
   ownerApproved,
+  removeIssueLabel,
+  sameRepoBlockers,
   sameRepository,
   subIssuesOf,
-  type GhIssue,
   type TimelineLabelEvent,
   type TimestampedComment,
 } from "./github.mts";
@@ -574,6 +575,21 @@ describe("issue labels", () => {
 });
 
 describe("split and umbrella issues", () => {
+  // GitHub allows a "blocked by" link to an issue in another repository; its
+  // number means nothing here, so only this repository's blockers are kept
+  // (#234).
+  it("reads an issue's native blockers in this repository, leaving out other repositories'", () => {
+    const { calls, run } = recordingGh([
+      [
+        JSON.stringify({ number: 50, repository_url: "https://api.github.com/repos/o/r" }),
+        JSON.stringify({ number: 7, repository_url: "https://api.github.com/repos/other/r" }),
+      ].join("\n"),
+    ]);
+
+    assert.deepEqual(sameRepoBlockers(10, run, "o/r"), [50]);
+    assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/issues/10/dependencies/blocked_by"]);
+  });
+
   it("creates an issue with its labels through the REST API and returns its number", () => {
     const { calls, run } = recordingGh(["151\n"]);
 

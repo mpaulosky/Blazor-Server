@@ -16,6 +16,7 @@ import {
   type IntakeVerdict,
   type SplitGitHub,
 } from "./intake.mts";
+import { bodyBlockers } from "./gate.mts";
 import { HandBackReport } from "./report.mts";
 
 const issue = (number: number, labels: string[] = ["Sandcastle"]): SandcastleIssue => ({
@@ -478,16 +479,34 @@ describe("applyVerdicts for a split verdict beyond the acceptance criteria", () 
   });
 
   // The original is about to lose Sandcastle, so its own blockers stop
-  // holding anything back: the first child takes them over (#234).
-  it("links the first child as blocked by the original's blockers, native and in its body", () => {
+  // holding anything back: the first child takes them over, as a "Blocked
+  // by" line the gate reads, so a blocker GitHub won't link (a typo, a PR)
+  // can't fail the split partway (#234).
+  it("puts the original's blockers, native and in its body, in the first child's body", () => {
     const split = recordingSplitGithub();
     split.github.blockersOf = (number) => (number === 10 ? [50] : []);
     const original = { ...issue(10), body: "## Summary\n\nA thing.\n\nBlocked by #60" };
 
     applyVerdicts([original], [splitVerdict(10)], recordingGh().run, "o/r", new HandBackReport(), () => {}, split.github);
 
+    const bodies = split.calls.filter((call) => call.fn === "createChild").map((call) => call.args[1] as string);
+    assert.deepEqual(bodyBlockers(bodies[0]!), [50, 60]);
+    assert.deepEqual(bodyBlockers(bodies[1]!), []);
     const blockedBy = split.calls.filter((call) => call.fn === "addBlockedBy").map((call) => call.args);
-    assert.deepEqual(blockedBy, [[101, 50], [101, 60], [102, 101], [103, 102]]);
+    assert.deepEqual(blockedBy, [[102, 101], [103, 102]]);
+  });
+
+  it("leaves the issue unjudged, with nothing marked or created, when reading its blockers fails", () => {
+    const split = recordingSplitGithub();
+    split.github.blockersOf = () => {
+      throw new Error("HTTP 502");
+    };
+    const lines: string[] = [];
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], recordingGh().run, "o/r", new HandBackReport(), (line) => lines.push(line), split.github);
+
+    assert.deepEqual(split.calls, []);
+    assert.ok(lines.some((line) => line.includes("judged again")), lines.join("\n"));
   });
 
   // Each child is held until the split finishes, so a partial split's
@@ -541,6 +560,23 @@ describe("applyVerdicts for a split verdict beyond the acceptance criteria", () 
     assert.ok(body.includes("`@page \"/x\"` and `@media`"), body);
     assert.doesNotMatch(body, /cc @someone/);
   });
+
+  // GitHub renders these as prose, so a mention or reference in them would
+  // fire (#234).
+  for (const [what, body] of [
+    ["after an escaped backtick", "## Summary\n\nPress \\`@someone\\` to see #123.\n\n## Acceptance criteria\n\n- [ ] One."],
+    ["between a stray backtick and a later code span", "## Summary\n\nThe ` key toggles.\n\ncc @someone, see #123\n\n## Acceptance criteria\n\n- [ ] `foo` works."],
+    ["after a backtick fence whose info string holds a backtick", "## Summary\n\n``` foo ` bar\n\ncc @someone, see #123\n\n## Acceptance criteria\n\n- [ ] One."],
+  ] as const) {
+    it(`breaks a mention and a reference ${what}`, () => {
+      const split = recordingSplitGithub();
+
+      applyVerdicts([issue(10)], [splitVerdict(10, [{ title: "Part 1", body }])], recordingGh().run, "o/r", new HandBackReport(), () => {}, split.github);
+
+      const created = split.calls.find((call) => call.fn === "createChild")!.args[1] as string;
+      assert.doesNotMatch(created, /@someone|#123/);
+    });
+  }
 
   // The children's bodies are model text posted from the host's account, so
   // a mention or cross-reference copied from the original would fire again

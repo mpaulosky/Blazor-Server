@@ -224,6 +224,24 @@ export function addBlockedBy(issue: number, blocker: number): void {
   );
 }
 
+// The numbers of `issue`'s native "blocked by" links to issues in this
+// repository. GitHub allows a link to another repository's issue, whose
+// number means nothing here, so those are left out. Used to hand a split
+// issue's blockers to its first child (see lib/intake.mts#applySplit).
+export function sameRepoBlockers(
+  issue: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): number[] {
+  const blockers = jsonLines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${issue}/dependencies/blocked_by`,
+      "--jq", ".[] | {number, repository_url} | @json",
+    ]),
+  ) as { number: number; repository_url: string }[];
+  return blockers.filter((blocker) => blocker.repository_url.endsWith(`/repos/${repo}`)).map((blocker) => blocker.number);
+}
+
 // Creates an issue with `labels` already applied, for the child issues a
 // split verdict drafts (see lib/intake.mts#applyVerdicts). Returns its
 // number.
