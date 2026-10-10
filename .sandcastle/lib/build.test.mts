@@ -470,6 +470,12 @@ describe("isGitHubServerError", () => {
       assert.equal(isGitHubServerError(new Error(output)), false, output);
     }
   });
+
+  it("reads only the command's output, not the command line it quotes", () => {
+    const output = "gh pr create --title Show a page on Internal Server Error or HTTP 503 failed:\nHTTP 422: Validation Failed";
+
+    assert.equal(isGitHubServerError(new Error(output)), false);
+  });
 });
 
 describe("publicErrorText", () => {

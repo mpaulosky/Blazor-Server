@@ -56,12 +56,15 @@ export async function publish(
 // Whether a git or gh failure is GitHub's own server error, which a later
 // attempt may not hit. Matches what git and gh print for one ("remote: Internal
 // Server Error", "returned error: 502", "HTTP 503: Service Unavailable"), not a
-// bare 5xx anywhere in the message, since the message also quotes the branch
-// name (fix/500-...).
+// bare 5xx, since a branch name can hold one (fix/500-...). Only the command's
+// output after "failed:" is read: the command line before it quotes branch
+// names, and could quote an issue title that mentions a server error.
 export function isGitHubServerError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
+  const outputStart = message.indexOf("failed:\n");
+  const output = outputStart === -1 ? message : message.slice(outputStart + "failed:\n".length);
   return /\bHTTP(?:\/[\d.]+)? 5\d\d\b|returned error: 5\d\d\b|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Time-?out/i.test(
-    message,
+    output,
   );
 }
 
