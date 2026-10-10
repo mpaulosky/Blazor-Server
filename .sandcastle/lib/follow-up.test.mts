@@ -800,6 +800,40 @@ describe("sweepPullRequests", () => {
     assert.deepEqual(updatedBranches, []);
     assert.deepEqual(requestedReviews, []);
   });
+
+  it("sweeps a PR as usual when the owner removed its needs-human", () => {
+    const ownerRemoved: IssueEvent[] = [
+      { event: "unlabeled", actor: "owner", label: "sandcastle:needs-human", createdAt: "2026-10-10T09:00:00Z" },
+    ];
+    const { updatedBranches, addedPrLabels, github } = stubGithub({
+      prs: [pr({ mergeStateStatus: "BEHIND" })],
+      isOwner: (login) => login === "owner",
+      pullRequestEvents: () => ownerRemoved,
+    });
+
+    sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(addedPrLabels, []);
+    assert.deepEqual(updatedBranches, [{ number: 101, expectedHeadSha: "a".repeat(40) }]);
+  });
+
+  it("leaves a PR alone, with no write, when it can't check who removed its needs-human", () => {
+    const ghostRemoved: IssueEvent[] = [
+      { event: "unlabeled", actor: "ghost", label: "sandcastle:needs-human", createdAt: "2026-10-10T09:00:00Z" },
+    ];
+    const { updatedBranches, addedPrLabels, github } = stubGithub({
+      prs: [pr({ mergeStateStatus: "BEHIND" })],
+      isOwner: () => undefined,
+      pullRequestEvents: () => ghostRemoved,
+    });
+    const lines: string[] = [];
+
+    sweepPullRequests(github, (line) => lines.push(line), NOW);
+
+    assert.deepEqual(addedPrLabels, []);
+    assert.deepEqual(updatedBranches, []);
+    assert.ok(lines.some((line) => line.includes("#101") && line.includes("couldn't check")), lines.join("\n"));
+  });
 });
 
 describe("followUpPhase", () => {

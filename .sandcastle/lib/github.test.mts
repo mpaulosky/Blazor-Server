@@ -429,6 +429,41 @@ describe("listSandcastleIssues", () => {
     assert.deepEqual(second[0]!.comments, ["Guidance on #3."]);
     assert.equal(lookups(), 2);
   });
+
+  // The run's queue scope (#146) decides what gh is asked for.
+  it("lists the scope's own label in a label scope", () => {
+    const { calls, run } = recordingGh(["[]"]);
+
+    listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "label", label: "Sandcastle:dev" });
+
+    assert.deepEqual(calls[0]!.args.slice(0, 9), ["issue", "list", "--repo", "o/r", "--state", "open", "--label", "Sandcastle:dev", "--limit"]);
+  });
+
+  it("views the scope's one issue in an issue scope, keeping only its owner-approved comments", () => {
+    const viewed = { ...issueBy(146, "stranger"), state: "OPEN", url: "https://github.com/o/r/issues/146" };
+    const run = ((_cmd: string, args: readonly string[]) => {
+      if (args[0] === "issue" && args[1] === "view" && args[2] === "146") return JSON.stringify(viewed);
+      return JSON.stringify({ permission: "read", role_name: "read" });
+    }) as unknown as typeof execFileSync;
+
+    const issues = listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 });
+
+    assert.deepEqual(issues, [{ number: 146, title: "Add a thing", body: "## Summary", labels: ["Sandcastle"], comments: [] }]);
+  });
+
+  it("answers nothing for a closed issue in an issue scope", () => {
+    const viewed = { ...issueBy(146, "maintainer"), state: "CLOSED", url: "https://github.com/o/r/issues/146" };
+    const { run } = recordingGh([JSON.stringify(viewed)]);
+
+    assert.deepEqual(listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 }), []);
+  });
+
+  it("throws when an issue scope's number is a pull request", () => {
+    const viewed = { ...issueBy(146, "maintainer"), state: "OPEN", url: "https://github.com/o/r/pull/146" };
+    const { run } = recordingGh([JSON.stringify(viewed)]);
+
+    assert.throws(() => listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 }), /pull request/);
+  });
 });
 
 describe("ensureLabels", () => {
