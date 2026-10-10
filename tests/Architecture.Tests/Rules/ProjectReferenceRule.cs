@@ -35,7 +35,7 @@ internal static class ProjectReferenceRule
 			.ToHashSet(StringComparer.Ordinal);
 	}
 
-	private static string FindRepositoryRoot()
+	internal static string FindRepositoryRoot()
 	{
 		DirectoryInfo? directory = new(AppContext.BaseDirectory);
 

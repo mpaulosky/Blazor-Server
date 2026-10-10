@@ -2,7 +2,8 @@
 
 This repository is a GitHub template for a server-rendered Blazor Web App on .NET 10 and C# 14, with Tailwind CSS v4
 theming and Auth0 authentication. Today it holds the Shared Kernel (`src/Domain/`), the Blazor Web App scaffold
-(`src/UI/`, with a Home page and the Tailwind build) and their tests; Theme, Palette and Auth0 are on the README roadmap.
+(`src/UI/`, with a Home page and the Tailwind build), the Aspire AppHost and ServiceDefaults, and their tests; Theme,
+Palette and Auth0 are on the README roadmap.
 
 ## Domain language
 
@@ -23,13 +24,20 @@ matching files.
 - `src/UI/`: the Blazor Web App. Each feature slice (components, request and response records, handler, validator,
   `Add<Feature>Feature()` registration) lives in its own folder under `Components/Features/<Feature>/`; the layout is in
   `Components/Layout/`, and the app-wide Error and NotFound pages are in `Components/Pages/`. It references only
-  `src/Domain` (see `docs/adr/0005-feature-slices-live-in-the-ui-project.md`).
+  `src/Domain` and `src/ServiceDefaults` (see `docs/adr/0005-feature-slices-live-in-the-ui-project.md` and its amendment,
+  `docs/adr/0006-ui-references-servicedefaults.md`).
+- `src/AppHost/`: the Aspire AppHost (entry file `AppHost.cs`). It runs the UI as the resource
+  `ApplicationConstants.Website` (`WebApp`) with the UI's `http` launch profile, so it needs no developer certificate.
+- `src/ServiceDefaults/`: OpenTelemetry (logging, metrics, tracing) and health checks, added by `AddServiceDefaults()`.
+  `MapDefaultEndpoints()` maps `/health` and `/alive` in Development only. It references no project, and has no HTTP
+  resilience or service discovery package until something calls another service.
 - `src/UI/Styles/app.tailwind.css`: the Tailwind CSS v4 source. The build runs the Tailwind CLI (a devDependency in
   `src/UI/package.json`, part of the pnpm workspace) to write `src/UI/wwwroot/css/app.css`, which git ignores.
 - `tests/Architecture.Tests/`, `tests/Domain.Tests.Unit/`, `tests/UI.Tests.Unit/` (bUnit),
-  `tests/UI.Tests.Integration/` (`WebApplicationFactory<Program>`): test projects, named `<Project>.Tests.<Kind>`.
-- `aspire.config.json` (the Aspire CLI's shared settings) is committed together with this repo's own AppHost, not
-  before. Until then, delete any copy the CLI writes: one that points at another repo's AppHost is per-machine noise.
+  `tests/UI.Tests.Integration/` (`WebApplicationFactory<Program>`), `tests/AppHost.Tests.Integration/`
+  (`Aspire.Hosting.Testing`, starts the AppHost): test projects, named `<Project>.Tests.<Kind>`.
+- `aspire.config.json` (the Aspire CLI's shared settings) lives at the repo root and points at
+  `src/AppHost/AppHost.csproj`. It's the only copy: delete any the CLI writes elsewhere, such as next to the AppHost.
 - `.sandcastle/`: the unattended agent pipeline (TypeScript, run with Claude Code).
 - `.github/workflows/`, `.github/scripts/`, `.github/hooks/`: CI, release blog tooling and git hooks.
 - `.claude/skills/code-review/`: the PR review checklist. GitHub's Copilot code review gets the same checklist through
@@ -48,6 +56,8 @@ scripts/gate.sh                                       # the full check; needs a 
 dotnet build Blazor-Server.slnx                       # quick build while iterating
 dotnet test --project tests/<Project>/<Project>.csproj  # one test project while iterating
 dotnet run --project src/UI                           # run the Blazor Web App
+aspire run                                            # run the AppHost: WebApp plus the Aspire dashboard
+dotnet run --project src/AppHost --launch-profile http  # the same without the Aspire CLI or a dev certificate
 pnpm --dir src/UI run watch:css                       # rebuild the CSS live while editing markup
 pnpm run check:sandcastle                             # type-check and test .sandcastle/
 SANDCASTLE_ISSUE=<n> pnpm run sandcastle              # build one issue (and its PR) locally

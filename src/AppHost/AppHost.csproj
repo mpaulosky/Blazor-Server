@@ -1,0 +1,20 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.1">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<!-- ASPIRE010 warns that the AppHost restores the dashboard and DCP packages instead of using the Aspire CLI
+		     bundle (AspireUseCliBundle=false). Those packages are all it needs, so `dotnet run` and the tests work
+		     without the Aspire CLI installed. -->
+		<NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Aspire.Hosting.AppHost" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="../Domain/Domain.csproj" IsAspireProjectResource="false" />
+		<ProjectReference Include="../UI/UI.csproj" />
+	</ItemGroup>
+
+</Project>

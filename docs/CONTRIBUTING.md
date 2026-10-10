@@ -82,6 +82,7 @@ src/                                    -- Source code
     appsettings.Development.json        -- UI development config
 
 tests/                                  -- Test projects (<Project>.Tests.<Kind>)
+  AppHost.Tests.Integration/            -- AppHost integration tests (Aspire.Hosting.Testing)
   Architecture.Tests/                   -- Architecture and slice-boundary rules
   Domain.Tests.Unit/                    -- Shared Kernel unit tests
   UI.Tests.Unit/                        -- UI component, handler and validator tests (bUnit)
@@ -89,6 +90,7 @@ tests/                                  -- Test projects (<Project>.Tests.<Kind>
   UI.Tests.E2E/                         -- End-to-end tests (Playwright)
 
 [SolutionName].slnx                     -- Solution file
+aspire.config.json                      -- Aspire CLI settings, pointing at src/AppHost
 .editorconfig                           -- Formatting, style, and naming rules
 CONTEXT.md                              -- Domain language
 Directory.Build.props                   -- Shared build settings
