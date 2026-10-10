@@ -375,6 +375,24 @@ describe("decide", () => {
     assert.deepEqual(result, { action: "needs-pass", reasons: ["1 unresolved bot thread(s)"] });
   });
 
+  // threadsForRole answers a thread the repository owner opened, so `decide`
+  // must flag it too: otherwise the PR never gets a pass to answer it (#81).
+  it("flags a settled PR with an unresolved owner thread as needing a follow-up pass, counting it", () => {
+    const result = decide(pr({ threads: [{ resolved: false, byBot: false, author: "owner" }] }), NOW, (login) => login === "owner");
+
+    assert.deepEqual(result, { action: "needs-pass", reasons: ["1 unresolved owner thread(s)"] });
+  });
+
+  // Whether the thread's author is confirmed, not just non-bot, decides this:
+  // an unresolved thread `isOwner` can't confirm is left alone here (it still
+  // counts toward the sweep's waiting-on-a-person list, which errs the other
+  // way on the same uncertainty).
+  it("leaves a settled PR with an unresolved thread of unconfirmed ownership alone", () => {
+    const result = decide(pr({ threads: [{ resolved: false, byBot: false, author: "maybe-owner" }] }), NOW, () => undefined);
+
+    assert.equal(result.action, "leave");
+  });
+
   it("leaves a settled, clean PR with every thread resolved alone", () => {
     const result = decide(pr({ threads: [{ resolved: true, byBot: true, author: null }] }), NOW);
 
@@ -662,11 +680,32 @@ describe("sweepPullRequests", () => {
   });
 
   it("leaves a settled PR with only a human thread open alone", () => {
-    const { updatedBranches, github } = stubGithub({ prs: [pr({ threads: [{ resolved: false, byBot: false, author: null }] })] });
+    const { updatedBranches, github } = stubGithub({
+      prs: [pr({ threads: [{ resolved: false, byBot: false, author: null }] })],
+      isOwner: () => false,
+    });
 
     sweepPullRequests(github, () => {}, NOW);
 
     assert.deepEqual(updatedBranches, []);
+  });
+
+  // #81's follow-up review: a settled PR whose only open thread is the
+  // repository owner's must still get a follow-up pass, since that's the
+  // only thing that ever answers an owner thread (threadsForRole). Before
+  // this, `decide` classified threads by byBot alone and never saw the
+  // owner, so the PR sat with the thread unanswered forever.
+  it("flags a settled PR with only an unresolved owner thread as needing a follow-up pass", () => {
+    const { github } = stubGithub({
+      prs: [pr({ threads: [{ resolved: false, byBot: false, author: "owner" }] })],
+      isOwner: (login) => login === "owner",
+    });
+
+    const { needsPass, passes } = sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(needsPass, [101]);
+    assert.equal(passes.length, 1);
+    assert.equal(passes[0]?.number, 101);
   });
 
   it("still updates the next PR when one PR's update fails", () => {
