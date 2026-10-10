@@ -80,7 +80,16 @@ export class BudgetError extends Error {}
 // falling back to the default. Allowed in GitHub Actions too, unlike the
 // scope variables.
 export function budgetMinutesFrom(env: Record<string, string | undefined>): number {
-  throw new Error("Not implemented");
+  const value = env.SANDCASTLE_BUDGET_MINUTES?.trim();
+  if (!value) {
+    return DEFAULT_BUDGET_MINUTES;
+  }
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new BudgetError(
+      `SANDCASTLE_BUDGET_MINUTES must be a positive whole number of minutes, not "${value}".`,
+    );
+  }
+  return Number(value);
 }
 
 // How many issues one intake run judges. A malformed or truncated <intake>

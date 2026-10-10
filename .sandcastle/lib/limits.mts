@@ -10,22 +10,25 @@ import { UncountedStopError } from "./errors.mts";
 // usageReport and the queue scope: tests pass their own instance through the
 // injected parameters and never touch the shared one.
 export class RunLimits {
+  private budget: { startedAt: number; minutes: number } | undefined;
+  private usageReason: string | undefined;
+
   constructor(private readonly now: () => number = Date.now) {}
 
   // Starts the budget clock at now(). Before start() is called there's no
   // budget, so tests and modules used without main.mts never stop.
   start(budgetMinutes: number): void {
-    throw new Error("Not implemented");
+    this.budget = { startedAt: this.now(), minutes: budgetMinutes };
   }
 
   // Records a usage-limit stop. Only the first is kept.
   hitUsageLimit(reason: string): void {
-    throw new Error("Not implemented");
+    this.usageReason ??= reason;
   }
 
   // The usage-limit reason, if one was recorded.
   usageLimitReason(): string | undefined {
-    throw new Error("Not implemented");
+    return this.usageReason;
   }
 
   // Why the run must stop starting work, or undefined. A usage stop comes
@@ -33,12 +36,21 @@ export class RunLimits {
   // now() - start >= budgetMinutes * 60_000, and the reason reads like
   // "the run's 240-minute time budget has passed".
   stopReason(): string | undefined {
-    throw new Error("Not implemented");
+    if (this.usageReason !== undefined) {
+      return this.usageReason;
+    }
+    if (this.budget && this.now() - this.budget.startedAt >= this.budget.minutes * 60_000) {
+      return `the run's ${this.budget.minutes}-minute time budget has passed`;
+    }
+    return undefined;
   }
 
   // Throws new UncountedStopError(stopReason()) when stopReason() is set.
   throwIfStopped(): void {
-    throw new Error("Not implemented");
+    const reason = this.stopReason();
+    if (reason !== undefined) {
+      throw new UncountedStopError(reason);
+    }
   }
 }
 
@@ -51,7 +63,41 @@ export const runLimits: RunLimits = new RunLimits();
 // Sandcastle's AgentError message is "claude-code exited with code N:\n
 // <stderr, else the result text, else the last 20 stdout lines>".
 export function isUsageLimitError(error: unknown): boolean {
-  throw new Error("Not implemented");
+  return usageLimitLine(error) !== undefined;
+}
+
+// Claude Code's usage- and rate-limit phrasings. Its wording changes between
+// versions, so they're kept in this one list. 529 / overloaded_error is a
+// server overload, not a usage limit, and stays a counted failure.
+const USAGE_LIMIT_PATTERNS: readonly RegExp[] = [
+  /Claude (AI )?usage limit reached/i,
+  /You['’]ve hit your (usage |session |weekly )?limit/i,
+  /(5-hour|session|daily|weekly|Opus weekly|Sonnet weekly) limit reached/i,
+  /API Error: 429/i,
+  /Request rejected \(429\)/i,
+  /"type"\s*:\s*"rate_limit_error"/i,
+];
+
+// How deep isUsageLimitError follows an error's `cause` chain.
+const MAX_CAUSE_DEPTH = 5;
+
+// The first line of `error`'s text (its message, String(error) and its
+// `cause` chain) that matches a usage-limit phrasing, or undefined. The
+// role runner names this line in the stop reason.
+export function usageLimitLine(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && current !== undefined && current !== null; depth++) {
+    const texts = current instanceof Error ? [current.message, String(current)] : [String(current)];
+    for (const text of texts) {
+      for (const line of text.split("\n")) {
+        if (USAGE_LIMIT_PATTERNS.some((pattern) => pattern.test(line))) {
+          return line.trim();
+        }
+      }
+    }
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return undefined;
 }
 
 // Re-exported so a caller that only needs the stop error doesn't also have
