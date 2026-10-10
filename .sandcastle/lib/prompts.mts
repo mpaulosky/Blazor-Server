@@ -3,6 +3,7 @@
 // lost every comment but those from authors with write access (see
 // ownerApproved).
 
+import type { PromptArgs } from "@ai-hero/sandcastle";
 import type { Checkpoint } from "./checkpoint.mts";
 import { BASE_BRANCH } from "./config.mts";
 import type { SandcastleIssue } from "./github.mts";
@@ -25,6 +26,29 @@ export function issuePromptArgs(issue: SandcastleIssue, branch: string) {
 // implementation, plus the red gate's output and which checkpoint it's at.
 export function gateFixerPromptArgs(issue: SandcastleIssue, branch: string, checkpoint: Checkpoint, gateOutput: string) {
   return { ...issuePromptArgs(issue, branch), CHECKPOINT: String(checkpoint), GATE_OUTPUT: gateOutput };
+}
+
+// The architect also gets the body of its own latest design note comment
+// (see DESIGN_MARKER in lib/config.mts), so a re-run builds on its earlier
+// decisions instead of starting blind.
+export function architectPromptArgs(issue: SandcastleIssue, branch: string, designNote: string | undefined): PromptArgs {
+  return { ...issuePromptArgs(issue, branch), DESIGN_NOTE: designNote ?? "(no earlier design note)" };
+}
+
+// The backend developer needs to know whether the UI developer runs after it
+// for this issue (see "Phase 6: Build" in docs/plans/sandcastle-workflow.md):
+// when it does, the Blazor components and pages are the UI developer's, and
+// the backend's run isn't the last developer run.
+export function backendPromptArgs(issue: SandcastleIssue, branch: string, uiRuns: boolean) {
+  return {
+    ...issuePromptArgs(issue, branch),
+    UI_DEVELOPER: uiRuns
+      ? "The UI developer runs after you for this issue. Leave Blazor components and pages (`.razor` files, their code-behind and their " +
+        "bUnit tests) to it, and make every other test pass. If the gate is still red only on those tests when you finish, say so in your " +
+        "last commit's body."
+      : "No UI developer runs for this issue, so your run is the last developer run: every test must pass by its end, Blazor components " +
+        "and pages included.",
+  };
 }
 
 // The host names branches and has already dropped issues with an open PR, so
