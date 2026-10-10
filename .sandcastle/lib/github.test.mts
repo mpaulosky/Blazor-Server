@@ -6,6 +6,7 @@ import {
   addIssueLabel,
   commentOnIssue,
   ensureLabels,
+  issueLabels,
   issuesWithLabel,
   labelTimeline,
   removeIssueLabel,
@@ -245,6 +246,15 @@ describe("issue labels", () => {
     removeIssueLabel(150, "sandcastle:building", run, "o/r");
 
     assert.deepEqual(calls.map((call) => call.args), [["issue", "edit", "150", "--repo", "o/r", "--remove-label", "sandcastle:building"]]);
+  });
+
+  it("reads an issue's labels", () => {
+    const { calls, run } = recordingGh(['["Sandcastle","sandcastle:building"]\n']);
+
+    const labels = issueLabels(150, run, "o/r");
+
+    assert.deepEqual(labels, ["Sandcastle", "sandcastle:building"]);
+    assert.deepEqual(calls[0]!.args, ["issue", "view", "150", "--repo", "o/r", "--json", "labels", "--jq", "[.labels[].name]"]);
   });
 
   it("lists the open issues carrying a label", () => {

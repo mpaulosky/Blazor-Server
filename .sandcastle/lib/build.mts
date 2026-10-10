@@ -8,16 +8,10 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
-import { BASE_BRANCH, BUILD_FAILED_MARKER, BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import { BASE_BRANCH, BUILD_FAILED_MARKER, BUILDING_LABEL, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
-import {
-  addIssueLabel,
-  commentOnIssue,
-  markerComments,
-  openPullRequest,
-  removeIssueLabel,
-  type SandcastleIssue,
-} from "./github.mts";
+import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
+import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
@@ -123,11 +117,14 @@ export type BuildHost = {
   // that threw UncountedStopError.
   recordBuildFailure(issueNumber: number, branch: string, detail: string): void;
   // Adds sandcastle:building to the issue, so the gate (lib/gate.mts) holds it
-  // back for a second Sandcastle run while this one builds it (#150).
-  markBuilding(issueNumber: number): void;
+  // back for a second Sandcastle run while this one builds it (#150). Returns
+  // false, without adding it, when the issue already carries the label:
+  // another run marked it after this round's gate read the labels.
+  markBuilding(issueNumber: number): boolean;
   // Removes sandcastle:building, however the build stopped: called from
-  // buildIssue's finally, so a failed, red-gated or thrown-out build doesn't
-  // leave the issue held back forever.
+  // buildIssue's finally, only when markBuilding added it, so a failed,
+  // red-gated or thrown-out build doesn't leave the issue held back forever,
+  // and a build that stood aside never removes another run's label.
   unmarkBuilding(issueNumber: number): void;
   // Whether what the commits from `base` to `commit` publish (see
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
@@ -173,8 +170,8 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
-  markBuilding: (issueNumber) => addIssueLabel(issueNumber, BUILDING_LABEL),
-  unmarkBuilding: (issueNumber) => removeIssueLabel(issueNumber, BUILDING_LABEL),
+  markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
+  unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
@@ -269,11 +266,18 @@ export async function buildIssue(
     return result.head;
   }
 
+  let marked = false;
   try {
     // Before any role runs, so a second Sandcastle run's gate holds the issue
     // back (#150). A label that can't be added stops the build: building
-    // unmarked is how two runs end up on one issue.
-    host.markBuilding(issue.number);
+    // unmarked is how two runs end up on one issue. The throw reaches
+    // main.mts's allSettled, so it skips this issue for the round without
+    // counting an attempt.
+    marked = host.markBuilding(issue.number);
+    if (!marked) {
+      console.error(`  ⏸ #${issue.number}: another run marked it ${BUILDING_LABEL} after this round's gate, so this run leaves it alone.`);
+      return notPublished;
+    }
 
     if (!(await developerFinishes("tester"))) return notPublished;
     if (!(await developerFinishes("backend"))) return notPublished;
@@ -354,14 +358,14 @@ export async function buildIssue(
     }
   } finally {
     // A label that can't be removed mustn't replace the build's own outcome or
-    // keep the sandbox from closing. It holds the issue back until a later
-    // startup clears it as stale (lib/building.mts).
+    // keep the sandbox from closing. The issue stays remembered, so this run's
+    // exit tries again (see main.mts), and failing that a later startup clears
+    // the label as stale (lib/building.mts).
     try {
-      host.unmarkBuilding(issue.number);
+      if (marked) host.unmarkBuilding(issue.number);
     } catch (error) {
       console.error(
-        `  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so the issue stays held back until a run starts ` +
-          `after the label is ${BUILDING_LABEL_MAX_AGE_MS / 3_600_000} hours old: ${error}`,
+        `  ⚠ #${issue.number}: removing ${BUILDING_LABEL} failed, so it's tried again when this run exits: ${error}`,
       );
     }
 

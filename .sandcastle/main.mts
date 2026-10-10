@@ -53,7 +53,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
-import { clearStaleBuildingLabels } from "./lib/building.mts";
+import { clearStaleBuildingLabels, releaseAllBuildingLabels } from "./lib/building.mts";
 import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { BUILDING_LABEL, MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
@@ -88,6 +88,18 @@ forgetGatedHead();
 // filters by, is read now so a token that can't read it fails before any work.
 ensureLabels();
 cacheHostLogin();
+
+// Ctrl-C, SIGTERM and a crash skip buildIssue's finally, which would leave
+// sandcastle:building holding the issue back for BUILDING_LABEL_MAX_AGE_MS.
+// While a label is on, its sandbox is open, so Sandcastle's own signal
+// handler is installed: it removes the containers and calls process.exit,
+// which runs this listener. Only SIGKILL gets past it, and the startup
+// clearing below covers that.
+process.on("exit", () => {
+  for (const issueNumber of releaseAllBuildingLabels()) {
+    console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL} as the run stopped.`);
+  }
+});
 
 // A run that crashed left sandcastle:building on the issue it was building.
 // Only a label older than any real build is cleared, so a live run's stays.

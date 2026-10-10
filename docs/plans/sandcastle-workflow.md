@@ -39,8 +39,11 @@ The host creates any missing `sandcastle:*` label at startup. The wayfinder map 
 
 `sandcastle:building` exists because a manual `/implement-spec #71` started on 2026-10-07 while Sandcastle was already building #71, and only the run log showed it (#150).
 `buildIssue` adds it before the first role runs and removes it in its `finally`, so a pass, a failure or a thrown error all clear it.
-A run that crashes can't remove it, so at startup the host removes it from any issue whose most recent `labeled` event for it is more than 6 hours old (`BUILDING_LABEL_MAX_AGE_MS`),
-longer than any build runs. A newer label belongs to a run that's still going, and stays.
+Two runs can both pass the gate before either adds the label, so `buildIssue` reads the issue's labels again just before adding it, and leaves an issue that already carries it to the
+run that marked it, without counting an attempt. Only the run that added the label removes it.
+A run stopped with Ctrl-C or SIGTERM, or one that crashes, removes the labels it still holds as the process exits.
+Only a killed process (SIGKILL) leaves one behind, so at startup the host removes the label from any issue whose most recent `labeled` event for it is more than 6 hours old
+(`BUILDING_LABEL_MAX_AGE_MS`), longer than any build runs. A newer label belongs to a run that's still going, and stays. To free an issue sooner, remove the label by hand.
 
 **Only the repository owner queues work, and only what they approved reaches an agent.** Anyone with triage access can add a label or edit an issue, anyone can comment on a public
 repository, and an agent holding a write token acts on what it reads. So when the host loads the queue, before intake and the early exit, it keeps an issue only when:

@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS } from "./config.mts";
 import type { TimelineLabelEvent } from "./github.mts";
-import { clearStaleBuildingLabels, labelIsStale, type BuildingGitHub } from "./building.mts";
+import {
+  claimBuildingLabel,
+  clearStaleBuildingLabels,
+  labelIsStale,
+  releaseAllBuildingLabels,
+  releaseBuildingLabel,
+  type BuildingGitHub,
+  type BuildingLabels,
+} from "./building.mts";
 
 const labeled = (createdAt: string): TimelineLabelEvent => ({ event: "labeled", label: BUILDING_LABEL, createdAt });
 const unlabeled = (createdAt: string): TimelineLabelEvent => ({ event: "unlabeled", label: BUILDING_LABEL, createdAt });
@@ -91,5 +99,103 @@ describe("clearStaleBuildingLabels", () => {
     clearStaleBuildingLabels(gh, BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS, now);
 
     assert.deepEqual(read, [42]);
+  });
+});
+
+// A BuildingLabels stub over an in-memory label list per issue, recording
+// every call. `failRemove` makes removing the label from those issues throw.
+function labelStub(labels: Record<number, string[]> = {}, failRemove: number[] = []) {
+  const calls: string[] = [];
+  const github: BuildingLabels = {
+    issueLabels: (issueNumber) => {
+      calls.push(`labels #${issueNumber}`);
+      return [...(labels[issueNumber] ?? [])];
+    },
+    addLabel: (issueNumber, label) => {
+      calls.push(`add #${issueNumber}`);
+      (labels[issueNumber] ??= []).push(label);
+    },
+    removeLabel: (issueNumber, label) => {
+      calls.push(`remove #${issueNumber}`);
+      if (failRemove.includes(issueNumber)) throw new Error("gh issue edit failed:\nHTTP 502: Bad Gateway");
+      labels[issueNumber] = (labels[issueNumber] ?? []).filter((name) => name !== label);
+    },
+  };
+  return { calls, github, labels };
+}
+
+describe("claimBuildingLabel", () => {
+  it("adds the label to an issue that doesn't carry it and remembers the issue", () => {
+    const { calls, github, labels } = labelStub({ 150: ["Sandcastle"] });
+    const marked = new Set<number>();
+
+    const claimed = claimBuildingLabel(150, github, marked);
+
+    assert.equal(claimed, true);
+    assert.deepEqual(calls, ["labels #150", "add #150"]);
+    assert.deepEqual(labels[150], ["Sandcastle", BUILDING_LABEL]);
+    assert.deepEqual([...marked], [150]);
+  });
+
+  // Another run's gate read the labels before this one's add, so both picked
+  // the issue: the one that marks it second must leave it alone.
+  it("leaves an issue another run already marked, without adding the label or remembering the issue", () => {
+    const { calls, github } = labelStub({ 150: ["Sandcastle", "Sandcastle:Building"] });
+    const marked = new Set<number>();
+
+    const claimed = claimBuildingLabel(150, github, marked);
+
+    assert.equal(claimed, false);
+    assert.deepEqual(calls, ["labels #150"]);
+    assert.deepEqual([...marked], []);
+  });
+});
+
+describe("releaseBuildingLabel", () => {
+  it("removes the label and forgets the issue", () => {
+    const { github, labels } = labelStub({ 150: [BUILDING_LABEL] });
+    const marked = new Set([150]);
+
+    releaseBuildingLabel(150, github, marked);
+
+    assert.deepEqual(labels[150], []);
+    assert.deepEqual([...marked], []);
+  });
+
+  // Still remembered, so releaseAllBuildingLabels tries again on exit.
+  it("keeps remembering the issue when the label can't be removed", () => {
+    const { github } = labelStub({ 150: [BUILDING_LABEL] }, [150]);
+    const marked = new Set([150]);
+
+    assert.throws(() => releaseBuildingLabel(150, github, marked), /502/);
+
+    assert.deepEqual([...marked], [150]);
+  });
+});
+
+describe("releaseAllBuildingLabels", () => {
+  // Ctrl-C, SIGTERM and a crash skip buildIssue's finally; main.mts calls
+  // this from the process's exit listener instead.
+  it("removes the label from every issue this run still holds and returns them", () => {
+    const { github, labels } = labelStub({ 71: [BUILDING_LABEL], 150: [BUILDING_LABEL] });
+    const marked = new Set([71, 150]);
+
+    const released = releaseAllBuildingLabels(github, marked, () => {});
+
+    assert.deepEqual(released, [71, 150]);
+    assert.deepEqual(labels, { 71: [], 150: [] });
+    assert.deepEqual([...marked], []);
+  });
+
+  it("carries on past an issue whose label can't be removed, and reports it", () => {
+    const { github, labels } = labelStub({ 71: [BUILDING_LABEL], 150: [BUILDING_LABEL] }, [71]);
+    const warnings: string[] = [];
+
+    const released = releaseAllBuildingLabels(github, new Set([71, 150]), (message) => warnings.push(message));
+
+    assert.deepEqual(released, [150]);
+    assert.deepEqual(labels[150], []);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /#71/);
   });
 });

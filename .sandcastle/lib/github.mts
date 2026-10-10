@@ -213,6 +213,18 @@ export function removeIssueLabel(
   ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, "--remove-label", label]);
 }
 
+// The names of the labels the issue `number` carries now, read fresh rather
+// than from the round's listSandcastleIssues snapshot.
+export function issueLabels(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): string[] {
+  return JSON.parse(
+    ghWithStderr(run, ["issue", "view", String(number), "--repo", repo, "--json", "labels", "--jq", "[.labels[].name]"]),
+  ) as string[];
+}
+
 // The numbers of the open issues carrying `label`. As with
 // listSandcastleIssues, the cap sits far above any real queue.
 export function issuesWithLabel(

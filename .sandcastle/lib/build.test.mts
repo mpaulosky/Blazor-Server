@@ -112,6 +112,7 @@ function host(
     markBuilding: (issueNumber) => {
       buildingCalls.push(issueNumber);
       order.push("mark");
+      return true;
     },
     unmarkBuilding: (issueNumber) => {
       buildingCalls.push(issueNumber);
@@ -546,6 +547,34 @@ describe("buildIssue marking the issue as building", () => {
 
     assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
     assert.equal(order.at(-1), "close");
+  });
+
+  // Another run's gate read the issue's labels before this run marked it, so
+  // both picked it: the second to mark it leaves it to the first.
+  it("leaves the issue alone when another run marked it first, without counting an attempt", async () => {
+    const { order, recordBuildFailureCalls, buildHost } = host([0, 0]);
+    buildHost.markBuilding = () => {
+      order.push("mark refused");
+      return false;
+    };
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.prUrl, undefined);
+    assert.deepEqual(order, ["mark refused", "close"]);
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
+  it("stops the build without counting an attempt when the label can't be added", async () => {
+    const { order, recordBuildFailureCalls, buildHost } = host([0, 0]);
+    buildHost.markBuilding = () => {
+      throw new Error("gh issue edit failed:\nHTTP 502: Bad Gateway");
+    };
+
+    await assert.rejects(() => buildIssue(issue, branch, base, buildHost), /502/);
+
+    assert.deepEqual(order, ["close"]);
+    assert.deepEqual(recordBuildFailureCalls, []);
   });
 
   it("marks the issue as building exactly once and unmarks it exactly once per build", async () => {
