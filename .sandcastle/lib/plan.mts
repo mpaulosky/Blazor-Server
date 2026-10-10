@@ -28,7 +28,11 @@ export type PlannedIssue = z.infer<typeof planSchema>["issues"][number];
 // (see OPTIONAL_ROLES in lib/config.mts). An empty array is valid on its own:
 // it means the planner deliberately picked none.
 export function resolveRoles(roles: unknown): OptionalRole[] {
-  throw new Error("Not implemented");
+  const known: readonly string[] = OPTIONAL_ROLES;
+  if (!Array.isArray(roles) || !roles.every((role) => typeof role === "string" && known.includes(role))) {
+    return [...OPTIONAL_ROLES];
+  }
+  return OPTIONAL_ROLES.filter((role) => roles.includes(role));
 }
 
 // The planner reads the ready issues, builds a dependency graph, and selects

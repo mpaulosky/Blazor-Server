@@ -32,7 +32,7 @@ export function gateFixerPromptArgs(issue: SandcastleIssue, branch: string, chec
 // (see DESIGN_MARKER in lib/config.mts), so a re-run builds on its earlier
 // decisions instead of starting blind.
 export function architectPromptArgs(issue: SandcastleIssue, branch: string, designNote: string | undefined): PromptArgs {
-  throw new Error("Not implemented");
+  return { ...issuePromptArgs(issue, branch), DESIGN_NOTE: designNote ?? "(no earlier design note)" };
 }
 
 // The host names branches and has already dropped issues with an open PR, so

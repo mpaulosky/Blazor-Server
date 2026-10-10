@@ -13,6 +13,7 @@ import {
   BUILD_FAILED_MARKER,
   BUILDING_LABEL,
   copyToWorktree,
+  DESIGN_MARKER,
   hooks,
   PUBLISH_RETRY_ATTEMPTS,
   type OptionalRole,
@@ -22,7 +23,7 @@ import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
-import { gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
+import { architectPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
@@ -65,9 +66,11 @@ export async function publish(
   wait: (ms: number) => Promise<void> = (ms) => sleep(ms),
 ): Promise<string> {
   await retryOnServerError(() => push(branch, commit), wait);
-  const body = reviewed
-    ? `Closes #${issue.number}\n\nImplemented and reviewed by Sandcastle.`
-    : `Closes #${issue.number}\n\nImplemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.`;
+  const body =
+    (reviewed
+      ? `Closes #${issue.number}\n\nImplemented and reviewed by Sandcastle.`
+      : `Closes #${issue.number}\n\nImplemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.`) +
+    (docsFailed ? "\n\n⚠️ The documentation step failed, so this PR may leave `CONTEXT.md`, `README.md` or the guides out of date." : "");
   // A retry after a create that GitHub carried out but answered with an error
   // finds that PR rather than open a second one: openPullRequest looks for an
   // open PR from the branch first.
@@ -110,11 +113,22 @@ async function retryOnServerError<T>(step: () => T, wait: (ms: number) => Promis
   }
 }
 
-// The issue comment for a tester or backend run that stopped the build.
+// The issue comment for an architect, tester, backend or UI run that stopped
+// the build.
 function developerFailureComment(failure: string, branch: string): string {
   return `Sandcastle stopped building this issue: ${failure}, so \`${branch}\` wasn't pushed. The branch keeps its commits.`;
 }
 
+// GitHub refuses a comment over 65,536 characters; this leaves room for the
+// design comment's own lines around the note.
+const DESIGN_NOTE_LIMIT = 60_000;
+
+// The design note cut to fit in an issue comment, saying where the whole of it
+// is when it's cut.
+function truncateDesignNote(note: string, path: string): string {
+  if (note.length <= DESIGN_NOTE_LIMIT) return note;
+  return `${note.slice(0, DESIGN_NOTE_LIMIT)}\n\n(Cut short to fit in a comment. The whole note is in the sandbox's \`${path}\`.)`;
+}
 
 // An issue with the optional roles the planner picked for it (see
 // resolveRoles in lib/plan.mts): architect, UI developer and/or scribe, each
@@ -161,7 +175,8 @@ export type BuildHost = {
   // What's wrong with how the worktree finds its repository (see
   // lib/host-safety.mts); empty when nothing is.
   worktreeProblems(worktreePath: string): string[];
-  // A failed publish's error, made safe to post on the public issue.
+  // Text from the sandbox (a failed publish's error, the architect's design
+  // note), made safe to post on the public issue.
   publicError(error: unknown): string;
   log(line: string): void;
 };
@@ -173,7 +188,7 @@ export function publicErrorText(text: string, holdsSecret: (text: string) => boo
     .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
     .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi, "$1***@")
     .trim();
-  return holdsSecret(cleaned) ? "(The error isn't shown: it looked like it held a secret. See the run log.)" : cleaned;
+  return holdsSecret(cleaned) ? "(This text isn't shown: it looked like it held a secret. See the run log.)" : cleaned;
 }
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
@@ -198,9 +213,11 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
-  latestDesignNote: () => {
-    throw new Error("Not implemented");
-  },
+  // Scoped like the failed-attempt count: a person who re-queues a handed-back
+  // issue may have rewritten it, so the architect starts that issue afresh
+  // rather than build on a design that went with the failed attempts.
+  latestDesignNote: (issueNumber) =>
+    markerComments(issueNumber, "sandcastle:needs-human", DESIGN_MARKER).at(-1)?.body.replace(DESIGN_MARKER, "").trim(),
   markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
   unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
@@ -276,18 +293,22 @@ async function buildMarkedIssue(
   const notPublished = { commits, prUrl: undefined, publishFailed: false };
   const log = (line: string) => host.log(`  #${issue.number} ${line}`);
 
-  // Run the tester or the backend developer. Returns false when the run threw,
-  // timed out or used up its iterations without signalling completion: the
-  // tests aren't written or aren't green, so the issue stops for this round.
-  // Whatever the run committed stays on the branch for the next round, and the
-  // failure counts as one of the issue's build attempts, as a checkpoint that
-  // stays red does. An UncountedStopError is rethrown instead.
-  async function developerFinishes(role: "tester" | "backend"): Promise<boolean> {
+  // Run the architect, the tester, the backend developer or the UI developer.
+  // Returns false when the run threw, timed out or used up its iterations
+  // without signalling completion: the design, the tests or the code aren't
+  // done, so the issue stops for this round. Whatever the run committed stays
+  // on the branch for the next round, and the failure counts as one of the
+  // issue's build attempts, as a checkpoint that stays red does. An
+  // UncountedStopError is rethrown instead.
+  async function developerFinishes(role: "architect" | "tester" | "backend" | "ui"): Promise<boolean> {
+    // Read outside the try: a gh failure reading the earlier design note is
+    // the host's, not the architect's, so it mustn't count as a failed attempt.
+    const roleArgs = role === "architect" ? architectPromptArgs(issue, branch, host.latestDesignNote(issue.number)) : promptArgs;
     let failure: string;
     try {
       const run = await runRoleInSandbox(sandbox, role, {
         promptFile: `./.sandcastle/roles/${role}.md`,
-        promptArgs,
+        promptArgs: roleArgs,
       });
       commits.push(...run.commits);
       if (run.completionSignal !== undefined) {
@@ -337,9 +358,39 @@ async function buildMarkedIssue(
     return result.head;
   }
 
+  // Post the architect's design note on the issue, so it outlives the
+  // sandbox: .sandcastle/work/ is gitignored, and a re-run's architect reads
+  // it back through host.latestDesignNote. The file is read inside the
+  // sandbox, not from the host, since an agent wrote it (it could be a
+  // symlink to a host file). A missing note or a failed comment is logged,
+  // not a failed build: this build's roles still read the file itself.
+  async function postDesignNote(): Promise<void> {
+    const path = `.sandcastle/work/${issue.number}/design.md`;
+    const read = await sandbox.exec(`cat ${path} 2>/dev/null`);
+    const note = read.exitCode === 0 ? read.stdout.trim() : "";
+    if (note === "") {
+      console.error(`  ⚠ #${issue.number}: the architect wrote no design note at ${path}, so none is posted.`);
+      return;
+    }
+    const body =
+      `${DESIGN_MARKER}\n` +
+      `Sandcastle's architect wrote this design note for \`${branch}\`. The tester and developers build from it, and ` +
+      `the reviewer checks it was followed.\n\n${truncateDesignNote(host.publicError(note), path)}`;
+    try {
+      host.commentOnIssue(issue.number, body);
+    } catch (error) {
+      console.error(`  ⚠ #${issue.number}: posting the design note failed: ${error}`);
+    }
+  }
+
   try {
+    if (issue.roles.includes("architect")) {
+      if (!(await developerFinishes("architect"))) return notPublished;
+      await postDesignNote();
+    }
     if (!(await developerFinishes("tester"))) return notPublished;
     if (!(await developerFinishes("backend"))) return notPublished;
+    if (issue.roles.includes("ui") && !(await developerFinishes("ui"))) return notPublished;
 
     // Gate, review and publish whenever the branch holds work that main
     // doesn't, not only when this run added commits: a re-run of a finished
@@ -354,6 +405,30 @@ async function buildMarkedIssue(
     if ((await gatePasses(1)) === undefined) return notPublished;
     if (host.commitsAhead(branch, base) === 0) {
       return notPublished;
+    }
+
+    // A failed scribe doesn't strand finished work: the code is gated, so
+    // publish anyway and say so in the PR. Out of usage or time, leave the
+    // branch for a later round, as the reviewer does below.
+    let docsFailed = false;
+    if (issue.roles.includes("scribe")) {
+      try {
+        const scribe = await runRoleInSandbox(sandbox, "scribe", {
+          promptFile: "./.sandcastle/roles/scribe.md",
+          promptArgs,
+        });
+        commits.push(...scribe.commits);
+        if (scribe.completionSignal === undefined) {
+          console.error(`  ⚠ #${issue.number}: the scribe ran out of iterations unfinished, publishing with a note.`);
+          docsFailed = true;
+        } else {
+          log("scribe finished");
+        }
+      } catch (error) {
+        if (error instanceof UncountedStopError) throw error;
+        console.error(`  ⚠ #${issue.number}: scribe failed, publishing with a note: ${error}`);
+        docsFailed = true;
+      }
     }
 
     let reviewed = true;
@@ -396,7 +471,7 @@ async function buildMarkedIssue(
     // pushed) or any other git or gh failure. Whatever still fails needs a
     // person, so the issue gets git's or gh's error rather than only the run log.
     try {
-      const prUrl = await host.publish(issue, branch, gated, reviewed, false);
+      const prUrl = await host.publish(issue, branch, gated, reviewed, docsFailed);
       return { commits, prUrl, publishFailed: false };
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);

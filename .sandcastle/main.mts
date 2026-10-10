@@ -18,20 +18,25 @@
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
 //                               createSandbox(), and the issue carries
 //                               sandcastle:building until its build ends,
-//                               however it ends. The tester commits failing
-//                               tests, then the backend developer makes them
-//                               pass; if either fails, the issue stops for the
+//                               however it ends. The architect, when the
+//                               planner picked it, writes a design note the
+//                               host posts on the issue. The tester commits
+//                               failing tests, then the backend developer and,
+//                               when picked, the UI developer make them pass;
+//                               if any of these fails, the issue stops for the
 //                               round. If the branch is then ahead of main (this
 //                               run's commits or earlier ones), the host runs
 //                               scripts/gate.sh in the sandbox (checkpoint 1),
+//                               the scribe (when picked) documents the change,
 //                               a reviewer runs, and the gate runs again
 //                               (checkpoint 2). A red gate gets two gate-fixer
 //                               attempts per checkpoint; past that nothing is
-//                               pushed. A red checkpoint or a failed tester or
-//                               backend run is a failed build attempt: the
-//                               first gets a comment, the second hands the
-//                               issue back with sandcastle:needs-human
-//                               (lib/handback.mts).
+//                               pushed. A red checkpoint or a failed architect,
+//                               tester, backend or UI run is a failed build
+//                               attempt: the first gets a comment, the second
+//                               hands the issue back with sandcastle:needs-human
+//                               (lib/handback.mts). A failed scribe or reviewer
+//                               still publishes, with a note in the PR.
 //                               Otherwise the host scans the commits for the
 //                               sandbox's secrets, pushes the commit the gate
 //                               passed on from the main checkout with git hooks
@@ -182,7 +187,8 @@ try {
       `Planning complete. ${work.length} issue(s) to work in parallel:`,
     );
     for (const { issue, branch } of work) {
-      console.log(`  #${issue.number}: ${issue.title} → ${branch}`);
+      const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
+      console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
     }
 
     const settled = await Promise.allSettled(
