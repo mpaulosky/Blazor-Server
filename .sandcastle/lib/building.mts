@@ -83,28 +83,31 @@ export const liveBuildingLabels: BuildingLabels = {
 };
 
 // The issues this process has marked sandcastle:building and not yet
-// unmarked. main.mts releases them from its exit listener, because Ctrl-C,
-// SIGTERM and a crash skip buildIssue's finally.
-export const markedByThisRun = new Set<number>();
+// unmarked, each with when this run claimed it (Date.now()). main.mts
+// releases them at the start of every round, so a removal that failed doesn't
+// hold the issue back for the rest of the run, and from its exit listener,
+// because Ctrl-C, SIGTERM and a crash skip buildIssue's finally.
+export const markedByThisRun = new Map<number, number>();
 
 // Marks the issue sandcastle:building for this run's build, before its
-// sandbox is created. The gate reads
-// labels from the snapshot taken at the start of the round, so a second run
-// that started meanwhile can pick the same issue: the labels are read again
-// here, and an issue that already carries the label (in any case, as GitHub
-// matches it) is left to the run that marked it. Returns whether this run
-// marked it. Two runs reading within the same second can still both add it;
-// this narrows the window from a round's planning to one round trip.
+// sandbox is created. The gate reads labels from the snapshot taken at the
+// start of the round, so a second run that started meanwhile can pick the
+// same issue: the labels are read again here, and an issue that already
+// carries the label (in any case, as GitHub matches it) is left to the run
+// that marked it. Returns whether this run marked it. Two runs reading within
+// the same second can still both add it; this narrows the window from a
+// round's planning to one round trip.
 export function claimBuildingLabel(
   issueNumber: number,
   github: BuildingLabels = liveBuildingLabels,
-  marked: Set<number> = markedByThisRun,
+  marked: Map<number, number> = markedByThisRun,
+  now: number = Date.now(),
 ): boolean {
   if (github.issueLabels(issueNumber).some((label) => label.toLowerCase() === BUILDING_LABEL)) return false;
   // Remembered before the add: an add that times out or gets a proxy's 502
   // may still have applied the label. So a failed add is undone at once, and
-  // if that fails too the issue stays remembered for the exit release.
-  marked.add(issueNumber);
+  // if that fails too the issue stays remembered for a later release.
+  marked.set(issueNumber, now);
   try {
     github.addLabel(issueNumber, BUILDING_LABEL);
   } catch (error) {
@@ -120,33 +123,47 @@ export function claimBuildingLabel(
 
 // Removes sandcastle:building from an issue this run marked. The issue is
 // forgotten only once the label is gone, so a removal that throws is tried
-// again by releaseAllBuildingLabels on exit.
+// again by releaseAllBuildingLabels.
 export function releaseBuildingLabel(
   issueNumber: number,
   github: BuildingLabels = liveBuildingLabels,
-  marked: Set<number> = markedByThisRun,
+  marked: Map<number, number> = markedByThisRun,
 ): void {
   github.removeLabel(issueNumber, BUILDING_LABEL);
   marked.delete(issueNumber);
 }
 
 // Removes sandcastle:building from every issue this run still holds: called
-// from main.mts's exit listener, so a run stopped by Ctrl-C, SIGTERM or a
-// crash doesn't hold its issues back for BUILDING_LABEL_MAX_AGE_MS. Exit
-// listeners can't wait, which suits the synchronous gh calls. A removal that
-// fails is reported and the rest carry on. Returns the issues released.
+// by main.mts at the start of each round, when no build of this run is going,
+// and from its exit listener, so a run stopped by Ctrl-C, SIGTERM or a crash
+// doesn't hold its issues back for BUILDING_LABEL_MAX_AGE_MS. Exit listeners
+// can't wait, which suits the synchronous gh calls. A label this run claimed
+// more than `maxAgeMs` ago is forgotten without being removed: another run's
+// startup may have cleared it as stale and claimed the issue since, so the
+// label there now may be that run's. A removal that fails is reported and the
+// rest carry on. Returns the issues released.
 export function releaseAllBuildingLabels(
   github: BuildingLabels = liveBuildingLabels,
-  marked: Set<number> = markedByThisRun,
+  marked: Map<number, number> = markedByThisRun,
   warn: (message: string) => void = console.error,
+  now: number = Date.now(),
+  maxAgeMs: number = BUILDING_LABEL_MAX_AGE_MS,
 ): number[] {
   const released: number[] = [];
-  for (const issueNumber of [...marked]) {
+  for (const [issueNumber, claimedAt] of [...marked]) {
+    if (now - claimedAt > maxAgeMs) {
+      marked.delete(issueNumber);
+      warn(
+        `  ⚠ #${issueNumber}: left ${BUILDING_LABEL} in place: this run claimed it over ${maxAgeMs / 3_600_000} hours ago, ` +
+          "so another run may have cleared it as stale and claimed the issue since.",
+      );
+      continue;
+    }
     try {
       releaseBuildingLabel(issueNumber, github, marked);
       released.push(issueNumber);
     } catch (error) {
-      warn(`  ⚠ #${issueNumber}: removing ${BUILDING_LABEL} failed, so a later startup clears it once it's stale: ${error}`);
+      warn(`  ⚠ #${issueNumber}: removing ${BUILDING_LABEL} failed, so it's tried again next round or when the run exits: ${error}`);
     }
   }
   return released;

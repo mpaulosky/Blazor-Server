@@ -127,75 +127,80 @@ function labelStub(labels: Record<number, string[]> = {}, failRemove: number[] =
   return { calls, github, labels };
 }
 
+// When this run claimed a label, and the time a test acts at: an hour later.
+const claimedAt = Date.parse("2026-10-10T05:00:00Z");
+const now = claimedAt + 60 * 60 * 1000;
+
 describe("claimBuildingLabel", () => {
   it("adds the label to an issue that doesn't carry it and remembers the issue", () => {
     const { calls, github, labels } = labelStub({ 150: ["Sandcastle"] });
-    const marked = new Set<number>();
+    const marked = new Map<number, number>();
 
-    const claimed = claimBuildingLabel(150, github, marked);
+    const claimed = claimBuildingLabel(150, github, marked, now);
 
     assert.equal(claimed, true);
+    assert.equal(marked.get(150), now);
     assert.deepEqual(calls, ["labels #150", "add #150"]);
     assert.deepEqual(labels[150], ["Sandcastle", BUILDING_LABEL]);
-    assert.deepEqual([...marked], [150]);
+    assert.deepEqual([...marked.keys()], [150]);
   });
 
   // Another run's gate read the labels before this one's add, so both picked
   // the issue: the one that marks it second must leave it alone.
   it("leaves an issue another run already marked, without adding the label or remembering the issue", () => {
     const { calls, github } = labelStub({ 150: ["Sandcastle", "Sandcastle:Building"] });
-    const marked = new Set<number>();
+    const marked = new Map<number, number>();
 
     const claimed = claimBuildingLabel(150, github, marked);
 
     assert.equal(claimed, false);
     assert.deepEqual(calls, ["labels #150"]);
-    assert.deepEqual([...marked], []);
+    assert.deepEqual([...marked.keys()], []);
   });
 });
 
 describe("claimBuildingLabel when adding the label fails", () => {
   it("removes a label the failed add may have applied, forgets the issue and rethrows", () => {
     const { calls, github, labels } = labelStub({ 150: [] }, [], [150]);
-    const marked = new Set<number>();
+    const marked = new Map<number, number>();
 
     assert.throws(() => claimBuildingLabel(150, github, marked), /502/);
 
     assert.deepEqual(calls, ["labels #150", "add #150", "remove #150"]);
     assert.deepEqual(labels[150], []);
-    assert.deepEqual([...marked], []);
+    assert.deepEqual([...marked.keys()], []);
   });
 
   // Still remembered, so releaseAllBuildingLabels tries again on exit.
   it("keeps remembering the issue when the label can't be removed either", () => {
     const { github } = labelStub({ 150: [] }, [150], [150]);
-    const marked = new Set<number>();
+    const marked = new Map<number, number>();
 
     assert.throws(() => claimBuildingLabel(150, github, marked), /502/);
 
-    assert.deepEqual([...marked], [150]);
+    assert.deepEqual([...marked.keys()], [150]);
   });
 });
 
 describe("releaseBuildingLabel", () => {
   it("removes the label and forgets the issue", () => {
     const { github, labels } = labelStub({ 150: [BUILDING_LABEL] });
-    const marked = new Set([150]);
+    const marked = new Map([[150, claimedAt]]);
 
     releaseBuildingLabel(150, github, marked);
 
     assert.deepEqual(labels[150], []);
-    assert.deepEqual([...marked], []);
+    assert.deepEqual([...marked.keys()], []);
   });
 
   // Still remembered, so releaseAllBuildingLabels tries again on exit.
   it("keeps remembering the issue when the label can't be removed", () => {
     const { github } = labelStub({ 150: [BUILDING_LABEL] }, [150]);
-    const marked = new Set([150]);
+    const marked = new Map([[150, claimedAt]]);
 
     assert.throws(() => releaseBuildingLabel(150, github, marked), /502/);
 
-    assert.deepEqual([...marked], [150]);
+    assert.deepEqual([...marked.keys()], [150]);
   });
 });
 
@@ -204,20 +209,57 @@ describe("releaseAllBuildingLabels", () => {
   // this from the process's exit listener instead.
   it("removes the label from every issue this run still holds and returns them", () => {
     const { github, labels } = labelStub({ 71: [BUILDING_LABEL], 150: [BUILDING_LABEL] });
-    const marked = new Set([71, 150]);
+    const marked = new Map([[71, claimedAt], [150, claimedAt]]);
 
-    const released = releaseAllBuildingLabels(github, marked, () => {});
+    const released = releaseAllBuildingLabels(github, marked, () => {}, now);
 
     assert.deepEqual(released, [71, 150]);
     assert.deepEqual(labels, { 71: [], 150: [] });
-    assert.deepEqual([...marked], []);
+    assert.deepEqual([...marked.keys()], []);
+  });
+
+  // Past the max age, another run's startup may have cleared the label as
+  // stale and claimed the issue: the label on it now may be that run's.
+  it("forgets, without removing, a label this run claimed more than the max age ago, and reports it", () => {
+    const { calls, github } = labelStub({ 150: [BUILDING_LABEL] });
+    const marked = new Map([[150, now - BUILDING_LABEL_MAX_AGE_MS - 1]]);
+    const warnings: string[] = [];
+
+    const released = releaseAllBuildingLabels(github, marked, (message) => warnings.push(message), now);
+
+    assert.deepEqual(released, []);
+    assert.deepEqual(calls, []);
+    assert.deepEqual([...marked.keys()], []);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /#150/);
+  });
+
+  // main.mts calls it at the start of every round too, so a removal that
+  // failed doesn't hold the issue back for the rest of the run.
+  it("removes a label on a later call after a removal that failed", () => {
+    const failRemove = [150];
+    const { github, labels } = labelStub({ 150: [BUILDING_LABEL] }, failRemove);
+    const marked = new Map([[150, claimedAt]]);
+
+    const first = releaseAllBuildingLabels(github, marked, () => {}, now);
+    failRemove.length = 0;
+    const second = releaseAllBuildingLabels(github, marked, () => {}, now);
+
+    assert.deepEqual(first, []);
+    assert.deepEqual(second, [150]);
+    assert.deepEqual(labels[150], []);
   });
 
   it("carries on past an issue whose label can't be removed, and reports it", () => {
     const { github, labels } = labelStub({ 71: [BUILDING_LABEL], 150: [BUILDING_LABEL] }, [71]);
     const warnings: string[] = [];
 
-    const released = releaseAllBuildingLabels(github, new Set([71, 150]), (message) => warnings.push(message));
+    const released = releaseAllBuildingLabels(
+      github,
+      new Map([[71, claimedAt], [150, claimedAt]]),
+      (message) => warnings.push(message),
+      now,
+    );
 
     assert.deepEqual(released, [150]);
     assert.deepEqual(labels[150], []);

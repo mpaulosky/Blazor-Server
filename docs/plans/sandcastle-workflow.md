@@ -41,7 +41,9 @@ The host creates any missing `sandcastle:*` label at startup. The wayfinder map 
 `buildIssue` adds it before creating the issue's sandbox and removes it after the sandbox closes, in a `finally`, so a pass, a failure or a thrown error all clear it.
 Two runs can both pass the gate before either adds the label, so `buildIssue` reads the issue's labels again just before adding it, and leaves an issue that already carries it to the
 run that marked it, without creating a sandbox or counting an attempt. Only the run that added the label removes it, and an add that fails is undone at once.
+A removal that fails is tried again at the start of the run's next round, so it doesn't hold the issue back for the rest of the run.
 A run stopped with Ctrl-C or SIGTERM, or one that crashes, removes the labels it still holds as the process exits.
+A run never removes a label it claimed more than 6 hours ago: by then another run may have cleared it as stale and claimed the issue.
 Only a killed process (SIGKILL) leaves one behind, so at startup the host removes the label from any issue whose most recent `labeled` event for it is more than 6 hours old
 (`BUILDING_LABEL_MAX_AGE_MS`), longer than any build runs. A newer label belongs to a run that's still going, and stays. To free an issue sooner, remove the label by hand.
 

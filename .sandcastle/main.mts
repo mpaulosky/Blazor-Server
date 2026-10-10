@@ -119,6 +119,13 @@ try {
     // -----------------------------------------------------------------------
     // Phase 0: Gate
     // -----------------------------------------------------------------------
+    // No build of this run is going between rounds, so any label it still
+    // holds is one whose removal failed: try again before the gate, which
+    // would otherwise hold the issue back for the rest of the run.
+    for (const issueNumber of releaseAllBuildingLabels()) {
+      console.log(`  🧹 #${issueNumber}: removed ${BUILDING_LABEL}, which an earlier round couldn't.`);
+    }
+
     const { ready, blocked } = gateIssues();
 
     for (const { issue, reasons } of blocked) {
