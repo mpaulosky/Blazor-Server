@@ -17,6 +17,7 @@ import {
   type FollowUpGitHub,
   type SweepPullRequest,
 } from "./follow-up.mts";
+import { OutcomeReport, WaitingPrReport } from "./report.mts";
 
 const HOST = "sandcastle-bot";
 const BRANCH = "feature/42-add-search";
@@ -324,7 +325,7 @@ describe("decide", () => {
     const result = decide(
       pr({
         reviews: [{ author: COPILOT_REVIEWER, commitOid: "0".repeat(40) }],
-        threads: [{ resolved: false, byBot: true }],
+        threads: [{ resolved: false, byBot: true, author: null }],
         checks: [{ name: "build", completed: true, green: true, completedAt }],
         copilotRequestedAt: [requestedAt],
       }),
@@ -369,13 +370,31 @@ describe("decide", () => {
   });
 
   it("flags a settled PR with an unresolved bot thread as needing a follow-up pass, counting it", () => {
-    const result = decide(pr({ threads: [{ resolved: false, byBot: true }] }), NOW);
+    const result = decide(pr({ threads: [{ resolved: false, byBot: true, author: null }] }), NOW);
 
     assert.deepEqual(result, { action: "needs-pass", reasons: ["1 unresolved bot thread(s)"] });
   });
 
+  // threadsForRole answers a thread the repository owner opened, so `decide`
+  // must flag it too: otherwise the PR never gets a pass to answer it (#81).
+  it("flags a settled PR with an unresolved owner thread as needing a follow-up pass, counting it", () => {
+    const result = decide(pr({ threads: [{ resolved: false, byBot: false, author: "owner" }] }), NOW, (login) => login === "owner");
+
+    assert.deepEqual(result, { action: "needs-pass", reasons: ["1 unresolved owner thread(s)"] });
+  });
+
+  // Whether the thread's author is confirmed, not just non-bot, decides this:
+  // an unresolved thread `isOwner` can't confirm is left alone here (it still
+  // counts toward the sweep's waiting-on-a-person list, which errs the other
+  // way on the same uncertainty).
+  it("leaves a settled PR with an unresolved thread of unconfirmed ownership alone", () => {
+    const result = decide(pr({ threads: [{ resolved: false, byBot: false, author: "maybe-owner" }] }), NOW, () => undefined);
+
+    assert.equal(result.action, "leave");
+  });
+
   it("leaves a settled, clean PR with every thread resolved alone", () => {
-    const result = decide(pr({ threads: [{ resolved: true, byBot: true }] }), NOW);
+    const result = decide(pr({ threads: [{ resolved: true, byBot: true, author: null }] }), NOW);
 
     assert.equal(result.action, "leave");
   });
@@ -383,7 +402,7 @@ describe("decide", () => {
   // Open human threads mean a human has joined the review; only they resolve
   // their own threads, so these never count toward a follow-up pass here.
   it("leaves a settled PR with only a human thread open alone, not needing a pass", () => {
-    const result = decide(pr({ threads: [{ resolved: false, byBot: false }] }), NOW);
+    const result = decide(pr({ threads: [{ resolved: false, byBot: false, author: null }] }), NOW);
 
     assert.equal(result.action, "leave");
   });
@@ -568,7 +587,7 @@ describe("sweepPullRequests", () => {
 
   it("doesn't update a PR with an unresolved bot thread", () => {
     const { updatedBranches, github } = stubGithub({
-      prs: [pr({ mergeStateStatus: "BEHIND", threads: [{ resolved: false, byBot: true }] })],
+      prs: [pr({ mergeStateStatus: "BEHIND", threads: [{ resolved: false, byBot: true, author: null }] })],
     });
 
     sweepPullRequests(github, () => {}, NOW);
@@ -652,7 +671,7 @@ describe("sweepPullRequests", () => {
   });
 
   it("leaves a settled, clean PR with every thread resolved alone", () => {
-    const { updatedBranches, requestedReviews, github } = stubGithub({ prs: [pr({ threads: [{ resolved: true, byBot: true }] })] });
+    const { updatedBranches, requestedReviews, github } = stubGithub({ prs: [pr({ threads: [{ resolved: true, byBot: true, author: null }] })] });
 
     sweepPullRequests(github, () => {}, NOW);
 
@@ -661,11 +680,32 @@ describe("sweepPullRequests", () => {
   });
 
   it("leaves a settled PR with only a human thread open alone", () => {
-    const { updatedBranches, github } = stubGithub({ prs: [pr({ threads: [{ resolved: false, byBot: false }] })] });
+    const { updatedBranches, github } = stubGithub({
+      prs: [pr({ threads: [{ resolved: false, byBot: false, author: null }] })],
+      isOwner: () => false,
+    });
 
     sweepPullRequests(github, () => {}, NOW);
 
     assert.deepEqual(updatedBranches, []);
+  });
+
+  // #81's follow-up review: a settled PR whose only open thread is the
+  // repository owner's must still get a follow-up pass, since that's the
+  // only thing that ever answers an owner thread (threadsForRole). Before
+  // this, `decide` classified threads by byBot alone and never saw the
+  // owner, so the PR sat with the thread unanswered forever.
+  it("flags a settled PR with only an unresolved owner thread as needing a follow-up pass", () => {
+    const { github } = stubGithub({
+      prs: [pr({ threads: [{ resolved: false, byBot: false, author: "owner" }] })],
+      isOwner: (login) => login === "owner",
+    });
+
+    const { needsPass, passes } = sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(needsPass, [101]);
+    assert.equal(passes.length, 1);
+    assert.equal(passes[0]?.number, 101);
   });
 
   it("still updates the next PR when one PR's update fails", () => {
@@ -833,6 +873,96 @@ describe("sweepPullRequests", () => {
     assert.deepEqual(addedPrLabels, []);
     assert.deepEqual(updatedBranches, []);
     assert.ok(lines.some((line) => line.includes("#101") && line.includes("couldn't check")), lines.join("\n"));
+  });
+
+  // AC: an updated PR reaches the run report (lib/report.mts) as "updated".
+  it("records 'updated' for a settled PR that's only behind main, once updateBranch has returned", () => {
+    const { github } = stubGithub({ prs: [pr({ mergeStateStatus: "BEHIND" })] });
+    const outcomes = new OutcomeReport();
+
+    sweepPullRequests(github, () => {}, NOW, outcomes);
+
+    assert.deepEqual(outcomes.items(), [{ kind: "pr", number: 101, outcome: "updated", detail: "was only behind main" }]);
+  });
+
+  it("doesn't record anything when updateBranch fails", () => {
+    const failing: FollowUpGitHub = {
+      hostLogin: () => HOST,
+      openPullRequests: () => [pr({ mergeStateStatus: "BEHIND" })],
+      closedPullRequests: () => [],
+      inScopeIssues: () => [{ number: 42, labels: [] }],
+      labelTimeline: () => [],
+      requestCopilotReview: () => {},
+      updateBranch: () => {
+        throw new Error("gh api failed: HTTP 422");
+      },
+      handBack: () => {},
+      isOwner: () => true,
+      pullRequestEvents: () => [],
+      addPullRequestLabel: () => {},
+    };
+    const outcomes = new OutcomeReport();
+
+    sweepPullRequests(failing, () => {}, NOW, outcomes);
+
+    assert.deepEqual(outcomes.items(), []);
+  });
+
+  // AC: "open Sandcastle PRs left waiting on unresolved human review threads,
+  // with links" — the waiting list the run report renders (lib/report.mts).
+  it("adds a PR to the waiting list, counting only its unresolved, non-bot threads", () => {
+    const { github } = stubGithub({
+      prs: [
+        pr({
+          threads: [
+            { resolved: false, byBot: false, author: "stranger" },
+            { resolved: true, byBot: false, author: "stranger" },
+            { resolved: false, byBot: true, author: null },
+          ],
+        }),
+      ],
+      isOwner: () => false,
+    });
+    const waiting = new WaitingPrReport();
+
+    sweepPullRequests(github, () => {}, NOW, undefined, waiting);
+
+    assert.deepEqual(waiting.items(), [{ pr: 101, threads: 1 }]);
+  });
+
+  // The waiting count must match lib/follow-up-pass.mts#threadsForRole's
+  // classification: an owner-opened thread is the follow-up role's to
+  // answer, never a person Sandcastle is waiting on.
+  it("doesn't count an unresolved thread the repository owner opened", () => {
+    const { github } = stubGithub({
+      prs: [pr({ threads: [{ resolved: false, byBot: false, author: "owner" }] })],
+      isOwner: (login) => login === "owner",
+    });
+    const waiting = new WaitingPrReport();
+
+    sweepPullRequests(github, () => {}, NOW, undefined, waiting);
+
+    assert.deepEqual(waiting.items(), []);
+  });
+
+  it("excludes a skipped PR from the waiting list", () => {
+    const { github } = stubGithub({ prs: [pr({ isDraft: true, threads: [{ resolved: false, byBot: false, author: null }] })] });
+    const waiting = new WaitingPrReport();
+
+    sweepPullRequests(github, () => {}, NOW, undefined, waiting);
+
+    assert.deepEqual(waiting.items(), []);
+  });
+
+  it("replaces the waiting list each sweep, rather than accumulating across sweeps", () => {
+    const waiting = new WaitingPrReport();
+    const { github: first } = stubGithub({ prs: [pr({ threads: [{ resolved: false, byBot: false, author: null }] })] });
+    const { github: second } = stubGithub({ prs: [pr({ threads: [] })] });
+
+    sweepPullRequests(first, () => {}, NOW, undefined, waiting);
+    sweepPullRequests(second, () => {}, NOW, undefined, waiting);
+
+    assert.deepEqual(waiting.items(), []);
   });
 });
 

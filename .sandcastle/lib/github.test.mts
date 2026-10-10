@@ -16,9 +16,11 @@ import {
   type ContentEdit,
   createIssue,
   ensureLabels,
+  failedCheckLogs,
   type GhIssue,
   handBack,
   hasLabel,
+  headChecksOf,
   hostLogin,
   issueEvents,
   issueLabels,
@@ -36,6 +38,7 @@ import {
   removeIssueLabel,
   replyToReviewThread,
   requestCopilotReview,
+  rerunFailedChecksOnce,
   resolveReviewThread,
   reviewThreadsOf,
   sameRepoBlockers,
@@ -46,7 +49,7 @@ import {
   type TimestampedComment,
   updatePullRequestBranch,
 } from "./github.mts";
-import { HandBackReport } from "./report.mts";
+import { HandBackReport, targetUrl } from "./report.mts";
 
 describe("ownerApproved", () => {
   // An issue carrying `comments`, each an [author, body] pair.
@@ -840,7 +843,9 @@ describe("handBack", () => {
     assert.deepEqual(calls[0]!.args, ["issue", "comment", "69", "--repo", "o/r", "--body-file", "-"]);
     assert.equal(calls[0]!.input, "Giving up.");
     assert.deepEqual(calls[1]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-human", "--remove-label", "sandcastle:ready"]);
-    assert.deepEqual(report.items(), [{ target: "issue #69", label: "sandcastle:needs-human", reason: "two failed build attempts" }]);
+    assert.deepEqual(report.items(), [
+      { kind: "issue", number: 69, label: "sandcastle:needs-human", reason: "two failed build attempts", url: targetUrl("o/r", { kind: "issue", number: 69 }) },
+    ]);
   });
 
   // The comment explains the hand-back, so it goes first: if GitHub rejects
@@ -878,7 +883,9 @@ describe("handBack", () => {
     assert.deepEqual(calls[0]!.args, ["pr", "comment", "17", "--repo", "o/r", "--body-file", "-"]);
     assert.deepEqual(calls[1]!.args, ["pr", "edit", "17", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
     assert.equal(calls[0]!.input, "Giving up on this PR.");
-    assert.deepEqual(report.items(), [{ target: "pr #17", label: "sandcastle:needs-human", reason: "follow-up gave up" }]);
+    assert.deepEqual(report.items(), [
+      { kind: "pr", number: 17, label: "sandcastle:needs-human", reason: "follow-up gave up", url: targetUrl("o/r", { kind: "pr", number: 17 }) },
+    ]);
   });
 });
 
@@ -1044,8 +1051,8 @@ describe("openPullRequestsForSweep", () => {
     assert.deepEqual(pr!.reviewRequests, [COPILOT_REVIEWER]);
     assert.deepEqual(pr!.reviews, [{ author: COPILOT_REVIEWER, commitOid: "a".repeat(40) }]);
     assert.deepEqual(pr!.threads, [
-      { resolved: false, byBot: true },
-      { resolved: false, byBot: false },
+      { resolved: false, byBot: true, author: "github-advanced-security[bot]" },
+      { resolved: false, byBot: false, author: "reviewer" },
     ]);
     assert.deepEqual(pr!.checks, [{ name: "build", completed: true, green: true, completedAt: "2026-10-01T00:00:00Z" }]);
     assert.equal(pr!.truncated, false);
@@ -1165,6 +1172,207 @@ describe("reviewThreadsOf", () => {
     const run = (() => JSON.stringify({ data: { repository: { pullRequest: null } } })) as unknown as typeof execFileSync;
 
     assert.throws(() => reviewThreadsOf(42, run, "o/r"), /no such pull request|pull request 42/i);
+  });
+});
+
+// #79: a follow-up pass reads a PR's head checks with the GitHub Actions run
+// behind each, so it can re-run a flaky one or read a failed one's log.
+describe("head checks and their runs", () => {
+  const HEAD_OID = "a".repeat(40);
+  type Context = Record<string, unknown>;
+  const checkRun = (name: string, conclusion: string, runId: number | null): Context => ({
+    __typename: "CheckRun",
+    name,
+    status: "COMPLETED",
+    conclusion,
+    completedAt: "2026-10-10T09:00:00Z",
+    checkSuite: { workflowRun: runId === null ? null : { databaseId: runId } },
+  });
+  const page = (contexts: Context[], options: { oid?: string; hasNextPage?: boolean } = {}) =>
+    JSON.stringify({
+      data: {
+        repository: {
+          pullRequest: {
+            headRefOid: HEAD_OID,
+            commits: {
+              nodes: [
+                {
+                  commit: {
+                    oid: options.oid ?? HEAD_OID,
+                    statusCheckRollup: { contexts: { pageInfo: { hasNextPage: options.hasNextPage ?? false }, nodes: contexts } },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+  // A gh stub answering the checks query with `contexts`, each run's attempt
+  // from `attempts`, and each run's failed-job log from `logs`; it records
+  // every call.
+  const gh = (contexts: Context[], attempts: Record<number, number> = {}, logs: Record<number, string> = {}) => {
+    const calls: string[][] = [];
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push([...args]);
+      if (args[0] === "api" && args[1] === "graphql") return page(contexts);
+      const attempt = /^repos\/o\/r\/actions\/runs\/(\d+)$/.exec(args[1] ?? "");
+      if (args[0] === "api" && attempt !== null) return `${attempts[Number(attempt[1])] ?? 1}\n`;
+      if (args[0] === "run" && args[1] === "rerun") return "";
+      if (args[0] === "run" && args[1] === "view") return logs[Number(args[2])] ?? "";
+      throw new Error(`unexpected gh call: ${args.join(" ")}`);
+    }) as unknown as typeof execFileSync;
+    return { calls, run };
+  };
+
+  describe("headChecksOf", () => {
+    it("normalises each check on the PR's head with the Actions run behind it, and a status with none", () => {
+      const { run } = gh([
+        checkRun("Build Solution", "FAILURE", 11),
+        { __typename: "StatusContext", context: "ci/legacy", state: "SUCCESS", createdAt: "2026-10-10T09:00:00Z" },
+      ]);
+
+      const { headRefOid, checks } = headChecksOf(7, run, "o/r");
+
+      assert.equal(headRefOid, HEAD_OID);
+      assert.deepEqual(checks, [
+        { name: "Build Solution", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z", runId: 11 },
+        { name: "ci/legacy", completed: true, green: true, completedAt: "2026-10-10T09:00:00Z", runId: undefined },
+      ]);
+    });
+
+    it("throws when the checks are truncated, rather than deciding from part of them", () => {
+      const run = (() => page([], { hasNextPage: true })) as unknown as typeof execFileSync;
+
+      assert.throws(() => headChecksOf(7, run, "o/r"), /truncated/i);
+    });
+
+    it("throws when the checks read are on a commit other than the PR's head", () => {
+      const run = (() => page([], { oid: "b".repeat(40) })) as unknown as typeof execFileSync;
+
+      assert.throws(() => headChecksOf(7, run, "o/r"), /head/i);
+    });
+  });
+
+  describe("rerunFailedChecksOnce", () => {
+    it("re-runs the failed jobs of a run not re-run before, once per run, and reports its checks as running", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21), checkRun("Tests: B", "FAILURE", 21)]);
+
+      const states = rerunFailedChecksOnce(7, ["Tests: A", "Tests: B"], HEAD_OID, run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "rerun", "21", "--failed", "--repo", "o/r"]],
+      );
+      assert.deepEqual(
+        states.map((state) => [state.name, state.completed]),
+        [
+          ["Tests: A", false],
+          ["Tests: B", false],
+        ],
+      );
+    });
+
+    it("doesn't re-run a run already on a later attempt: its checks are reported as they stand", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21)], { 21: 2 });
+
+      const states = rerunFailedChecksOnce(7, ["Tests: A"], HEAD_OID, run, "o/r");
+
+      assert.ok(!calls.some((args) => args[0] === "run" && args[1] === "rerun"), "nothing was re-run");
+      assert.deepEqual(states, [{ name: "Tests: A", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z" }]);
+    });
+
+    it("throws for a check with no Actions run to re-run", () => {
+      const { run } = gh([checkRun("Tests: A", "FAILURE", null)]);
+
+      assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], HEAD_OID, run, "o/r"), /Tests: A/);
+    });
+
+    // #79: a pass must never re-run jobs it read for a commit other than the
+    // one it gated, since a push between the read and the re-run would re-run
+    // the wrong commit's failures.
+    it("throws, without re-running anything, when the head has moved past the gated commit", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21)]);
+
+      assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], "b".repeat(40), run, "o/r"), /head moved/);
+      assert.ok(!calls.some((args) => args[0] === "run"), "nothing was re-run");
+    });
+
+    // #259: a name in `names` can carry a green run from one workflow
+    // trigger and a red one from another (`push` and `pull_request`, say).
+    // Only the red run should be re-run; re-running the green one too would
+    // ask `gh` to re-run a run with no failed jobs.
+    it("skips a green run behind a check name that also has a failed run", () => {
+      const { calls, run } = gh([checkRun("Tests: A", "SUCCESS", 20), checkRun("Tests: A", "FAILURE", 21)]);
+
+      const states = rerunFailedChecksOnce(7, ["Tests: A"], HEAD_OID, run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "rerun", "21", "--failed", "--repo", "o/r"]],
+      );
+      assert.deepEqual(states, [{ name: "Tests: A", completed: false, green: false, completedAt: null }]);
+    });
+  });
+
+  describe("failedCheckLogs", () => {
+    it("reads each run's failed-job log once, under a header naming its checks", () => {
+      const { calls, run } = gh(
+        [checkRun("Analyze (csharp)", "FAILURE", 31), checkRun("Analyze (actions)", "FAILURE", 31)],
+        {},
+        { 31: "##[error] CS8600" },
+      );
+
+      const log = failedCheckLogs(7, ["Analyze (csharp)", "Analyze (actions)"], HEAD_OID, run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "view", "31", "--log-failed", "--repo", "o/r"]],
+      );
+      assert.match(log, /Analyze \(csharp\), Analyze \(actions\)/);
+      assert.match(log, /##\[error\] CS8600/);
+    });
+
+    it("says a check has no Actions log rather than failing the pass", () => {
+      const { run } = gh([checkRun("CodeQL", "FAILURE", null)]);
+
+      assert.match(failedCheckLogs(7, ["CodeQL"], HEAD_OID, run, "o/r"), /CodeQL[\s\S]*no GitHub Actions/);
+    });
+
+    it("throws rather than quote a log read for a commit other than the one gated", () => {
+      const { run } = gh([checkRun("Analyze (csharp)", "FAILURE", 31)]);
+
+      assert.throws(() => failedCheckLogs(7, ["Analyze (csharp)"], "b".repeat(40), run, "o/r"), /head moved/);
+    });
+
+    // #79's follow-up review: a limit applied once to the whole joined text
+    // lets a later, longer run's log crowd an earlier run's out of it
+    // entirely. Each run gets an even share instead.
+    it("gives each run's log its own share of a limit, rather than letting a later run's log crowd an earlier one's out", () => {
+      const { run } = gh(
+        [checkRun("Analyze (csharp)", "FAILURE", 31), checkRun("Python tests", "FAILURE", 42)],
+        {},
+        { 31: "##[error] ALPHA_MARK", 42: `${"y".repeat(500)}\n##[error] BETA_MARK` },
+      );
+
+      const log = failedCheckLogs(7, ["Analyze (csharp)", "Python tests"], HEAD_OID, run, "o/r", 100);
+
+      assert.match(log, /ALPHA_MARK/);
+      assert.match(log, /BETA_MARK/);
+    });
+
+    it("reads the whole log of every run when no limit is given", () => {
+      const { run } = gh(
+        [checkRun("Analyze (csharp)", "FAILURE", 31), checkRun("Python tests", "FAILURE", 42)],
+        {},
+        { 31: "##[error] ALPHA_MARK", 42: `${"y".repeat(500)}\n##[error] BETA_MARK` },
+      );
+
+      const log = failedCheckLogs(7, ["Analyze (csharp)", "Python tests"], HEAD_OID, run, "o/r");
+
+      assert.match(log, /ALPHA_MARK/);
+      assert.match(log, new RegExp(`y{500}\\n##\\[error\\] BETA_MARK$`));
+    });
   });
 });
 

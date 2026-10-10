@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { UncountedStopError } from "./errors.mts";
-import { roundSummary } from "./round.mts";
+import { roundOutcomes, roundSummary } from "./round.mts";
 
 const work = [
   { issue: { number: 71 }, branch: "feature/71-a" },
@@ -68,5 +68,40 @@ describe("roundSummary", () => {
 
     assert.equal(summary.stop, "No pull requests opened this round. Stopping.");
     assert.ok(!summary.lines.some((line) => line.includes("⏹")));
+  });
+});
+
+// AC: "every touched issue and PR" reaches the run report with its outcome.
+describe("roundOutcomes", () => {
+  it("takes a fulfilled build's own outcome and detail", () => {
+    const outcomes = roundOutcomes(work, [
+      { status: "fulfilled", value: { prUrl: "https://github.com/o/r/pull/1", publishFailed: false, outcome: "published", detail: "https://github.com/o/r/pull/1" } },
+      { status: "fulfilled", value: { prUrl: undefined, publishFailed: false, outcome: "deferred", detail: "behind #65" } },
+    ]);
+
+    assert.deepEqual(outcomes, [
+      { kind: "issue", number: 71, outcome: "published", detail: "https://github.com/o/r/pull/1" },
+      { kind: "issue", number: 72, outcome: "deferred", detail: "behind #65" },
+    ]);
+  });
+
+  it("marks a build that rejected with UncountedStopError as stopped, with its message", () => {
+    const stop = new UncountedStopError("Claude's usage limit was hit during the backend run");
+
+    const outcomes = roundOutcomes(work, [
+      { status: "fulfilled", value: { prUrl: "https://github.com/o/r/pull/1", publishFailed: false, outcome: "published", detail: "https://github.com/o/r/pull/1" } },
+      { status: "rejected", reason: stop },
+    ]);
+
+    assert.deepEqual(outcomes[1], { kind: "issue", number: 72, outcome: "stopped", detail: stop.message });
+  });
+
+  it("marks any other rejection as not published, since the build threw rather than return a result", () => {
+    const outcomes = roundOutcomes(work, [
+      { status: "rejected", reason: new Error("sandbox crashed") },
+      { status: "fulfilled", value: { prUrl: undefined, publishFailed: false, outcome: "role failed", detail: "the tester failed" } },
+    ]);
+
+    assert.deepEqual(outcomes[0], { kind: "issue", number: 71, outcome: "not published", detail: "the build stopped on an error; see the run log" });
   });
 });

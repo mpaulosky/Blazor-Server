@@ -4,6 +4,8 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [feat(sandcastle): Write a run report with outcomes, hand-backs and token usage](2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) | release,automation |
+| 2026-10-10 | [feat(sandcastle): Follow-up passes fix red CI on Sandcastle PRs](2026-10-10-pr-259-feat-sandcastle-follow-up-passes-fix-red-ci-on-sandcastle-prs.md) | release,automation |
 | 2026-10-10 | [chore: Re-apply the repo-ci-baseline Template](2026-10-10-pr-257-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-10 | [chore: Re-apply the repo-ci-baseline Template](2026-10-10-pr-255-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-10 | [chore: Re-apply the repo-ci-baseline Template](2026-10-10-pr-253-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |

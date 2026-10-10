@@ -5,6 +5,7 @@ import type { SandcastleIssue } from "./github.mts";
 import { applyVerdicts, critiqueRound, type CritiqueGitHub, type CritiqueVerdict } from "./critique.mts";
 import { UncountedStopError } from "./errors.mts";
 import type { CritiquePromptArgs } from "./prompts.mts";
+import { OutcomeReport } from "./report.mts";
 
 const issue = (number: number): SandcastleIssue => ({
   number,
@@ -71,6 +72,38 @@ describe("applyVerdicts", () => {
     assert.deepEqual(gh.links, []);
     assert.deepEqual(gh.comments, []);
     assert.ok(lines.some((line) => line.includes("#1") && line.includes("touches only docs")));
+  });
+
+  // AC: a deferred issue reaches the run report (lib/report.mts), so the
+  // summary lists it as "deferred" rather than silently dropping it.
+  it("records a linked defer as deferred, naming its blocker", () => {
+    const gh = github();
+    const { log } = capture();
+    const report = new OutcomeReport();
+
+    applyVerdicts([issue(1), issue(2)], [defer(1, 2, "both edit lib/plan.mts")], gh.stub, log, report);
+
+    assert.deepEqual(report.items(), [{ kind: "issue", number: 1, outcome: "deferred", detail: "behind #2" }]);
+  });
+
+  it("records nothing for a keep verdict", () => {
+    const gh = github();
+    const { log } = capture();
+    const report = new OutcomeReport();
+
+    applyVerdicts([issue(1), issue(2)], [{ id: "1", verdict: "keep", reason: "touches only docs" }], gh.stub, log, report);
+
+    assert.deepEqual(report.items(), []);
+  });
+
+  it("records nothing for an ignored defer, since it wasn't applied", () => {
+    const gh = github();
+    const { log } = capture();
+    const report = new OutcomeReport();
+
+    applyVerdicts([issue(1), issue(2)], [defer(1, undefined)], gh.stub, log, report);
+
+    assert.deepEqual(report.items(), []);
   });
 
   it("ignores and logs a verdict for an issue that wasn't picked", () => {

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import type { execFileSync } from "node:child_process";
 import { BUILD_FAILED_MARKER, BUILD_FAILURE_CAP } from "./config.mts";
 import { buildFailedComment, handBackWorkflowChange, needsHumanComment, recordFailedAttempt, workflowHandBackComment } from "./handback.mts";
-import { HandBackReport } from "./report.mts";
+import { HandBackReport, targetUrl } from "./report.mts";
 
 // A gh stub recording every call's args and stdin input.
 function recordingGh() {
@@ -131,9 +131,11 @@ describe("recordFailedAttempt", () => {
     assert.match(lastAttempt, /Failed build attempt 2 of 2/);
     assert.doesNotMatch(lastAttempt, /stays in the queue/);
     assert.equal(report.items().length, 1);
-    assert.equal(report.items()[0]!.target, "issue #69");
+    assert.equal(report.items()[0]!.kind, "issue");
+    assert.equal(report.items()[0]!.number, 69);
     assert.equal(report.items()[0]!.label, "sandcastle:needs-human");
     assert.match(report.items()[0]!.reason, /feature\/69-run-the-gate/);
+    assert.equal(report.items()[0]!.url, targetUrl("o/r", { kind: "issue", number: 69 }));
   });
 });
 
@@ -221,8 +223,10 @@ describe("handBackWorkflowChange", () => {
       "issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-human", "--remove-label", "sandcastle:ready",
     ]);
     assert.equal(report.items().length, 1);
-    assert.equal(report.items()[0]!.target, "issue #69");
+    assert.equal(report.items()[0]!.kind, "issue");
+    assert.equal(report.items()[0]!.number, 69);
     assert.equal(report.items()[0]!.label, "sandcastle:needs-human");
     assert.match(report.items()[0]!.reason, /\.github\/workflows/);
+    assert.equal(report.items()[0]!.url, targetUrl("o/r", { kind: "issue", number: 69 }));
   });
 });

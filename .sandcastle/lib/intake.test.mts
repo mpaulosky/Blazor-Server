@@ -203,7 +203,8 @@ describe("applyVerdicts", () => {
     assert.match(body, /1\.\s*What should happen when the input is empty\?/);
     assert.match(body, /2\.\s*Which page shows this\?/);
     assert.equal(report.items().length, 1);
-    assert.equal(report.items()[0]!.target, "issue #7");
+    assert.equal(report.items()[0]!.kind, "issue");
+    assert.equal(report.items()[0]!.number, 7);
     assert.equal(report.items()[0]!.label, "sandcastle:needs-info");
   });
 
@@ -336,7 +337,8 @@ describe("applyVerdicts for a malformed split verdict", () => {
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.input as string, /split/i);
     assert.equal(report.items().length, 1);
-    assert.equal(report.items()[0]!.target, "issue #11");
+    assert.equal(report.items()[0]!.kind, "issue");
+    assert.equal(report.items()[0]!.number, 11);
   });
 
   it("hands the issue back with sandcastle:needs-info, when a drafted child has no acceptance criteria", () => {

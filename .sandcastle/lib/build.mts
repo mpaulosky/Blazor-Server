@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
-import { runRoleInSandbox } from "./agents.mts";
+import { isRoleTimeout, runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
 import {
@@ -28,6 +28,7 @@ import { handBackWorkflowChange, recordFailedAttempt, type WorkflowChange } from
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { runLimits, type RunLimits } from "./limits.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
+import type { Outcome } from "./report.mts";
 import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
@@ -382,7 +383,7 @@ export async function buildIssue(
   // skips this issue for the round without counting an attempt.
   if (!host.markBuilding(issue.number)) {
     console.error(`  ⏸ #${issue.number}: another run marked it ${BUILDING_LABEL} after this round's gate, so this run leaves it alone.`);
-    return { commits: [], prUrl: undefined, publishFailed: false };
+    return { commits: [], prUrl: undefined, publishFailed: false, outcome: "not published", detail: "another run is building it" };
   }
   try {
     return await buildMarkedIssue(issue, branch, base, host);
@@ -401,7 +402,22 @@ export async function buildIssue(
   }
 }
 
-type BuildResult = { commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean };
+// What became of a build, for the run report (lib/report.mts, #81).
+export type BuildOutcome = Extract<Outcome, "published" | "role failed" | "timed out" | "gate failed" | "not published">;
+
+// The detail of a build that ended because the branch holds no work to
+// publish.
+const NOTHING_AHEAD = "the branch holds nothing main doesn't";
+
+// `detail` is host-written text only, never a role's or gh's error output: the
+// run report is public on a public repository.
+type BuildResult = {
+  commits: { sha: string }[];
+  prUrl: string | undefined;
+  publishFailed: boolean;
+  outcome: BuildOutcome;
+  detail: string;
+};
 
 // buildIssue's work once the issue is marked: everything from creating the
 // sandbox to closing it.
@@ -424,7 +440,8 @@ async function buildMarkedIssue(
 
   const promptArgs = issuePromptArgs(issue, branch);
   const commits: { sha: string }[] = [];
-  const notPublished = { commits, prUrl: undefined, publishFailed: false };
+  const unpublished = (outcome: BuildOutcome, detail: string): BuildResult =>
+    ({ commits, prUrl: undefined, publishFailed: false, outcome, detail });
   const log = (line: string) => host.log(`  #${issue.number} ${line}`);
   const designNotePath = `.sandcastle/work/${issue.number}/design.md`;
 
@@ -440,17 +457,19 @@ async function buildMarkedIssue(
   }
 
   // Run the architect, the tester, the backend developer or the UI developer.
-  // Returns false when the run threw, timed out or used up its iterations
-  // without signalling completion: the design, the tests or the code aren't
-  // done, so the issue stops for this round. Whatever the run committed stays
-  // on the branch for the next round, and the failure counts as one of the
-  // issue's build attempts, as a checkpoint that stays red does. An
-  // UncountedStopError is rethrown instead.
-  async function developerFinishes(role: DeveloperRole): Promise<boolean> {
+  // Returns undefined when the run finished. When it threw, timed out or used
+  // up its iterations without signalling completion, the design, the tests or
+  // the code aren't done, so it returns the build's result and the issue stops
+  // for this round. Whatever the run committed stays on the branch for the
+  // next round, and the failure counts as one of the issue's build attempts,
+  // as a checkpoint that stays red does. An UncountedStopError is rethrown
+  // instead.
+  async function developerFails(role: DeveloperRole): Promise<BuildResult | undefined> {
     // Built outside the try: a gh failure reading the earlier design note is
     // the host's, not the architect's, so it mustn't count as a failed attempt.
     const roleArgs = developerPromptArgs(role);
     let failure: string;
+    let result: BuildResult;
     try {
       const run = await runRoleInSandbox(
         sandbox,
@@ -464,16 +483,20 @@ async function buildMarkedIssue(
       commits.push(...run.commits);
       if (run.completionSignal !== undefined) {
         log(`${role} finished`);
-        return true;
+        return undefined;
       }
       failure = `the ${role} ran out of iterations unfinished`;
+      result = unpublished("role failed", failure);
     } catch (error) {
       if (error instanceof UncountedStopError) throw error;
       failure = `the ${role} failed: ${error}`;
+      result = isRoleTimeout(error)
+        ? unpublished("timed out", `the ${role} timed out`)
+        : unpublished("role failed", `the ${role} failed`);
     }
     console.error(`  ✗ #${issue.number}: ${failure}, so ${branch} isn't published.`);
     host.recordBuildFailure(issue.number, branch, developerFailureComment(failure, branch));
-    return false;
+    return result;
   }
 
   // Run a gate checkpoint, with the gate-fixer while the gate is red. Returns
@@ -567,13 +590,17 @@ async function buildMarkedIssue(
     // round's design note, and every role follows the note when it exists:
     // only this build's architect may have written it (#230).
     await sandbox.exec(`rm -f ${designNotePath}`);
-    if (issue.roles.includes("architect")) {
-      if (!(await developerFinishes("architect"))) return notPublished;
-      await postDesignNote();
+    const developers: DeveloperRole[] = [
+      ...(issue.roles.includes("architect") ? ["architect" as const] : []),
+      "tester",
+      "backend",
+      ...(issue.roles.includes("ui") ? ["ui" as const] : []),
+    ];
+    for (const role of developers) {
+      const failed = await developerFails(role);
+      if (failed !== undefined) return failed;
+      if (role === "architect") await postDesignNote();
     }
-    if (!(await developerFinishes("tester"))) return notPublished;
-    if (!(await developerFinishes("backend"))) return notPublished;
-    if (issue.roles.includes("ui") && !(await developerFinishes("ui"))) return notPublished;
 
     // Gate, review and publish whenever the branch holds work that main
     // doesn't, not only when this run added commits: a re-run of a finished
@@ -581,13 +608,13 @@ async function buildMarkedIssue(
     if (host.commitsAhead(branch, base) === 0) {
       const status = await sandbox.exec("git status --porcelain 2>&1");
       if (status.exitCode === 0 && status.stdout.trim() === "") {
-        return notPublished;
+        return unpublished("not published", NOTHING_AHEAD);
       }
     }
 
-    if ((await gatePasses(1)) === undefined) return notPublished;
+    if ((await gatePasses(1)) === undefined) return unpublished("gate failed", "checkpoint 1");
     if (host.commitsAhead(branch, base) === 0) {
-      return notPublished;
+      return unpublished("not published", NOTHING_AHEAD);
     }
 
     const docsFailed = issue.roles.includes("scribe") && !(await scribeFinishes());
@@ -616,7 +643,7 @@ async function buildMarkedIssue(
     }
 
     const gated = await gatePasses(2);
-    if (gated === undefined) return notPublished;
+    if (gated === undefined) return unpublished("gate failed", "checkpoint 2");
 
     // The push is public, and the sandbox holds the Claude token or API key.
     // The comment doesn't say where the secret is, since the issue is public too.
@@ -629,7 +656,7 @@ async function buildMarkedIssue(
           `\`git log -p ${BASE_BRANCH}..${branch}\` before anything pushes the branch, and rotate the secret if it has ` +
           "left this machine.",
       );
-      return notPublished;
+      return unpublished("not published", "a commit holds a secret");
     }
 
     // A publish already reached goes ahead even once the run has hit the time
@@ -643,7 +670,7 @@ async function buildMarkedIssue(
     // person, so the issue gets git's or gh's error rather than only the run log.
     try {
       const prUrl = await host.publish(issue, branch, gated, reviewed, docsFailed);
-      return { commits, prUrl, publishFailed: false };
+      return { commits, prUrl, publishFailed: false, outcome: "published", detail: prUrl };
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);
       const detail = host.publicError(error);
@@ -665,7 +692,13 @@ async function buildMarkedIssue(
             `  ⚠ #${issue.number}: handing it back for its workflow change failed, so the next round tries again: ${handBackError}`,
           );
         }
-        return { commits, prUrl: undefined, publishFailed: true };
+        return {
+          commits,
+          prUrl: undefined,
+          publishFailed: true,
+          outcome: "not published",
+          detail: "GitHub refused its .github/workflows change",
+        };
       }
       const fence = "`".repeat(Math.max(3, ...[...detail.matchAll(/`+/g)].map((match) => match[0].length + 1)));
       host.commentOnIssue(
@@ -679,7 +712,13 @@ async function buildMarkedIssue(
           "its body. If origin's branch has commits the local one doesn't (an agent rewrote one an earlier round " +
           `pushed), the two need reconciling before Sandcastle can push it.\n\n${fence}text\n${detail}\n${fence}`,
       );
-      return { commits, prUrl: undefined, publishFailed: true };
+      return {
+        commits,
+        prUrl: undefined,
+        publishFailed: true,
+        outcome: "not published",
+        detail: "pushing it or opening its pull request failed",
+      };
     }
   } finally {
     // Sandcastle's close() runs git in the worktree; leave one that no longer

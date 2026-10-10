@@ -98,8 +98,9 @@ function reportedText(line: string): string | undefined {
   }
 }
 
-// How deep isUsageLimitError follows an error's `cause` chain.
-const MAX_CAUSE_DEPTH = 5;
+// How deep usageLimitLine (and lib/agents.mts#isRoleTimeout) follows an
+// error's `cause` chain.
+export const MAX_CAUSE_DEPTH = 5;
 
 // The first line of `error`'s text (its message, String(error) and its
 // `cause` chain) that matches a usage-limit phrasing, or undefined. The
