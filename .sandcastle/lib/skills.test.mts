@@ -108,6 +108,16 @@ describe("makeAgentSandbox", () => {
     assert.equal(stub.createCalls[0]?.worktreePath, "/repo/.sandcastle/worktrees/fix-1");
   });
 
+  it("keeps the provider's other members", () => {
+    const skillsDir = mkdtempSync(join(tmpdir(), "skills-"));
+    const stub = host(skillsDir);
+
+    const sandbox = makeAgentSandbox(stub.host, [])();
+
+    assert.equal(sandbox.tag, "bind-mount");
+    assert.equal(sandbox.name, "stub-docker");
+  });
+
   it("refuses a provider it can't add the .git mounts to", () => {
     const skillsDir = mkdtempSync(join(tmpdir(), "skills-"));
     const stub = host(skillsDir);
