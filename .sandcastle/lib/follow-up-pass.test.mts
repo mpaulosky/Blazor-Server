@@ -28,7 +28,10 @@ const ISSUE_NUMBER = 50;
 const PR_NUMBER = 7;
 const BRANCH = "feature/50-fix-widget";
 const BASE = "m".repeat(40);
-const HEAD = "h".repeat(40);
+const HEAD = "c".repeat(40);
+// The commit the follow-up role makes in sandboxFake, unless a test says otherwise.
+const ROLE_COMMIT = "a".repeat(40);
+const HOST_LOGIN = "sandcastle-bot";
 
 const issue: SandcastleIssue = { number: ISSUE_NUMBER, title: "Fix the widget", body: "", labels: ["Sandcastle"], comments: [] };
 
@@ -95,7 +98,7 @@ const isOwner: IsOwner = (login) => (login === null ? false : login === "owner")
 
 describe("threadsForRole", () => {
   it("sorts a bot thread's first comment into forRole, tagged \"bot\"", () => {
-    const { forRole, leftForHuman, unknown } = threadsForRole([botThread()], isOwner);
+    const { forRole, leftForHuman, unknown } = threadsForRole([botThread()], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole, [
       {
@@ -112,7 +115,7 @@ describe("threadsForRole", () => {
   });
 
   it("sorts a thread the repository owner opened into forRole, tagged \"owner\"", () => {
-    const { forRole } = threadsForRole([ownerThread()], isOwner);
+    const { forRole } = threadsForRole([ownerThread()], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole, [
       {
@@ -134,15 +137,64 @@ describe("threadsForRole", () => {
       ],
     });
 
-    const { forRole, leftForHuman, unknown } = threadsForRole([answered], isOwner);
+    const { forRole, leftForHuman, unknown } = threadsForRole([answered], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole, []);
     assert.deepEqual(leftForHuman, []);
     assert.deepEqual(unknown, []);
   });
 
+  it("drops an owner thread the host answered, when the host is signed in as the owner", () => {
+    const answered = ownerThread({
+      comments: [...ownerThread().comments, { author: "owner", byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nNoted.`, url: "https://github.com/o/r/pull/7#discussion_r4" }],
+    });
+
+    const { forRole } = threadsForRole([answered], isOwner, "owner");
+
+    assert.deepEqual(forRole, []);
+  });
+
+  it("keeps an owner thread for the role when a stranger quotes the host's reply marker in it", () => {
+    const spoofed = ownerThread({
+      comments: [...ownerThread().comments, { author: "stranger", byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nNoted.`, url: "https://github.com/o/r/pull/7#discussion_r4" }],
+    });
+
+    const { forRole } = threadsForRole([spoofed], isOwner, HOST_LOGIN);
+
+    assert.deepEqual(forRole.map((thread) => thread.threadId), ["RT_owner"]);
+  });
+
+  it("still drops an owner thread the host answered when a stranger or a bot replies after the host", () => {
+    const answered = ownerThread({
+      comments: [
+        ...ownerThread().comments,
+        { author: HOST_LOGIN, byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nNoted.`, url: "https://github.com/o/r/pull/7#discussion_r4" },
+        { author: "stranger", byBot: false, body: "+1", url: "https://github.com/o/r/pull/7#discussion_r5" },
+        { author: "some-bot", byBot: true, body: "Beep.", url: "https://github.com/o/r/pull/7#discussion_r6" },
+      ],
+    });
+
+    const { forRole } = threadsForRole([answered], isOwner, HOST_LOGIN);
+
+    assert.deepEqual(forRole, []);
+  });
+
+  it("gives an owner thread back to the role once the owner replies to the host", () => {
+    const repliedTo = ownerThread({
+      comments: [
+        ...ownerThread().comments,
+        { author: HOST_LOGIN, byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nNoted.`, url: "https://github.com/o/r/pull/7#discussion_r4" },
+        { author: "owner", byBot: false, body: "Please do it anyway.", url: "https://github.com/o/r/pull/7#discussion_r5" },
+      ],
+    });
+
+    const { forRole } = threadsForRole([repliedTo], isOwner, HOST_LOGIN);
+
+    assert.deepEqual(forRole.map((thread) => thread.threadId), ["RT_owner"]);
+  });
+
   it("drops a resolved thread outright, whoever opened it", () => {
-    const { forRole, leftForHuman, unknown } = threadsForRole([botThread({ resolved: true })], isOwner);
+    const { forRole, leftForHuman, unknown } = threadsForRole([botThread({ resolved: true })], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole, []);
     assert.deepEqual(leftForHuman, []);
@@ -150,7 +202,7 @@ describe("threadsForRole", () => {
   });
 
   it("sends a stranger's thread to leftForHuman and never to the role", () => {
-    const { forRole, leftForHuman } = threadsForRole([strangerThread()], isOwner);
+    const { forRole, leftForHuman } = threadsForRole([strangerThread()], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole, []);
     assert.deepEqual(leftForHuman, [strangerThread()]);
@@ -159,7 +211,7 @@ describe("threadsForRole", () => {
   it("treats a thread with no author as left for a person too", () => {
     const noAuthor = strangerThread({ comments: [{ author: null, byBot: false, body: "???", url: "https://github.com/o/r/pull/7#discussion_r5" }] });
 
-    const { forRole, leftForHuman } = threadsForRole([noAuthor], isOwner);
+    const { forRole, leftForHuman } = threadsForRole([noAuthor], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole, []);
     assert.deepEqual(leftForHuman, [noAuthor]);
@@ -169,7 +221,7 @@ describe("threadsForRole", () => {
     const uncertain = ownerThread({ comments: [{ author: "maybe-owner", byBot: false, body: "Hmm.", url: "https://github.com/o/r/pull/7#discussion_r6" }] });
     const unsure: IsOwner = () => undefined;
 
-    const { forRole, leftForHuman, unknown } = threadsForRole([uncertain], unsure);
+    const { forRole, leftForHuman, unknown } = threadsForRole([uncertain], unsure, HOST_LOGIN);
 
     assert.deepEqual(forRole, []);
     assert.deepEqual(leftForHuman, []);
@@ -181,7 +233,7 @@ describe("threadsForRole", () => {
       comments: [...botThread().comments, { author: "stranger", byBot: false, body: "I disagree.", url: "https://github.com/o/r/pull/7#discussion_r7" }],
     });
 
-    const { forRole } = threadsForRole([mixed], isOwner);
+    const { forRole } = threadsForRole([mixed], isOwner, HOST_LOGIN);
 
     assert.deepEqual(forRole[0]!.comments, [{ author: "copilot-pull-request-reviewer", body: "Consider returning a Result<T> here." }]);
   });
@@ -349,7 +401,8 @@ describe("replyBody", () => {
 
     const body = replyBody(action, publicError);
 
-    assert.ok(!/Resolved/i.test(body) || !/ADDRESSED|WONT_FIX|INVALID/.test(body));
+    assert.match(body, /Left open for the repository owner/);
+    assert.doesNotMatch(body, /Resolved as/);
   });
 });
 
@@ -360,19 +413,20 @@ describe("passSummaryComment", () => {
     merged: "clean",
     actions: [{ thread: forRoleBot, verdict: { threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }, resolve: "ADDRESSED" }],
     ignored: ["RT_made_up"],
+    unverified: [],
     failedWrites: [],
     leftForHuman: 1,
   };
 
   it("carries the follow-up marker and names the pass number against the cap", () => {
-    const comment = passSummaryComment(report);
+    const comment = passSummaryComment(report, publicError);
 
     assert.match(comment, new RegExp(FOLLOW_UP_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.match(comment, new RegExp(`pass 1 of ${FOLLOW_UP_PASS_CAP}`, "i"));
   });
 
   it("names each thread action's resolution", () => {
-    const comment = passSummaryComment(report);
+    const comment = passSummaryComment(report, publicError);
 
     assert.match(comment, /ADDRESSED/);
   });
@@ -380,7 +434,36 @@ describe("passSummaryComment", () => {
   it("says a thread was left open for the owner when it was only replied to", () => {
     const ownerReport: PassReport = { ...report, actions: [{ thread: forRoleOwner, verdict: { threadId: "RT_owner", verdict: "fixed", reason: "Done." }, resolve: undefined }] };
 
-    assert.match(passSummaryComment(ownerReport), /left open for the owner/i);
+    assert.match(passSummaryComment(ownerReport, publicError), /left open for the owner/i);
+  });
+
+  it("sends each reason and ignored id through publicError, as a reply's reason is", () => {
+    const hideSecret = (text: string) => text.replaceAll("sk-ant-secret", "[redacted]");
+    const leaky: PassReport = {
+      ...report,
+      actions: [{ thread: forRoleBot, verdict: { threadId: "RT_bot", verdict: "declined", reason: "Echoed sk-ant-secret." }, resolve: "WONT_FIX" }],
+      ignored: ["RT_sk-ant-secret"],
+    };
+
+    const comment = passSummaryComment(leaky, hideSecret);
+
+    assert.doesNotMatch(comment, /sk-ant-secret/);
+    assert.match(comment, /Echoed \[redacted\]/);
+  });
+
+  it("cuts a long reason without splitting a character in two", () => {
+    const long: PassReport = {
+      ...report,
+      actions: [{ thread: forRoleBot, verdict: { threadId: "RT_bot", verdict: "declined", reason: `${"x".repeat(299)}😀 and more` }, resolve: "WONT_FIX" }],
+    };
+
+    const comment = passSummaryComment(long, publicError);
+
+    assert.doesNotMatch(comment, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  });
+
+  it("lists the threads whose \"fixed\" verdict named no commit the pass added", () => {
+    assert.match(passSummaryComment({ ...report, unverified: ["RT_bot"] }, publicError), /no commit this pass added[^\n]*RT_bot/);
   });
 });
 
@@ -410,6 +493,11 @@ function sandboxFake(
     roleFailing?: string[];
     roleFailWith?: Record<string, Error>;
     roleUnfinished?: string[];
+    // The role finishes a conflicted merge with `git merge --abort` rather
+    // than a merge commit, so its commit doesn't contain main.
+    abandonsMerge?: boolean;
+    // The role's commit shares no history with the PR's head.
+    rewritesHistory?: boolean;
   } = {},
 ) {
   const execCalls: string[] = [];
@@ -417,7 +505,18 @@ function sandboxFake(
   const steps: string[] = [];
   let headNumber = 0;
   const nextHead = () => (++headNumber).toString(16).padStart(40, "0");
+  // Each commit's history, itself included, so `git merge-base --is-ancestor`
+  // and `git rev-parse --verify` answer as they would in a real repository.
+  const history = new Map<string, Set<string>>([
+    [HEAD, new Set([HEAD])],
+    [BASE, new Set([BASE])],
+  ]);
   let head = HEAD;
+  let mergeConflicted = false;
+  const commit = (sha: string, options: { from?: Set<string>; withMain?: boolean } = {}) => {
+    history.set(sha, new Set([...(options.from ?? history.get(head)!), ...(options.withMain ? history.get(BASE)! : []), sha]));
+    head = sha;
+  };
   const gateExitCodes = [...(options.gateExitCodes ?? [0])];
 
   const sandbox = {
@@ -431,9 +530,21 @@ function sandboxFake(
       if (command.startsWith("rm -f")) return { stdout: "", stderr: "", exitCode: 0 };
       if (command.startsWith("git reset --hard")) return { stdout: "", stderr: "", exitCode: 0 };
       if (command === "git rev-parse HEAD") return { stdout: `${head}\n`, stderr: "", exitCode: 0 };
-      if (command.startsWith("git merge")) {
-        if ((options.mergeConflictFiles?.length ?? 0) > 0) return { stdout: "CONFLICT", stderr: "", exitCode: 1 };
-        head = nextHead();
+      const verify = /^git rev-parse --verify --quiet '([0-9a-f]+)\^\{commit\}'$/.exec(command);
+      if (verify !== null) {
+        const found = [...history.keys()].find((sha) => sha.startsWith(verify[1]!));
+        return found === undefined ? { stdout: "", stderr: "", exitCode: 1 } : { stdout: `${found}\n`, stderr: "", exitCode: 0 };
+      }
+      const ancestry = /^git merge-base --is-ancestor '([^']+)' '([^']+)'$/.exec(command);
+      if (ancestry !== null) {
+        return { stdout: "", stderr: "", exitCode: history.get(ancestry[2]!)?.has(ancestry[1]!) === true ? 0 : 1 };
+      }
+      if (command.startsWith("git merge ")) {
+        if ((options.mergeConflictFiles?.length ?? 0) > 0) {
+          mergeConflicted = true;
+          return { stdout: "CONFLICT", stderr: "", exitCode: 1 };
+        }
+        commit(nextHead(), { withMain: true });
         return { stdout: "", stderr: "", exitCode: 0 };
       }
       if (command.includes("diff --name-only --diff-filter=U")) {
@@ -445,7 +556,7 @@ function sandboxFake(
       if (command.startsWith("git status")) return { stdout: "", stderr: "", exitCode: 0 };
       const exitCode = gateExitCodes.shift();
       if (exitCode === undefined) throw new Error("the gate ran more often than the test expected");
-      if (exitCode === 0) head = nextHead();
+      if (exitCode === 0) commit(nextHead());
       return { stdout: `gate output, exit ${exitCode}\n`, stderr: "", exitCode };
     },
     run: async (opts: SandboxRunOptions) => {
@@ -453,7 +564,11 @@ function sandboxFake(
       runs.push(opts);
       steps.push(role);
       if (options.roleFailing?.includes(role)) throw options.roleFailWith?.[role] ?? new Error(`${role} failed`);
-      head = nextHead();
+      commit(role === "follow-up" ? ROLE_COMMIT : nextHead(), {
+        from: options.rewritesHistory ? new Set() : undefined,
+        withMain: mergeConflicted && !options.abandonsMerge,
+      });
+      mergeConflicted = false;
       return {
         iterations: [],
         commits: [{ sha: head }],
@@ -478,6 +593,10 @@ function passHostFake(
     leaksSecret?: boolean;
     worktreeProblems?: string[];
     isOwnerFn?: IsOwner;
+    hostLogin?: string;
+    // The branch's head on GitHub after a failed push; by default someone
+    // else pushed meanwhile.
+    remoteHead?: string;
   } = {},
 ) {
   const calls = {
@@ -498,6 +617,7 @@ function passHostFake(
     fetchBranch: (branch) => void calls.fetchBranch.push(branch),
     reviewThreads: () => ({ headRefOid: options.headRefOid ?? HEAD, threads: options.threads ?? [] }),
     isOwner: options.isOwnerFn ?? isOwner,
+    hostLogin: () => options.hostLogin ?? HOST_LOGIN,
     passCount: () => options.passCount ?? 0,
     contains: () => options.containsBase ?? true,
     markBuilding: (issueNumber) => {
@@ -515,6 +635,7 @@ function passHostFake(
       calls.push.push({ branch, commit });
       if (options.pushError) throw options.pushError;
     },
+    remoteHead: () => options.remoteHead ?? "f".repeat(40),
     replyToThread: (threadId, body) => void calls.replyToThread.push({ threadId, body }),
     resolveThread: (threadId) => void calls.resolveThread.push(threadId),
     commentOnPullRequest: (pr, body) => void calls.commentOnPullRequest.push({ pr, body }),
@@ -551,7 +672,8 @@ describe("runPass", () => {
   // (tested with stubbed verdicts)."
   for (const verdict of ["fixed", "declined", "outdated"] as const) {
     it(`replies to an owner thread given a "${verdict}" verdict, but never resolves it`, async () => {
-      const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_owner", verdict, reason: "Noted." }]) });
+      const commit = verdict === "fixed" ? { commit: ROLE_COMMIT.slice(0, 7) } : {};
+      const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_owner", verdict, reason: "Noted.", ...commit }]) });
       const { passHost, calls } = passHostFake({ threads: [ownerThread()], containsBase: true, sandbox });
 
       await runPass(passTarget(), issue, BASE, passHost);
@@ -722,7 +844,7 @@ describe("runPass", () => {
     assert.equal(calls.commentOnPullRequest.length, 1);
   });
 
-  it("neither replies nor comments when the push fails to fast-forward", async () => {
+  it("neither replies nor comments when the push fails because someone else pushed meanwhile", async () => {
     const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }]) });
     const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox, pushError: new Error("! [rejected] (non-fast-forward)") });
 
@@ -733,6 +855,43 @@ describe("runPass", () => {
     assert.deepEqual(calls.commentOnPullRequest, []);
     assert.deepEqual(calls.handBack, []);
   });
+
+  it("hands the PR back when the push fails and the PR's head hasn't moved, so another round would fail the same way", async () => {
+    const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }]) });
+    const { passHost, calls } = passHostFake({
+      threads: [botThread()],
+      containsBase: true,
+      sandbox,
+      pushError: new Error("! [remote rejected] (protected branch hook declined)"),
+      remoteHead: HEAD,
+    });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.equal(calls.handBack.length, 1);
+    assert.match(calls.handBack[0]!.body, /protected branch hook declined/);
+    assert.deepEqual(calls.replyToThread, []);
+  });
+
+  // A "fixed" verdict is only believed for a commit the pass added.
+  for (const [scenario, commit] of [
+    ["names a commit the branch doesn't hold", "b".repeat(7)],
+    ["names a commit already on the PR before the pass", HEAD.slice(0, 7)],
+    ["names no commit at all", undefined],
+  ] as const) {
+    it(`neither replies to nor resolves a thread whose "fixed" verdict ${scenario}, and says so in the summary`, async () => {
+      const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit }]) });
+      const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox });
+
+      const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+      assert.equal(outcome.kind, "passed");
+      assert.deepEqual(calls.replyToThread, []);
+      assert.deepEqual(calls.resolveThread, []);
+      assert.match(calls.commentOnPullRequest[0]!.body, /no commit this pass added[^\n]*RT_bot/);
+    });
+  }
 
   it("gives up without pushing when a commit holds a secret", async () => {
     const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }]) });
@@ -847,9 +1006,7 @@ describe("runPass's other give-ups", () => {
   });
 
   it("gives up without pushing when the gated commit doesn't contain the PR's head", async () => {
-    // mergeConflictFiles makes every `git merge…` command fail, the
-    // merge-base ancestry check included; no merge is needed here.
-    const sandbox = sandboxFake({ followUpJson: fixedVerdict, mergeConflictFiles: ["src/A.cs"] });
+    const sandbox = sandboxFake({ followUpJson: fixedVerdict, rewritesHistory: true });
     const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox });
 
     const outcome = await runPass(passTarget(), issue, BASE, passHost);
@@ -868,6 +1025,28 @@ describe("runPass's other give-ups", () => {
     const merge = String(sandbox.runs[0]?.promptArgs?.MERGE ?? "");
     assert.match(merge, /src\/A\.cs, src\/B\.cs/);
     assert.match(merge, /git commit --no-edit/);
+  });
+
+  it("pushes a conflicted merge once the role has resolved it and the gate passes", async () => {
+    const sandbox = sandboxFake({ followUpJson: "[]", mergeConflictFiles: ["src/A.cs"] });
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
+
+    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+
+    assert.deepEqual(outcome, { kind: "passed", pushed: sandbox.headOf() });
+    assert.deepEqual(calls.push, [{ branch: BRANCH, commit: sandbox.headOf() }]);
+    assert.match(calls.commentOnPullRequest[0]!.body, /resolved its conflicts/);
+  });
+
+  it("gives up without pushing when the role abandoned the merge with main", async () => {
+    const sandbox = sandboxFake({ followUpJson: "[]", mergeConflictFiles: ["src/A.cs"], abandonsMerge: true });
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
+
+    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /abandoned/);
+    assert.deepEqual(calls.push, []);
   });
 
   it("gives up when GitHub refuses the push for a workflow file", async () => {
@@ -902,7 +1081,7 @@ describe("runPass's other give-ups", () => {
     const answered = ownerThread({
       comments: [...ownerThread().comments, { author: "owner", byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nNoted.`, url: "https://github.com/o/r/pull/7#discussion_r8" }],
     });
-    const { passHost, calls } = passHostFake({ threads: [answered], containsBase: true });
+    const { passHost, calls } = passHostFake({ threads: [answered], containsBase: true, hostLogin: "owner" });
 
     const outcome = await runPass(passTarget(), issue, BASE, passHost);
 

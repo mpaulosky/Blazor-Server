@@ -82,10 +82,13 @@ export type PromptThread = {
 // Sorts a PR's open review threads for the follow-up role (runPass's step
 // 2). A resolved thread is dropped outright. A thread whose first comment's
 // author is a bot goes to the role as "bot". A thread the repository owner
-// opened goes to the role as "owner", unless its last comment already
-// carries FOLLOW_UP_REPLY_MARKER (lib/config.mts): that means the host
-// already answered it and is waiting on the owner, so it's dropped from
-// every list rather than handed to the role again. Any other thread,
+// opened goes to the role as "owner", unless the last comment by the owner or
+// `hostLogin` is the host's own reply (by `hostLogin`, opening with
+// FOLLOW_UP_REPLY_MARKER, lib/config.mts): that means the host already
+// answered it and is waiting on the owner, so it's dropped from every list
+// rather than handed to the role again. Comments by anyone else don't count
+// either way, so a stranger can neither hide an owner thread by quoting the
+// marker nor reopen one by replying after the host. Any other thread,
 // including one with no author at all, goes to `leftForHuman`
 // (lib/report.mts#recordHumanThread records each one). A thread whose first
 // author `isOwner` can't answer for goes to `unknown`, so a pass never
@@ -95,6 +98,7 @@ export type PromptThread = {
 export function threadsForRole(
   threads: readonly ReviewThread[],
   isOwner: IsOwner,
+  hostLogin: string,
 ): { forRole: PromptThread[]; leftForHuman: ReviewThread[]; unknown: ReviewThread[] } {
   const forRole: PromptThread[] = [];
   const leftForHuman: ReviewThread[] = [];
@@ -115,7 +119,8 @@ export function threadsForRole(
         leftForHuman.push(thread);
         continue;
       }
-      if (thread.comments.at(-1)?.body.includes(FOLLOW_UP_REPLY_MARKER)) continue;
+      const last = thread.comments.findLast((comment) => comment.author === hostLogin || isOwner(comment.author) === true);
+      if (last?.author === hostLogin && last.body.startsWith(FOLLOW_UP_REPLY_MARKER)) continue;
       from = "owner";
     }
     forRole.push({
@@ -261,14 +266,16 @@ export function replyBody(action: ThreadAction, publicError: (text: string) => s
 // One pass's outcome, for passSummaryComment: which attempt this was, what
 // commit was pushed (undefined when nothing needed pushing), whether main
 // needed merging in and how that went, every thread action taken, the
-// ignored verdicts, any GitHub write that failed, and how many threads were
-// left for a person.
+// ignored verdicts, the "fixed" verdicts left unanswered because their commit
+// didn't check out (see fixesInPush), any GitHub write that failed, and how
+// many threads were left for a person.
 export type PassReport = {
   pass: number;
   pushed: string | undefined;
   merged: "none" | "clean" | "conflicts";
   actions: ThreadAction[];
   ignored: string[];
+  unverified: string[];
   failedWrites: string[];
   leftForHuman: number;
 };
@@ -283,19 +290,23 @@ const MERGE_SENTENCES: Record<PassReport["merged"], string[]> = {
 // The PR comment a pass posts once it's done (runPass's step 13):
 // FOLLOW_UP_MARKER, "Follow-up pass n of FOLLOW_UP_PASS_CAP", what was
 // pushed, and one line per thread action naming its verdict and resolution,
-// or "left open for the owner" for one that was only replied to.
-export function passSummaryComment(report: PassReport): string {
+// or "left open for the owner" for one that was only replied to. The role's
+// text in it goes through `publicError` first, as replyBody's does.
+export function passSummaryComment(report: PassReport, publicError: (text: string) => string): string {
   const lines = [`${FOLLOW_UP_MARKER}\nSandcastle's follow-up pass ${report.pass} of ${FOLLOW_UP_PASS_CAP} on this PR.`];
   const pushed =
     report.pushed === undefined ? "Nothing needed pushing." : `Pushed \`${report.pushed}\`, which passed \`scripts/gate.sh\`.`;
   lines.push([...MERGE_SENTENCES[report.merged], pushed].join(" "));
   if (report.actions.length > 0) {
-    lines.push(["Review threads:", ...report.actions.map(summaryLine)].join("\n"));
+    lines.push(["Review threads:", ...report.actions.map((action) => summaryLine(action, publicError))].join("\n"));
   }
   if (report.ignored.length > 0) {
-    // The ids are the role's text too, so they're kept plain and short.
-    const ids = report.ignored.map((id) => plainText(id.slice(0, 100))).join(", ");
-    lines.push(`Ignored verdicts for threads the follow-up role wasn't given, or already answered: ${ids}.`);
+    lines.push(`Ignored verdicts for threads the follow-up role wasn't given, or already answered: ${idList(report.ignored, publicError)}.`);
+  }
+  if (report.unverified.length > 0) {
+    lines.push(
+      `Left open, since their "fixed" verdict names no commit this pass added to the branch: ${idList(report.unverified, publicError)}.`,
+    );
   }
   if (report.failedWrites.length > 0) {
     lines.push(`These GitHub writes failed: ${report.failedWrites.join("; ")}.`);
@@ -308,13 +319,26 @@ export function passSummaryComment(report: PassReport): string {
   return cutToLimit(lines.join("\n\n"));
 }
 
+// Model text for the pass summary: through `publicError`, which hides a
+// secret, before it's cut (a secret cut in half no longer matches), then cut
+// to `limit` without splitting a character, which GitHub would refuse, and
+// kept to plain text.
+function summaryText(text: string, limit: number, publicError: (text: string) => string): string {
+  return plainText(cutAtCharacter(publicError(text), limit));
+}
+
+// Thread ids the role wrote, for a line of the pass summary.
+function idList(ids: readonly string[], publicError: (text: string) => string): string {
+  return ids.map((id) => summaryText(id, 100, publicError)).join(", ");
+}
+
 // One thread action's line in the pass summary. The reason is model text, so
-// it's kept to plain text and cut short; the reply on the thread has it all.
-function summaryLine(action: ThreadAction): string {
+// it's cut short; the reply on the thread has it all.
+function summaryLine(action: ThreadAction, publicError: (text: string) => string): string {
   const { thread, verdict, resolve } = action;
   const where = thread.path === null ? "" : ` on ${plainText(thread.path)}${thread.line === null ? "" : `:${thread.line}`}`;
   const outcome = resolve === undefined ? "left open for the owner" : `resolved ${resolve}`;
-  return `- ${thread.from} thread${where}: ${verdict.verdict}, ${outcome}. ${plainText(verdict.reason.slice(0, 300))}`;
+  return `- ${thread.from} thread${where}: ${verdict.verdict}, ${outcome}. ${summaryText(verdict.reason, 300, publicError)}`;
 }
 
 // The PR hand-back comment for a pass that gave up (runPass's step 4, 9, 10,
@@ -345,9 +369,10 @@ export function giveUpComment(reason: string, output: string | undefined): strin
 //   markBuilding said another run already has the issue);
 // - "passed": the pass ran to completion; `pushed` is the commit pushed, or
 //   undefined when nothing needed pushing;
-// - "push-failed": the gated commit failed to push (for example, someone
-//   pushed to the PR meanwhile, so it's non-fast-forward); not counted and
-//   not a give-up, so the next sweep tries again with the PR's new head;
+// - "push-failed": the gated commit failed to push because someone pushed to
+//   the PR meanwhile (its head on GitHub moved, or couldn't be read); not
+//   counted and not a give-up, so the next sweep tries again with the PR's
+//   new head. A push that failed with the head unmoved gives up instead;
 // - "gave-up": the PR was handed back with sandcastle:needs-human.
 export type PassOutcome =
   | { kind: "skipped"; reason: string }
@@ -365,6 +390,8 @@ export type PassHost = {
   reviewThreads(pr: number): { headRefOid: string; threads: ReviewThread[] };
   // lib/queue.mts#ownerCheck(signedInHostLogin, pushAccess).
   isOwner: IsOwner;
+  // lib/github.mts#signedInHostLogin: who the host's replies are posted as.
+  hostLogin(): string;
   // FOLLOW_UP_MARKER comments posted since sandcastle:needs-human was last
   // removed (lib/github.mts#markerComments), counted against
   // FOLLOW_UP_PASS_CAP.
@@ -384,6 +411,8 @@ export type PassHost = {
   // A plain push of the gated commit to the PR's branch, retried on a
   // GitHub server error the way lib/build.mts#publish's push is.
   push(branch: string, commit: string): Promise<void>;
+  // branches.mts's originRefs.remoteHead: the branch's head on GitHub now.
+  remoteHead(branch: string): string | undefined;
   // lib/github.mts#replyToReviewThread.
   replyToThread(threadId: string, body: string): void;
   // lib/github.mts#resolveReviewThread.
@@ -410,6 +439,7 @@ export const livePassHost: PassHost = {
     () => signedInHostLogin(),
     (login) => pushAccess(login),
   ),
+  hostLogin: () => signedInHostLogin(),
   passCount: (pr) => markerComments(pr, "sandcastle:needs-human", FOLLOW_UP_MARKER).length,
   contains: (commit, ancestor) => originRefs.contains(commit, ancestor),
   markBuilding: (issue) => claimBuildingLabel(issue),
@@ -422,6 +452,7 @@ export const livePassHost: PassHost = {
       () => void git("push", "--quiet", "origin", `${commit}:refs/heads/${branch}`),
       (ms) => sleep(ms),
     ),
+  remoteHead: (branch) => originRefs.remoteHead(branch),
   replyToThread: (threadId, body) => replyToReviewThread(threadId, body),
   resolveThread: (threadId) => resolveReviewThread(threadId),
   commentOnPullRequest: (pr, body) => commentOnPullRequest(pr, body),
@@ -477,6 +508,41 @@ async function sandboxContains(sandbox: Pick<sandcastle.Sandbox, "exec">, commit
   return result.exitCode === 0;
 }
 
+// Splits `verdicts` into those the host acts on and the ids of "fixed" ones
+// it doesn't. A "fixed" verdict is kept only when its commit is one this pass
+// added: it resolves in the sandbox, `gated` contains it and `head` (the PR's
+// head before the pass) doesn't. Otherwise the reply would say "Fixed in" a
+// commit the PR doesn't hold, or resolve a bot thread nothing changed for, and
+// nobody would look at it again. An unverified verdict's thread is left open,
+// so the next pass sees it again.
+async function fixesInPush(
+  sandbox: Pick<sandcastle.Sandbox, "exec">,
+  verdicts: readonly ThreadVerdict[],
+  gated: string,
+  head: string,
+): Promise<{ kept: ThreadVerdict[]; unverified: string[] }> {
+  const kept: ThreadVerdict[] = [];
+  const unverified: string[] = [];
+  for (const verdict of verdicts) {
+    if (verdict.verdict !== "fixed") {
+      kept.push(verdict);
+      continue;
+    }
+    const resolved =
+      verdict.commit === undefined
+        ? undefined
+        : (await sandbox.exec(`git rev-parse --verify --quiet ${shellWord(`${verdict.commit}^{commit}`)}`)).stdout.trim();
+    const added =
+      resolved !== undefined &&
+      /^[0-9a-f]{40,64}$/.test(resolved) &&
+      (await sandboxContains(sandbox, gated, resolved)) &&
+      !(await sandboxContains(sandbox, head, resolved));
+    if (added) kept.push(verdict);
+    else unverified.push(verdict.threadId);
+  }
+  return { kept, unverified };
+}
+
 // Runs one follow-up pass on `target`, a PR the sweep (lib/follow-up.mts)
 // marked as needing one, for its issue. See this module's header and the
 // design note at .sandcastle/work/78/design.md for the step-by-step: reset
@@ -498,7 +564,7 @@ export async function runPass(
 
   const { headRefOid, threads } = host.reviewThreads(target.number);
   if (headRefOid !== target.headRefOid) return skip("its head moved since the sweep read it");
-  const sorted = threadsForRole(threads, host.isOwner);
+  const sorted = threadsForRole(threads, host.isOwner, host.hostLogin());
   if (sorted.unknown.length > 0) return skip("couldn't check whether a review thread's author is the repository owner");
   for (const thread of sorted.leftForHuman) {
     const first = thread.comments[0];
@@ -680,19 +746,36 @@ async function passOnMarkedIssue(
             String(error),
           );
         }
-        // Someone pushed to the PR meanwhile, or GitHub kept failing: the
-        // next sweep reads the new head and tries again, uncounted.
-        log(`couldn't push ${gated}, so no reply or summary is posted and the next round tries again: ${error}`);
+        // Only a race is worth another round: the next sweep reads the new
+        // head and tries again, uncounted. With the head unmoved the same push
+        // fails again (branch protection, a token without push rights), and
+        // with no summary posted the cap would never stop the PR being passed
+        // on every round, so it's handed back.
+        let remote: string | undefined;
+        try {
+          remote = host.remoteHead(branch);
+        } catch {
+          remote = undefined;
+        }
+        if (remote === target.headRefOid) {
+          return stop("GitHub refused the push, and the PR's head hasn't moved, so pushing again would fail the same way", String(error));
+        }
+        log(`couldn't push ${gated}, since the PR's head moved, so no reply or summary is posted and the next round tries again: ${error}`);
         return { kind: "push-failed", error: host.publicError(error) };
       }
     }
 
-    const { actions, ignored } = threadActions(verdicts, forRole);
+    const { kept, unverified } = await fixesInPush(sandbox, verdicts, gated, target.headRefOid);
+    if (unverified.length > 0) log(`left ${unverified.length} "fixed" verdict(s) unanswered: their commit isn't one this pass added`);
+    const { actions, ignored } = threadActions(kept, forRole);
     const failedWrites = answerThreads(actions, host, log);
     try {
       host.commentOnPullRequest(
         target.number,
-        passSummaryComment({ pass: passCount + 1, pushed, merged, actions, ignored, failedWrites, leftForHuman }),
+        passSummaryComment(
+          { pass: passCount + 1, pushed, merged, actions, ignored, unverified, failedWrites, leftForHuman },
+          (text) => host.publicError(text),
+        ),
       );
     } catch (error) {
       log(`posting the pass summary failed, so this pass isn't counted: ${error}`);
