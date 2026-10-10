@@ -577,6 +577,63 @@ describe("intakeRound", () => {
     assert.deepEqual(warnings, []);
   });
 
+  // Narrowing a failed batch makes single-issue batches back to back, each of
+  // whose edits can fail for that issue's own reasons, so they don't count
+  // toward the refused-batches limit (#229).
+  it("still judges the rest when single-issue batches from narrowing are refused in a row", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE + 1 }, (_, i) => issue(i + 1));
+    const closed = ["2", "3"];
+    const gh = recordingGh(["Sandcastle"], (args) => (args[1] === "edit" && closed.includes(String(args[2])) ? new Error("gh: issue closed") : undefined));
+    const warnings: string[] = [];
+
+    await intakeRound(
+      issues,
+      [],
+      async (promptArgs) => {
+        const sent: number[] = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        if (sent.includes(1)) throw new Error("truncated <intake> block");
+        return sent.map((number) => verdict(number, { reason: "clear and checkable" }));
+      },
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+      () => {},
+      (message) => warnings.push(message),
+    );
+
+    const edited = issues
+      .map((i) => i.number)
+      .filter((number) => gh.calls.some((call) => call.args[1] === "edit" && call.args[2] === String(number)));
+    assert.deepEqual(edited, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    assert.ok(!warnings.some((warning) => /GitHub refused/.test(warning)), warnings.join("\n"));
+  });
+
+  // Refused batches with a good one between them aren't "in a row" (#229).
+  it("still judges the next batch when a batch GitHub accepted sits between two refused ones", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE * 4 }, (_, i) => issue(i + 1));
+    const refused = (number: number) => number <= INTAKE_BATCH_SIZE || (number > INTAKE_BATCH_SIZE * 2 && number <= INTAKE_BATCH_SIZE * 3);
+    const gh = recordingGh(["Sandcastle"], (args) => (args[1] === "edit" && refused(Number(args[2])) ? new Error("gh: HTTP 502") : undefined));
+    const warnings: string[] = [];
+
+    await intakeRound(
+      issues,
+      [],
+      async (promptArgs) => {
+        const sent: number[] = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        return sent.map((number) => verdict(number, { reason: "clear and checkable" }));
+      },
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+      () => {},
+      (message) => warnings.push(message),
+    );
+
+    const last = INTAKE_BATCH_SIZE * 4;
+    assert.ok(gh.calls.some((call) => call.args[1] === "edit" && call.args[2] === String(last)), JSON.stringify(gh.calls.length));
+    assert.ok(!warnings.some((warning) => /GitHub refused/.test(warning)), warnings.join("\n"));
+  });
+
   // The run that reaches the limit may be a batch's own: intake mustn't then
   // log that it's splitting a batch it never tries (#229).
   it("doesn't log a split it won't try once intake has stopped for the round", async () => {

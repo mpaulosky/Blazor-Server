@@ -79,10 +79,10 @@ export const INTAKE_BATCH_SIZE = 10;
 export const INTAKE_FAILED_RUNS_LIMIT = 8;
 
 // How many batches in a row may have GitHub refuse every verdict before
-// intake stops for the round. One refused edit can be the issue's own (closed
-// or transferred since the queue was read), and a narrowed batch can hold a
-// single issue, so one such batch isn't enough to tell that GitHub is
-// refusing the host (#229).
+// intake stops for the round. A batch counts only when it held more than one
+// verdict: one refused edit can be the issue's own (closed or transferred
+// since the queue was read), and narrowing a failed batch makes single-issue
+// batches back to back (#229).
 export const INTAKE_REFUSED_BATCHES_LIMIT = 2;
 
 // Gate-fixer runs allowed at each gate checkpoint before the issue's round is

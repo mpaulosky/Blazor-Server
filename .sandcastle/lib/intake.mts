@@ -313,8 +313,10 @@ export async function intakeRound(
     }
     failedInARow = 0;
     const { applied, failed } = applyVerdicts(batch, verdicts, gh, repo, report, log);
-    if (applied > 0) refusedInARow = 0;
-    else if (failed > 0) refusedInARow += 1;
+    // A batch counts only when GitHub refused more than one verdict in it: one
+    // refused edit can be that issue's own, and narrowing makes single-issue
+    // batches back to back. Any other run that answered resets the count.
+    refusedInARow = applied === 0 && failed > 1 ? refusedInARow + 1 : 0;
     if (refusedInARow >= INTAKE_REFUSED_BATCHES_LIMIT) {
       stopped = `GitHub refused every verdict in ${INTAKE_REFUSED_BATCHES_LIMIT} batches in a row`;
     }
