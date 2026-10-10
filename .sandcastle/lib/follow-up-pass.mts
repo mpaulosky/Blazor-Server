@@ -1079,6 +1079,17 @@ async function passOnMarkedIssue(
       log(`re-ran the failed jobs of ${rerun.join(", ")} once as flaky`);
     }
 
+    // The role ran only to read `ciLog` (no thread to answer, no conflict to
+    // resolve), so pushing nothing means it couldn't act on the forwarded
+    // check either: nothing re-runs a forwarded check the way a push or
+    // `gh run rerun --failed` does, so the next sweep would only find the
+    // same red check and run the role the same way again, over and over
+    // until FOLLOW_UP_PASS_CAP (#79). Giving up now, rather than reporting
+    // "passed", stops that at once instead of after two wasted repeats.
+    if (ciLog !== undefined && forRole.length === 0 && merged !== "conflicts" && pushed === undefined) {
+      return stop(`the follow-up role committed nothing for the forwarded failed-job log of ${checkList(redCi.forward)}`);
+    }
+
     try {
       host.commentOnPullRequest(
         target.number,

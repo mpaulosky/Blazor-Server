@@ -1536,6 +1536,31 @@ describe("runPass's red CI handling", () => {
     assert.equal(calls.push.length, 1);
   });
 
+  // #79's follow-up review: a CodeQL failure the role can't act on (an
+  // autobuild or infrastructure error, say) leaves the role committing
+  // nothing. Reporting "passed" there would only let the next sweep find the
+  // same red check and run the role the same way again, every sweep until
+  // FOLLOW_UP_PASS_CAP. Giving up at once instead stops that repeat as soon
+  // as it's seen, rather than after two more of the same costly pass.
+  it("gives up at once when the role commits nothing for a forwarded log, instead of reporting passed", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0, 0], followUpJson: "[]", roleNoCommit: ["follow-up"] });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: true,
+      sandbox,
+      checks: [redCheck({ name: "Analyze (csharp)" })],
+      failedCheckLog: "##[error] CS8600: converting null literal...",
+    });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Analyze (csharp) is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /Analyze \(csharp\)/);
+    assert.deepEqual(calls.push, []);
+    const roleRun = sandbox.runs.find((run) => run.name === "follow-up");
+    assert.ok(roleRun !== undefined, "the role still ran, and was given the log");
+  });
+
   // #79's follow-up review: a red check with no Actions run behind it (code
   // scanning's own "CodeQL" result, not the "Analyze" job) has no log a pass
   // could forward and nothing a pass could re-run, so sending it to the
