@@ -1,2 +1,9 @@
 /* source("..") roots the scan at src/UI, whatever directory the CLI runs from. */
 @import "tailwindcss" source("..");
+
+@layer base {
+	/* FocusOnNavigate moves focus to the h1 after navigation; utilities can't target :focus directly. */
+	h1:focus {
+		outline: none;
+	}
+}
