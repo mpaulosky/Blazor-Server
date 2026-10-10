@@ -41,6 +41,7 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.123](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.123) | 2026-10-10 | feat(ui): Add the Blazor Web App with Tailwind CSS and feature slices | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-260-feat-ui-add-the-blazor-web-app-with-tailwind-css-and-feature-slices.md) |
 | [v0.0.122](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.122) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-264-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.121](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.121) | 2026-10-10 | feat(sandcastle): Write a run report with outcomes, hand-backs and token usage | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) |
 | [v0.0.120](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.120) | 2026-10-10 | feat(sandcastle): Follow-up passes fix red CI on Sandcastle PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-259-feat-sandcastle-follow-up-passes-fix-red-ci-on-sandcastle-prs.md) |
@@ -50,7 +51,6 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
 | [v0.0.116](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.116) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-251-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.115](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.115) | 2026-10-10 | feat(sandcastle): Follow-up passes resolve review threads and merge conflicts | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-243-feat-sandcastle-follow-up-passes-resolve-review-threads-and-merge-conflicts.md) |
 | [v0.0.114](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.114) | 2026-10-10 | chore(sandcastle): Install Chromium's system libraries in the sandbox image | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-248-chore-sandcastle-install-chromium-s-system-libraries-in-the-sandbox-image.md) |
-| [v0.0.113](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.113) | 2026-10-10 | feat(sandcastle): Stop unattended runs cleanly when there's no work, time or usage left | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-241-feat-sandcastle-stop-unattended-runs-cleanly-when-there-s-no-work-time-or-usage-left.md) |
 
 <!-- RELEASES_END -->
 
