@@ -455,6 +455,7 @@ describe("isGitHubServerError", () => {
       "gh pr list failed:\nHTTP 502: Bad Gateway (https://api.github.com/graphql)",
       "gh pr create failed:\nService Unavailable",
       "gh pr create failed:\nGateway Timeout",
+      "gh pr create failed:\nGraphQL: Something went wrong while executing your query. This may be the result of a timeout, or it could be a GitHub bug.",
     ]) {
       assert.equal(isGitHubServerError(new Error(output)), true, output);
     }
