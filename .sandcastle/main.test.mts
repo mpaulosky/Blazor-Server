@@ -51,10 +51,10 @@ describe("main.mts header", () => {
 describe("main.mts's intake wiring", () => {
   it("runs intake before the blocker gate", () => {
     const mainMts = read(".sandcastle/main.mts");
-    const intakeCall = mainMts.indexOf("intakeRound(");
+    const intakeCall = mainMts.indexOf("intakePhase(");
     const gateCall = mainMts.indexOf("gateIssues()");
 
-    assert.notEqual(intakeCall, -1, "main.mts doesn't call intakeRound(");
+    assert.notEqual(intakeCall, -1, "main.mts doesn't call intakePhase(");
     assert.notEqual(gateCall, -1, "main.mts doesn't call gateIssues()");
     assert.ok(intakeCall < gateCall, "main.mts doesn't run intake before the blocker gate");
   });
@@ -63,7 +63,7 @@ describe("main.mts's intake wiring", () => {
   // whose work is already waiting for review.
   it("passes intake the open pull requests", () => {
     const mainMts = read(".sandcastle/main.mts");
-    const call = mainMts.slice(mainMts.indexOf("intakeRound("), mainMts.indexOf(";", mainMts.indexOf("intakeRound(")));
+    const call = mainMts.slice(mainMts.indexOf("intakePhase("), mainMts.indexOf(";", mainMts.indexOf("intakePhase(")));
 
     assert.match(call, /openPullRequests\(\)/);
   });

@@ -68,11 +68,10 @@ import { clearStaleBuildingLabels, installBuildingLabelRelease, releaseAllBuildi
 import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { BUILDING_LABEL, MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
-import { UncountedStopError } from "./lib/errors.mts";
 import { gateIssues } from "./lib/gate.mts";
 import { cacheHostLogin, ensureLabels, listSandcastleIssues, openPullRequests } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
-import { intakeRound } from "./lib/intake.mts";
+import { intakePhase } from "./lib/intake.mts";
 import { planRound } from "./lib/plan.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
@@ -119,16 +118,9 @@ try {
     // -----------------------------------------------------------------------
     // Phase 0a: Intake
     // -----------------------------------------------------------------------
-    // Runs before the gate, over blocked issues too, so a human sees intake's
-    // questions while a blocker is still in flight. A failed intake run only
-    // costs its issues this round: without sandcastle:ready the gate holds
-    // them back, and the issues already ready can still be built.
-    try {
-      await intakeRound(listSandcastleIssues(), openPullRequests());
-    } catch (error) {
-      if (error instanceof UncountedStopError) throw error;
-      console.error(`  ✗ Intake failed, so the issues it was judging wait for the next round: ${error}`);
-    }
+    // See lib/intake.mts#intakePhase: a failed intake is logged and costs only
+    // the issues it was judging this round.
+    await intakePhase(() => ({ issues: listSandcastleIssues(), openPrs: openPullRequests() }));
 
     // -----------------------------------------------------------------------
     // Phase 0b: Gate

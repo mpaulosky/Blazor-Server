@@ -16,6 +16,7 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { BUILDING_LABEL, hooks } from "./config.mts";
+import { UncountedStopError } from "./errors.mts";
 import { openPrReason } from "./gate.mts";
 import {
   addIssueLabel,
@@ -67,18 +68,25 @@ export function needsIntake(issues: readonly SandcastleIssue[], openPrs: readonl
 
 export type IntakeRun = (promptArgs: ReturnType<typeof intakePromptArgs>) => Promise<IntakeVerdict[]>;
 
-// Throws StructuredOutputError when the <intake> tag is missing, the JSON is
-// malformed or it doesn't match the schema.
-const runIntake: IntakeRun = async (promptArgs) => {
-  const intake = await runRole("intake", {
-    hooks,
-    sandbox: agentSandbox(),
-    promptFile: "./.sandcastle/intake-prompt.md",
-    promptArgs,
-    output: sandcastle.Output.object({ tag: "intake", schema: intakeSchema }),
-  });
-  return intake.output.verdicts;
-};
+// The live intake run: the intake role on intake-prompt.md, in a sandbox,
+// asking for an <intake> block checked against intakeSchema. Sandcastle
+// throws StructuredOutputError when the tag is missing, the JSON is malformed
+// or it doesn't match the schema. `run` and `sandbox` are Sandcastle's,
+// passed in so a test can stub them.
+export function intakeRunner(run: typeof runRole = runRole, sandbox: typeof agentSandbox = agentSandbox): IntakeRun {
+  return async (promptArgs) => {
+    const intake = await run("intake", {
+      hooks,
+      sandbox: sandbox(),
+      promptFile: "./.sandcastle/intake-prompt.md",
+      promptArgs,
+      output: sandcastle.Output.object({ tag: "intake", schema: intakeSchema }),
+    });
+    return intake.output.verdicts;
+  };
+}
+
+const runIntake: IntakeRun = intakeRunner();
 
 // Apply intake's verdicts to the issues sent to it. A ready verdict adds
 // sandcastle:ready with one comment saying why. A needs-info verdict hands
@@ -114,13 +122,14 @@ export function applyVerdicts(
     // Handing an issue back with no questions would leave its author nothing
     // to answer, so such a verdict counts as none.
     if (verdict.verdict === "needs-info" && questionsOf(verdict).length === 0) {
-      log(`  ⚠ Ignoring intake's needs-info verdict on ${ref}: it has no questions, so it's judged again next round.`);
+      log(`  ⚠ Ignoring intake's needs-info verdict on ${ref}: it has no questions, so it's judged again in a later round or run.`);
       continue;
     }
 
     // A failed gh call before the verdict's labels land leaves the issue
-    // unjudged, so the gate holds it back and the next round's intake judges
-    // it again.
+    // unjudged, so the gate holds it back and intake judges it again in a
+    // later round, or on the next run when nothing else is ready and this run
+    // ends after the gate.
     try {
       // Another Sandcastle run may have judged the issue since this round read
       // the queue: applying this verdict too would leave two comments,
@@ -131,7 +140,7 @@ export function applyVerdicts(
       }
       applyVerdict(issue.number, verdict, run, repo, report, log);
     } catch (error) {
-      log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again next round: ${error}`);
+      log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again in a later round or run: ${error}`);
       continue;
     }
     const bugNote = verdict.bug ? " (a bug)" : "";
@@ -143,7 +152,7 @@ export function applyVerdicts(
   }
 
   for (const id of sent.keys()) {
-    if (!judged.has(id)) log(`  ⚠ Intake gave no verdict on #${id}, so it's judged again next round.`);
+    if (!judged.has(id)) log(`  ⚠ Intake gave no verdict on #${id}, so it's judged again in a later round or run.`);
   }
 }
 
@@ -197,7 +206,7 @@ export function readyComment(verdict: IntakeVerdict): string {
 // blank ones dropped.
 function questionsOf(verdict: IntakeVerdict): string[] {
   return (verdict.questions ?? [])
-    .map((question) => question.replace(/\s+/g, " ").trim().replace(/^\d+[.)]\s*/, ""))
+    .map((question) => question.replace(/\s+/g, " ").trim().replace(/^\d+[.)]\s+/, ""))
     .filter((question) => question !== "");
 }
 
@@ -236,4 +245,27 @@ export async function intakeRound(
   log(`Intake is judging ${toJudge.length} issue(s) against the Definition of Ready: ${toJudge.map((issue) => `#${issue.number}`).join(", ")}`);
   const verdicts = await run(intakePromptArgs(toJudge));
   applyVerdicts(toJudge, verdicts, gh, repo, report, log);
+}
+
+// Phase 0a as main.mts runs it: load the queue and the open PRs, then run
+// intake over them. Intake runs before the gate, over blocked issues too, so a
+// human sees its questions while a blocker is still in flight. A failure,
+// whether loading or judging, is logged and costs only the issues intake was
+// judging this round: without sandcastle:ready the gate holds them back, and
+// the issues already ready can still be built. They're judged again in a
+// later round, or on the next run when nothing else is ready, since the run
+// then ends after the gate. An UncountedStopError (a usage
+// limit or time budget) still ends the run.
+export async function intakePhase(
+  load: () => { issues: readonly SandcastleIssue[]; openPrs: readonly OpenPullRequest[] },
+  round: (issues: readonly SandcastleIssue[], openPrs: readonly OpenPullRequest[]) => Promise<void> = intakeRound,
+  warn: (message: string) => void = console.error,
+): Promise<void> {
+  try {
+    const { issues, openPrs } = load();
+    await round(issues, openPrs);
+  } catch (error) {
+    if (error instanceof UncountedStopError) throw error;
+    warn(`  ✗ Intake failed, so the issues it was judging wait for a later round or run: ${error}`);
+  }
 }

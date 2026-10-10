@@ -3,7 +3,8 @@ import type { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { BUILDING_LABEL, SANDCASTLE_LABELS } from "./config.mts";
 import type { OpenPullRequest, SandcastleIssue } from "./github.mts";
-import { applyVerdicts, intakeRound, needsIntake, type IntakeVerdict } from "./intake.mts";
+import { UncountedStopError } from "./errors.mts";
+import { applyVerdicts, intakePhase, intakeRound, intakeRunner, needsIntake, type IntakeVerdict } from "./intake.mts";
 import { HandBackReport } from "./report.mts";
 
 const issue = (number: number, labels: string[] = ["Sandcastle"]): SandcastleIssue => ({
@@ -196,7 +197,7 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
     applyVerdicts([issue(1)], [verdict(1)], gh.run, "o/r", new HandBackReport(), (line) => lines.push(line));
 
     assert.ok(!gh.calls.some((call) => call.args[1] === "comment"));
-    assert.ok(lines.some((line) => line.includes("#1") && line.includes("judged again next round")), lines.join("\n"));
+    assert.ok(lines.some((line) => line.includes("#1") && line.includes("judged again in a later round or run")), lines.join("\n"));
   });
 
   // Added before the hand-back, so a failed bug edit leaves the issue
@@ -218,7 +219,7 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
     assert.ok(!gh.calls.some((call) => call.args[1] === "comment"));
     assert.ok(!gh.calls.some((call) => call.args.includes("sandcastle:needs-info")));
     assert.deepEqual(report.items(), []);
-    assert.ok(lines.some((line) => line.includes("#4") && line.includes("judged again next round")), lines.join("\n"));
+    assert.ok(lines.some((line) => line.includes("#4") && line.includes("judged again in a later round or run")), lines.join("\n"));
   });
 
   // Handing an issue back without questions would leave its author nothing to
@@ -341,6 +342,13 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
       ]);
     });
 
+    it("leaves a question that starts with a number alone", () => {
+      assert.deepEqual(posted(["2.0 or 3.0: which API version?", "3.5 seconds or 5?"]), [
+        "1. 2.0 or 3.0: which API version?",
+        "2. 3.5 seconds or 5?",
+      ]);
+    });
+
     it("doesn't number a question twice when intake numbered it", () => {
       assert.deepEqual(posted(["1. Which page?", "2) Which Theme?"]), ["1. Which page?", "2. Which Theme?"]);
     });
@@ -435,4 +443,138 @@ describe("intakeRound", () => {
     const edits = gh.calls.filter((call) => call.args[0] === "issue" && call.args[1] === "edit");
     assert.deepEqual(edits.map((call) => call.args), [["issue", "edit", "2", "--repo", "o/r", "--add-label", "sandcastle:ready"]]);
   });
+});
+
+// main.mts's Phase 0a: a failed intake costs only the issues it was judging
+// this round, and the run carries on to the gate.
+describe("intakePhase", () => {
+  // When nothing else is ready the run ends after the gate, so the retry may
+  // only come with the next Sandcastle run, and the log says so.
+  it("logs an intake run that throws, and carries on", async () => {
+    const warnings: string[] = [];
+
+    await intakePhase(
+      () => ({ issues: [issue(1)], openPrs: [] }),
+      async () => {
+        throw new Error("StructuredOutputError: no <intake> tag");
+      },
+      (message) => warnings.push(message),
+    );
+
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /no <intake> tag/);
+    assert.match(warnings[0]!, /a later round or run/);
+  });
+
+  it("logs a queue that can't be read, and carries on without running intake", async () => {
+    let ran = false;
+    const warnings: string[] = [];
+
+    await intakePhase(
+      () => {
+        throw new Error("gh issue list failed:\nHTTP 502");
+      },
+      async () => {
+        ran = true;
+      },
+      (message) => warnings.push(message),
+    );
+
+    assert.equal(ran, false);
+    assert.match(warnings[0]!, /502/);
+  });
+
+  // A usage limit or time budget ends the whole run, not just intake.
+  it("rethrows an UncountedStopError", async () => {
+    const stop = new UncountedStopError("usage limit reached");
+
+    await assert.rejects(
+      intakePhase(
+        () => ({ issues: [issue(1)], openPrs: [] }),
+        async () => {
+          throw stop;
+        },
+        () => {},
+      ),
+      (error) => error === stop,
+    );
+  });
+
+  it("passes intake the issues and open PRs it loaded", async () => {
+    const openPrs = [{ number: 50, headRefName: "feature/2-a-thing" }];
+    let received: unknown;
+
+    await intakePhase(
+      () => ({ issues: [issue(1)], openPrs }),
+      async (issues, prs) => {
+        received = { issues: issues.map((i) => i.number), prs };
+      },
+      () => {},
+    );
+
+    assert.deepEqual(received, { issues: [1], prs: openPrs });
+  });
+});
+
+// The live intake run, with Sandcastle's runRole stubbed. Sandcastle itself
+// turns a missing <intake> tag or invalid JSON into a StructuredOutputError;
+// what's ours is the role, prompt, tag and schema it's given.
+describe("intakeRunner", () => {
+  // A runRole stub that records its call and answers with `verdicts`.
+  function stubRunRole(verdicts: IntakeVerdict[] = []) {
+    const calls: { role: string; options: { promptFile?: string; promptArgs?: unknown; output: { tag: string; schema: unknown } } }[] = [];
+    const runRole = (async (role: string, options: (typeof calls)[number]["options"]) => {
+      calls.push({ role, options });
+      return { iterations: [], commits: [], output: { verdicts } };
+    }) as unknown as Parameters<typeof intakeRunner>[0];
+    return { calls, runRole };
+  }
+  const noSandbox = (() => ({})) as unknown as Parameters<typeof intakeRunner>[1];
+  // Validates `value` with the schema runIntake hands Sandcastle, as
+  // Sandcastle does with the parsed <intake> JSON.
+  async function validate(schema: unknown, value: unknown) {
+    return (schema as { "~standard": { validate(value: unknown): Promise<{ issues?: unknown[] }> | { issues?: unknown[] } } })["~standard"].validate(value);
+  }
+
+  it("runs the intake role on intake-prompt.md, asking for an <intake> block, and returns its verdicts", async () => {
+    const { calls, runRole } = stubRunRole([verdict(3)]);
+
+    const verdicts = await intakeRunner(runRole, noSandbox)({ ISSUES_JSON: "[]" });
+
+    assert.deepEqual(verdicts, [verdict(3)]);
+    assert.equal(calls[0]!.role, "intake");
+    assert.equal(calls[0]!.options.promptFile, "./.sandcastle/intake-prompt.md");
+    assert.deepEqual(calls[0]!.options.promptArgs, { ISSUES_JSON: "[]" });
+    assert.equal(calls[0]!.options.output.tag, "intake");
+  });
+
+  it("gives Sandcastle a schema that accepts the prompt's example verdicts", async () => {
+    const { calls, runRole } = stubRunRole();
+    await intakeRunner(runRole, noSandbox)({ ISSUES_JSON: "[]" });
+
+    const result = await validate(calls[0]!.options.output.schema, {
+      verdicts: [
+        { id: "42", verdict: "ready", bug: false, reason: "Clear." },
+        { id: "43", verdict: "needs-info", bug: false, questions: ["Which scales?"], reason: "Open question." },
+      ],
+    });
+
+    assert.equal(result.issues, undefined);
+  });
+
+  for (const [what, value] of [
+    ["an unknown verdict", { verdicts: [{ id: "1", verdict: "maybe", bug: false, reason: "?" }] }],
+    ["a verdict without bug", { verdicts: [{ id: "1", verdict: "ready", reason: "?" }] }],
+    ["a numeric id", { verdicts: [{ id: 1, verdict: "ready", bug: false, reason: "?" }] }],
+    ["no verdicts list", { verdict: "ready" }],
+  ] as const) {
+    it(`gives Sandcastle a schema that rejects ${what}`, async () => {
+      const { calls, runRole } = stubRunRole();
+      await intakeRunner(runRole, noSandbox)({ ISSUES_JSON: "[]" });
+
+      const result = await validate(calls[0]!.options.output.schema, value);
+
+      assert.ok(result.issues && result.issues.length > 0);
+    });
+  }
 });
