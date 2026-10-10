@@ -101,7 +101,7 @@ import { cacheHostLogin, ensureLabels, openPullRequests } from "./lib/github.mts
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { planRound, resolveRoles } from "./lib/plan.mts";
-import { loadQueue, useQueueScope } from "./lib/queue.mts";
+import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
@@ -163,6 +163,9 @@ try {
     // -----------------------------------------------------------------------
     // The sweep runs first, even in a round that then exits early. A failure
     // in either step is logged, and the step runs again next round.
+    // Every phase below loads the queue; they share one read of each issue
+    // this round.
+    startQueueRound();
     followUpPhase();
     umbrellaPhase();
 

@@ -34,7 +34,7 @@ import {
   type PullRequestIdentity,
   type TimelineLabelEvent,
 } from "./github.mts";
-import { labelOriginFixes, loadQueue, type IsOwner } from "./queue.mts";
+import { labelOriginFixes, loadQueue, ownerCheck, type IsOwner } from "./queue.mts";
 
 // One check run or status on a PR's head commit, normalised from either
 // GraphQL shape (CheckRun or StatusContext) by lib/github.mts#openPullRequestsForSweep.
@@ -250,7 +250,7 @@ export const liveFollowUpGitHub: FollowUpGitHub = {
   requestCopilotReview: (pullRequestId) => requestCopilotReview(pullRequestId),
   updateBranch: (number, expectedHeadSha) => updatePullRequestBranch(number, expectedHeadSha),
   handBack: (issueNumber, reason, body) => handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body),
-  isOwner: (login) => pushAccess(login),
+  isOwner: ownerCheck(() => signedInHostLogin(), (login) => pushAccess(login)),
   pullRequestEvents: (number) => issueEvents(number),
   addPullRequestLabel: (number, label) => addPullRequestLabel(number, label),
 };

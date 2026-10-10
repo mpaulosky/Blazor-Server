@@ -8,7 +8,9 @@ import {
   ISSUE_LABEL_RULES,
   labelOriginFixes,
   loadQueue,
+  ownerCheck,
   type IsOwner,
+  type QueueCache,
   type QueueGitHub,
 } from "./queue.mts";
 
@@ -224,7 +226,7 @@ describe("loadQueue", () => {
     const { github, removed, added } = stubQueueGithub({ issues: [issue(10)], events });
     const lines: string[] = [];
 
-    const kept = loadQueue(SCOPE, github, (line) => lines.push(line), new Set());
+    const kept = loadQueue(SCOPE, github, (line) => lines.push(line), new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), []);
     assert.ok(lines.some((line) => line.includes("#10") && line.includes("stranger")), lines.join("\n"));
@@ -236,7 +238,7 @@ describe("loadQueue", () => {
     const events = { 11: [{ event: "labeled" as const, actor: "host", label: "Sandcastle", createdAt: "2026-10-01T00:00:00Z" }] };
     const { github } = stubQueueGithub({ issues: [issue(11)], events });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), [11]);
   });
@@ -250,7 +252,7 @@ describe("loadQueue", () => {
     };
     const { github } = stubQueueGithub({ issues: [issue(12)], events });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), []);
   });
@@ -259,7 +261,7 @@ describe("loadQueue", () => {
     const events = { 13: [{ event: "labeled" as const, actor: "ghost", label: "Sandcastle", createdAt: "2026-10-01T00:00:00Z" }] };
     const { github, removed, added } = stubQueueGithub({ issues: [issue(13)], events });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), []);
     assert.deepEqual(removed, []);
@@ -271,7 +273,7 @@ describe("loadQueue", () => {
     const events = { 14: [{ event: "labeled" as const, actor: "owner", label: "Sandcastle:dev", createdAt: "2026-10-01T00:00:00Z" }] };
     const { github } = stubQueueGithub({ issues: [issue(14, ["Sandcastle:dev"])], events });
 
-    const kept = loadQueue(scope, github, () => {}, new Set());
+    const kept = loadQueue(scope, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), [14]);
   });
@@ -281,7 +283,7 @@ describe("loadQueue", () => {
     const edits = { 20: [{ editor: "stranger", editedAt: "2026-10-02T00:00:00Z" }] };
     const { github } = stubQueueGithub({ issues: [issue(20)], events, edits });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), []);
   });
@@ -295,7 +297,7 @@ describe("loadQueue", () => {
     };
     const { github } = stubQueueGithub({ issues: [issue(21)], events });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), []);
   });
@@ -305,7 +307,7 @@ describe("loadQueue", () => {
     const edits = { 22: [{ editor: "stranger", editedAt: "2026-10-01T00:00:00Z" }] };
     const { github } = stubQueueGithub({ issues: [issue(22)], events, edits });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), []);
   });
@@ -315,7 +317,7 @@ describe("loadQueue", () => {
     const edits = { 23: [{ editor: "stranger", editedAt: "2026-10-01T00:00:00Z" }] };
     const { github } = stubQueueGithub({ issues: [issue(23)], events, edits });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), [23]);
   });
@@ -330,7 +332,7 @@ describe("loadQueue", () => {
     const edits = { 24: [{ editor: "stranger", editedAt: "2026-10-02T00:00:00Z" }] };
     const { github } = stubQueueGithub({ issues: [issue(24)], events, edits });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), [24]);
   });
@@ -340,7 +342,7 @@ describe("loadQueue", () => {
     const edits = { 25: [{ editor: "stranger", editedAt: "2026-10-02T00:00:00Z" }] };
     const { github } = stubQueueGithub({ issues: [issue(25)], events, edits });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(needsIntake(kept).map((i) => i.number), []);
   });
@@ -354,7 +356,7 @@ describe("loadQueue", () => {
     };
     const { github, removed } = stubQueueGithub({ issues: [issue(30, ["Sandcastle", "sandcastle:ready"])], events });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(removed, [{ number: 30, label: "sandcastle:ready" }]);
     assert.deepEqual(kept[0]?.labels, ["Sandcastle"]);
@@ -370,7 +372,7 @@ describe("loadQueue", () => {
     };
     const { github, removed } = stubQueueGithub({ issues: [issue(31, ["Sandcastle", "sandcastle:ready"])], events });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(removed, []);
     assert.deepEqual(kept[0]?.labels, ["Sandcastle", "sandcastle:ready"]);
@@ -386,7 +388,7 @@ describe("loadQueue", () => {
       };
       const { github, added } = stubQueueGithub({ issues: [issue(32, ["Sandcastle"])], events });
 
-      const kept = loadQueue(SCOPE, github, () => {}, new Set());
+      const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
       assert.deepEqual(added, [{ number: 32, label: handBackLabel }]);
       assert.ok(kept[0]?.labels.includes(handBackLabel), JSON.stringify(kept));
@@ -403,7 +405,7 @@ describe("loadQueue", () => {
     };
     const { github, added } = stubQueueGithub({ issues: [issue(33, ["Sandcastle"])], events });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(added, []);
     assert.deepEqual(kept[0]?.labels, ["Sandcastle"]);
@@ -418,7 +420,7 @@ describe("loadQueue", () => {
     };
     const { github } = stubQueueGithub({ issues: [issue(34, ["Sandcastle", "sandcastle:ready"])], events, fail: new Set([34]) });
 
-    const kept = loadQueue(SCOPE, github, () => {}, new Set());
+    const kept = loadQueue(SCOPE, github, () => {}, new Set(), new Map());
 
     assert.deepEqual(kept.map((i) => i.number), []);
   });
@@ -429,4 +431,107 @@ describe("ISSUE_LABEL_RULES", () => {
     assert.deepEqual(ISSUE_LABEL_RULES.trustAdds, ["sandcastle:ready"]);
     assert.deepEqual([...ISSUE_LABEL_RULES.trustRemovals], ["sandcastle:needs-info", "sandcastle:needs-human"]);
   });
+});
+
+// GitHub Actions' host can act as a GitHub App, whose "<app>[bot]" login has
+// no collaborator permission: the lookup answers no. The host's own label
+// changes (intake's sandcastle:ready, a split's children) must still count
+// as the owner's.
+describe("ownerCheck", () => {
+  const HOST_BOT = "sandcastle-app[bot]";
+
+  it("counts the host's own login as the owner, even when its permission lookup says no", () => {
+    const asked: (string | null)[] = [];
+    const isOwner = ownerCheck(() => HOST_BOT, (login) => {
+      asked.push(login);
+      return false;
+    });
+
+    assert.equal(isOwner(HOST_BOT), true);
+    assert.deepEqual(asked, []);
+  });
+
+  it("asks the permission check about every other login, and a deleted account", () => {
+    const isOwner = ownerCheck(() => HOST_BOT, isOwnerOf({ owner: true, stranger: false }));
+
+    assert.deepEqual([isOwner("owner"), isOwner("stranger"), isOwner("ghost"), isOwner(null)], [true, false, undefined, false]);
+  });
+
+  it("keeps an issue a [bot] host labelled and marked ready, end to end through loadQueue", () => {
+    const events = {
+      20: [
+        { event: "labeled" as const, actor: "owner", label: "Sandcastle", createdAt: "2026-10-01T00:00:00Z" },
+        { event: "labeled" as const, actor: HOST_BOT, label: "sandcastle:ready", createdAt: "2026-10-02T00:00:00Z" },
+      ],
+    };
+    const isOwner = ownerCheck(() => HOST_BOT, isOwnerOf({ owner: true, [HOST_BOT]: false }));
+    const { github, removed } = stubQueueGithub({ issues: [issue(20, ["Sandcastle", "sandcastle:ready"])], events, isOwner });
+
+    const kept = loadQueue({ kind: "label", label: "Sandcastle" }, github, () => {}, new Set(), new Map());
+
+    assert.deepEqual(kept.map((i) => i.labels), [["Sandcastle", "sandcastle:ready"]]);
+    assert.deepEqual(removed, []);
+  });
+});
+
+describe("loadQueue's round cache", () => {
+  const SCOPE = { kind: "label", label: "Sandcastle" } as const;
+  const owned = { 30: [{ event: "labeled" as const, actor: "owner", label: "Sandcastle", createdAt: "2026-10-01T00:00:00Z" }] };
+
+  // A stub that counts the per-issue reads, the calls that cost a GitHub
+  // request each.
+  function counting(issues: SandcastleIssue[]) {
+    const reads = { events: 0, edits: 0 };
+    const { github } = stubQueueGithub({ issues, events: owned });
+    return {
+      reads,
+      github: {
+        ...github,
+        events: (number: number) => (reads.events++, github.events(number)),
+        bodyEdits: (number: number) => (reads.edits++, github.bodyEdits(number)),
+      },
+    };
+  }
+
+  it("reads an unchanged issue's events and body edits once a round, however many phases load the queue", () => {
+    const { github, reads } = counting([issue(30)]);
+    const cache: QueueCache = new Map();
+
+    for (let phase = 0; phase < 3; phase++) loadQueue(SCOPE, github, () => {}, new Set(), cache);
+
+    assert.deepEqual(reads, { events: 1, edits: 1 });
+  });
+
+  it("reads them again once the issue's labels, title or body changed, as intake's own writes change them", () => {
+    const cache: QueueCache = new Map();
+    const reads = [issue(30), { ...issue(30), labels: ["Sandcastle", "sandcastle:ready"] }, { ...issue(30), title: "Renamed" }, { ...issue(30), body: "Edited" }].map(
+      (changed) => {
+        const { github, reads } = counting([changed]);
+        loadQueue(SCOPE, github, () => {}, new Set(), cache);
+        return reads.events;
+      },
+    );
+
+    assert.deepEqual(reads, [1, 1, 1, 1]);
+  });
+
+  it("reads them again in a new round, with a fresh cache", () => {
+    const { github, reads } = counting([issue(30)]);
+
+    loadQueue(SCOPE, github, () => {}, new Set(), new Map());
+    loadQueue(SCOPE, github, () => {}, new Set(), new Map());
+
+    assert.equal(reads.events, 2);
+  });
+});
+
+// GitHub matches label names case-insensitively, so gh lists an issue
+// labelled Sandcastle:dev for SANDCASTLE_LABEL=sandcastle:dev.
+it("keeps an issue whose queue label differs from the scope's only in case", () => {
+  const events = { 40: [{ event: "labeled" as const, actor: "owner", label: "Sandcastle:dev", createdAt: "2026-10-01T00:00:00Z" }] };
+  const { github } = stubQueueGithub({ issues: [issue(40, ["Sandcastle:dev"])], events });
+
+  const kept = loadQueue({ kind: "label", label: "sandcastle:dev" }, github, () => {}, new Set(), new Map());
+
+  assert.deepEqual(kept.map((i) => i.number), [40]);
 });

@@ -20,6 +20,7 @@ import {
   listSandcastleIssues,
   pushAccess,
   removeIssueLabel,
+  signedInHostLogin,
   type ContentEdit,
   type IssueEvent,
   type SandcastleIssue,
@@ -49,6 +50,16 @@ export function activeQueueScope(): QueueScope {
 // drives a write: the caller holds the issue back and checks again next
 // round.
 export type IsOwner = (login: string | null) => boolean | undefined;
+
+// An IsOwner that counts the host's own login as the owner before asking
+// `access`. GitHub Actions' host can act as a GitHub App, whose "<app>[bot]"
+// login has no collaborator permission, so the lookup would call every label
+// the host itself adds or removes (intake's sandcastle:ready, a split's
+// children, loadQueue's own restores) a stranger's. `hostLogin` is read only
+// when a login needs checking.
+export function ownerCheck(hostLogin: () => string, access: IsOwner): IsOwner {
+  return (login) => (login !== null && login === hostLogin() ? true : access(login));
+}
 
 export type Approval = { approved: true } | { approved: false; reason: string };
 
@@ -190,6 +201,28 @@ export type QueueGitHub = {
 // round), so one skip prints once, not three times.
 const skipsLogged = new Set<string>();
 
+// One round's per-issue reads (events and body edits), keyed by what loadQueue
+// can see of the issue (see cacheKey).
+export type QueueCache = Map<string, { events: IssueEvent[]; edits: ContentEdit[] }>;
+
+let roundCache: QueueCache = new Map();
+
+// Starts a new round's cache. main.mts calls it at the top of every round,
+// so the sweep, intake and the gate (each of which loads the queue) share
+// one read of each issue's events and body edits: two GitHub requests an
+// issue a round, not six, which a full queue over several rounds would
+// otherwise spend against the hourly API limit.
+export function startQueueRound(): void {
+  roundCache = new Map();
+}
+
+// An issue's labels, title and body, so a change between phases (intake's
+// own label writes, a rename or body edit) reads its events again rather
+// than judging it from a stale list.
+function cacheKey(issue: SandcastleIssue): string {
+  return JSON.stringify([issue.number, [...issue.labels].map((label) => label.toLowerCase()).sort(), issue.title, issue.body]);
+}
+
 // The live QueueGitHub. A factory, so each load gets one fresh set of failed
 // permission lookups, shared by the comment filter and isOwner: a login
 // whose lookup failed isn't asked about again in the same load, and is
@@ -200,7 +233,7 @@ export function liveQueueGitHub(): QueueGitHub {
     issuesInScope: (scope) => listSandcastleIssues(undefined, undefined, undefined, undefined, scope, failed),
     events: (number) => issueEvents(number),
     bodyEdits: (number) => bodyEdits(number),
-    isOwner: (login) => pushAccess(login, undefined, failed),
+    isOwner: ownerCheck(() => signedInHostLogin(), (login) => pushAccess(login, undefined, failed)),
     removeLabel: (number, label) => removeIssueLabel(number, label),
     addLabel: (number, label) => addIssueLabel(number, label),
   };
@@ -218,6 +251,7 @@ export function loadQueue(
   github: QueueGitHub = liveQueueGitHub(),
   log: (line: string) => void = console.log,
   logged: Set<string> = skipsLogged,
+  cache: QueueCache = roundCache,
 ): SandcastleIssue[] {
   const queueLabel = queueLabelOf(scope);
   const skip = (issue: SandcastleIssue, reason: string): void => {
@@ -234,8 +268,14 @@ export function loadQueue(
       continue;
     }
     try {
-      const events = github.events(issue.number);
-      const verdict = approval(queueLabel, events, github.bodyEdits(issue.number), github.isOwner);
+      const key = cacheKey(issue);
+      let read = cache.get(key);
+      if (read === undefined) {
+        read = { events: github.events(issue.number), edits: github.bodyEdits(issue.number) };
+        cache.set(key, read);
+      }
+      const { events } = read;
+      const verdict = approval(queueLabel, events, read.edits, github.isOwner);
       if (!verdict.approved) {
         skip(issue, verdict.reason);
         continue;

@@ -87,6 +87,18 @@ describe("main.mts's queue-scope wiring", () => {
   });
 });
 
+describe("main.mts's queue round", () => {
+  it("starts a fresh queue round at the top of each round, before the follow-up sweep", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+    const startRound = mainMts.indexOf("startQueueRound()", loop);
+    const sweep = mainMts.indexOf("followUpPhase()", loop);
+
+    assert.notEqual(startRound, -1, "main.mts's round loop doesn't call startQueueRound()");
+    assert.ok(startRound < sweep, "main.mts doesn't start the queue round before the follow-up sweep");
+  });
+});
+
 // #146's first acceptance criterion: a local run without SANDCASTLE_ISSUE or
 // SANDCASTLE_LABEL must exit non-zero with a usage message and touch
 // nothing, not even shell out to gh, git or docker to check whether it
