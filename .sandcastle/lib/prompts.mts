@@ -1,6 +1,7 @@
 // Prompt arguments built from GitHub content. Roles can't reach GitHub, so this
 // is everything they learn about an issue. The issues passed in have already
-// lost every comment but the owner's (see ownerApproved).
+// lost every comment but those from authors with write access (see
+// ownerApproved).
 
 import type { Checkpoint } from "./checkpoint.mts";
 import { BASE_BRANCH } from "./config.mts";

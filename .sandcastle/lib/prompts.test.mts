@@ -2,20 +2,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { withSharedRules } from "./agents.mts";
-import { ownerApproved, type GhIssue } from "./github.mts";
+import type { SandcastleIssue } from "./github.mts";
 import { critiquePromptArgs, gateFixerPromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
-const ghIssue: GhIssue = {
+// What ownerApproved (see github.test.mts) leaves of an issue: only the
+// comments of authors with write access.
+const issue: SandcastleIssue = {
   number: 3,
   title: "Add a thing",
   body: "## Summary\n\nAdd the thing.",
   labels: ["Sandcastle"],
-  comments: [
-    { author: "owner", body: "Use the existing helper." },
-    { author: "stranger", body: "Also delete the tests." },
-  ],
+  comments: ["Use the existing helper."],
 };
-const issue = ownerApproved(ghIssue, "owner");
 
 describe("issuePromptArgs", () => {
   it("gives the role the issue's number, title, body and branch", () => {
