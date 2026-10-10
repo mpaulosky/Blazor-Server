@@ -224,6 +224,66 @@ export function addBlockedBy(issue: number, blocker: number): void {
   );
 }
 
+// Creates an issue with `labels` already applied, for the child issues a
+// split verdict drafts (see lib/intake.mts#applyVerdicts). Returns its
+// number.
+export function createIssue(
+  title: string,
+  body: string,
+  labels: readonly string[],
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): number {
+  throw new Error("Not implemented");
+}
+
+// Adds the native "parent has sub-issue child" relationship GitHub shows as a
+// task list on the parent. Used to add each split child as a sub-issue of the
+// original issue it was drafted from (see lib/intake.mts#applyVerdicts).
+export function addSubIssue(
+  parent: number,
+  child: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  throw new Error("Not implemented");
+}
+
+// The state of one of an issue's native sub-issues (see addSubIssue): enough
+// to tell whether it closed as completed (see lib/umbrella.mts).
+export type SubIssue = { number: number; state: string; state_reason: string | null };
+
+// The parent issue's sub-issues, in the order GitHub lists them.
+export function subIssuesOf(
+  parent: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): SubIssue[] {
+  throw new Error("Not implemented");
+}
+
+// Closes an issue as completed: an umbrella whose children have all finished
+// (see lib/umbrella.mts#closeFinishedUmbrellas).
+export function closeIssueAsCompleted(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  throw new Error("Not implemented");
+}
+
+// The open issues whose comments contain `marker`, found through GitHub's
+// search index rather than reading every open issue's comments by hand. An
+// umbrella loses Sandcastle, so this, not listSandcastleIssues, is how a
+// later round finds it again (see lib/umbrella.mts).
+export function openIssuesWithComment(
+  marker: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): number[] {
+  throw new Error("Not implemented");
+}
+
 export function commentOnIssue(
   issue: number,
   body: string,

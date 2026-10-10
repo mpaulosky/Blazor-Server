@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { BUILDING_LABEL, SANDCASTLE_LABELS } from "./config.mts";
 import type { OpenPullRequest, SandcastleIssue } from "./github.mts";
 import { UncountedStopError } from "./errors.mts";
-import { applyVerdicts, intakePhase, intakeRound, intakeRunner, needsIntake, type IntakeVerdict } from "./intake.mts";
+import { applyVerdicts, intakePhase, intakeRound, intakeRunner, needsIntake, type IntakeVerdict, type SplitGitHub } from "./intake.mts";
 import { HandBackReport } from "./report.mts";
 
 const issue = (number: number, labels: string[] = ["Sandcastle"]): SandcastleIssue => ({
@@ -36,6 +36,55 @@ const verdict = (id: number, overrides: Partial<IntakeVerdict> = {}): IntakeVerd
   reason: "has a Summary, a checkable acceptance criterion and no open question",
   ...overrides,
 });
+
+// A drafted child that carries a Summary and one acceptance criterion, as a
+// well-formed split's children must.
+const child = (title: string, acceptanceCriterion: string) => ({
+  title,
+  body: `## Summary\n\n${title}.\n\n## Acceptance criteria\n\n- [ ] ${acceptanceCriterion}`,
+});
+
+const wellFormedChildren = [
+  child("Create the child issues", "Each child is created with Sandcastle."),
+  child("Link the child issues in build order", "Child 2 is blocked by child 1, and child 3 by child 2."),
+  child("Close the umbrella once its children finish", "The umbrella closes as completed once every child does."),
+];
+
+const splitVerdict = (id: number, children: { title: string; body: string }[] = wellFormedChildren, overrides: Partial<IntakeVerdict> = {}): IntakeVerdict => ({
+  id: String(id),
+  verdict: "split",
+  bug: false,
+  reason: "meets the Definition of Ready but needs three PRs",
+  children,
+  ...overrides,
+});
+
+// A SplitGitHub stub recording every call, and handing out sequential
+// numbers (starting at 101) for each child it creates.
+function recordingSplitGithub(firstChildNumber: number = 101) {
+  const calls: { fn: string; args: unknown[] }[] = [];
+  let next = firstChildNumber;
+  const github: SplitGitHub = {
+    createChild: (title, body, labels) => {
+      const number = next++;
+      calls.push({ fn: "createChild", args: [title, body, labels] });
+      return number;
+    },
+    addSubIssue: (parent, childNumber) => {
+      calls.push({ fn: "addSubIssue", args: [parent, childNumber] });
+    },
+    addBlockedBy: (childNumber, blocker) => {
+      calls.push({ fn: "addBlockedBy", args: [childNumber, blocker] });
+    },
+    removeSandcastle: (issueNumber) => {
+      calls.push({ fn: "removeSandcastle", args: [issueNumber] });
+    },
+    comment: (issueNumber, body) => {
+      calls.push({ fn: "comment", args: [issueNumber, body] });
+    },
+  };
+  return { calls, github };
+}
 
 describe("needsIntake", () => {
   it("sends an issue without sandcastle:ready to intake", () => {
@@ -173,6 +222,98 @@ describe("applyVerdicts", () => {
     assert.equal(gh.calls.length, 0);
     assert.deepEqual(report.items(), []);
     assert.ok(lines.some((line) => line.includes("#9") && line.includes("wasn't sent")));
+  });
+});
+
+// A split verdict is well-formed once it has at least one drafted child and
+// every child carries acceptance criteria (see "a malformed split verdict"
+// below for what happens otherwise).
+describe("applyVerdicts for a well-formed split verdict", () => {
+  it("creates a Sandcastle sub-issue for each child, in build order, each blocked by the one before it", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.equal(created.length, 3, JSON.stringify(split.calls));
+    assert.deepEqual(created.map((call) => call.args[2]), [["Sandcastle"], ["Sandcastle"], ["Sandcastle"]]);
+    assert.deepEqual(created.map((call) => call.args[0]), wellFormedChildren.map((c) => c.title));
+
+    const [child1, child2, child3] = [101, 102, 103];
+    const subIssues = split.calls.filter((call) => call.fn === "addSubIssue");
+    assert.deepEqual(subIssues.map((call) => call.args), [[10, child1], [10, child2], [10, child3]]);
+
+    const blockedBy = split.calls.filter((call) => call.fn === "addBlockedBy");
+    assert.deepEqual(blockedBy.map((call) => call.args), [[child2, child1], [child3, child2]]);
+  });
+
+  it("adds bug to each child when the original verdict carries bug: true", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(10)], [splitVerdict(10, wellFormedChildren, { bug: true })], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.equal(created.length, 3);
+    for (const call of created) {
+      assert.deepEqual(call.args[2], ["Sandcastle", "bug"]);
+    }
+  });
+
+  it("removes Sandcastle from the original and comments with the umbrella marker listing the children", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    assert.deepEqual(split.calls.filter((call) => call.fn === "removeSandcastle").map((call) => call.args), [[10]]);
+
+    const comment = split.calls.find((call) => call.fn === "comment");
+    assert.ok(comment, `no umbrella comment was posted: ${JSON.stringify(split.calls)}`);
+    assert.equal(comment!.args[0], 10);
+    const body = comment!.args[1] as string;
+    assert.match(body, /<!-- sandcastle:umbrella -->/);
+    assert.match(body, /#101/);
+    assert.match(body, /#102/);
+    assert.match(body, /#103/);
+  });
+});
+
+// A split verdict with no children, or whose drafted children include one
+// with no acceptance criteria, can't be applied: the host asks a human to
+// split the issue instead, rather than create an umbrella with missing or
+// empty children.
+describe("applyVerdicts for a malformed split verdict", () => {
+  it("hands the issue back with sandcastle:needs-info and a question asking a human to split it, when the split has no children", () => {
+    const gh = recordingGh();
+    const report = new HandBackReport();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(11)], [splitVerdict(11, [])], gh.run, "o/r", report, undefined, split.github);
+
+    assert.equal(split.calls.length, 0, "no child issue should be created for a malformed split");
+    const edits = gh.calls.filter((call) => call.args[0] === "issue" && call.args[1] === "edit");
+    assert.deepEqual(edits.map((call) => call.args), [["issue", "edit", "11", "--repo", "o/r", "--add-label", "sandcastle:needs-info"]]);
+    const comments = gh.calls.filter((call) => call.args[0] === "issue" && call.args[1] === "comment");
+    assert.equal(comments.length, 1);
+    assert.match(comments[0]!.input as string, /split/i);
+    assert.equal(report.items().length, 1);
+    assert.equal(report.items()[0]!.target, "issue #11");
+  });
+
+  it("hands the issue back with sandcastle:needs-info, when a drafted child has no acceptance criteria", () => {
+    const gh = recordingGh();
+    const report = new HandBackReport();
+    const split = recordingSplitGithub();
+    const children = [{ title: "Create the child issues", body: "## Summary\n\nCreates each child." }, ...wellFormedChildren.slice(1)];
+
+    applyVerdicts([issue(12)], [splitVerdict(12, children)], gh.run, "o/r", report, undefined, split.github);
+
+    assert.equal(split.calls.length, 0, "no child issue should be created for a malformed split");
+    const edits = gh.calls.filter((call) => call.args[0] === "issue" && call.args[1] === "edit");
+    assert.deepEqual(edits.map((call) => call.args), [["issue", "edit", "12", "--repo", "o/r", "--add-label", "sandcastle:needs-info"]]);
+    assert.equal(report.items().length, 1);
   });
 });
 
@@ -562,11 +703,34 @@ describe("intakeRunner", () => {
     assert.equal(result.issues, undefined);
   });
 
+  it("gives Sandcastle a schema that accepts a split verdict with drafted children", async () => {
+    const { calls, runRole } = stubRunRole();
+    await intakeRunner(runRole, noSandbox)({ ISSUES_JSON: "[]" });
+
+    const result = await validate(calls[0]!.options.output.schema, {
+      verdicts: [
+        {
+          id: "44",
+          verdict: "split",
+          bug: false,
+          reason: "Clear, but needs three PRs.",
+          children: [
+            { title: "Part 1", body: "## Summary\n\n## Acceptance criteria\n\n- [ ] One." },
+            { title: "Part 2", body: "## Summary\n\n## Acceptance criteria\n\n- [ ] Two." },
+          ],
+        },
+      ],
+    });
+
+    assert.equal(result.issues, undefined);
+  });
+
   for (const [what, value] of [
     ["an unknown verdict", { verdicts: [{ id: "1", verdict: "maybe", bug: false, reason: "?" }] }],
     ["a verdict without bug", { verdicts: [{ id: "1", verdict: "ready", reason: "?" }] }],
     ["a numeric id", { verdicts: [{ id: 1, verdict: "ready", bug: false, reason: "?" }] }],
     ["no verdicts list", { verdict: "ready" }],
+    ["a split verdict whose child has no body", { verdicts: [{ id: "1", verdict: "split", bug: false, reason: "?", children: [{ title: "Part 1" }] }] }],
   ] as const) {
     it(`gives Sandcastle a schema that rejects ${what}`, async () => {
       const { calls, runRole } = stubRunRole();

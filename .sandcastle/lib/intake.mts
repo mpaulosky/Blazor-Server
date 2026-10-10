@@ -4,11 +4,13 @@
 // A run before the blocker gate judges every unjudged Sandcastle issue
 // against the Definition of Ready (see docs/plans/sandcastle-workflow.md,
 // "Phase 2: Intake"), so a human sees numbered questions on an unclear issue
-// instead of Sandcastle guessing at it. Its only verdicts here are "ready"
-// (sandcastle:ready) and "needs-info" (hands the issue back with
-// sandcastle:needs-info and one comment of numbered questions); splitting an
-// oversized issue is #75's job. Every verdict can also carry bug: true,
-// which adds the bug label so the issue's branch is fix/.
+// instead of Sandcastle guessing at it. Its verdicts are "ready"
+// (sandcastle:ready), "needs-info" (hands the issue back with
+// sandcastle:needs-info and one comment of numbered questions), and "split"
+// (#75: too big for one PR, so the host creates child issues from the
+// verdict's children and turns the original into an umbrella). Every verdict
+// can also carry bug: true, which adds the bug label so the issue's branch is
+// fix/.
 // ---------------------------------------------------------------------------
 
 import { execFileSync } from "node:child_process";
@@ -19,11 +21,15 @@ import { BUILDING_LABEL, hooks } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { openPrReason } from "./gate.mts";
 import {
+  addBlockedBy,
   addIssueLabel,
+  addSubIssue,
   commentOnIssue,
+  createIssue,
   handBack,
   hasLabel,
   issueLabels,
+  removeIssueLabel,
   repoName,
   type OpenPullRequest,
   type SandcastleIssue,
@@ -36,8 +42,12 @@ const intakeSchema = z.object({
   verdicts: z.array(
     z.object({
       id: z.string(),
-      verdict: z.enum(["ready", "needs-info"]),
+      verdict: z.enum(["ready", "needs-info", "split"]),
       questions: z.array(z.string()).optional(),
+      // Only for a split verdict: the drafted child issues, in build order.
+      // Whether it's well-formed (at least one child, each carrying
+      // acceptance criteria) is checked when the verdict is applied, not here.
+      children: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
       bug: z.boolean(),
       reason: z.string(),
     }),
@@ -45,6 +55,30 @@ const intakeSchema = z.object({
 });
 
 export type IntakeVerdict = z.infer<typeof intakeSchema>["verdicts"][number];
+
+// The GitHub writes applying a split verdict needs; tests pass a stub. Each
+// child is created and linked before the original loses Sandcastle and gets
+// the umbrella comment, so a failure partway through leaves the issue
+// unsplit rather than an umbrella with missing children.
+export type SplitGitHub = {
+  // Creates one child with `labels` already on it. Returns its number.
+  createChild(title: string, body: string, labels: readonly string[]): number;
+  // Adds `child` as a sub-issue of `parent` (the original issue being split).
+  addSubIssue(parent: number, child: number): void;
+  // Links `child` as blocked by the one before it in build order.
+  addBlockedBy(child: number, blocker: number): void;
+  // Removes Sandcastle from the original issue, which has become an umbrella.
+  removeSandcastle(issue: number): void;
+  comment(issue: number, body: string): void;
+};
+
+export const liveSplitGitHub: SplitGitHub = {
+  createChild: createIssue,
+  addSubIssue,
+  addBlockedBy,
+  removeSandcastle: (issue) => removeIssueLabel(issue, "Sandcastle"),
+  comment: commentOnIssue,
+};
 
 // The labels that mean intake has judged the issue, or a person has to act
 // on it before anything else happens.
@@ -102,6 +136,7 @@ export function applyVerdicts(
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
+  splitGithub: SplitGitHub = liveSplitGitHub,
 ): void {
   const sent = new Map(issues.map((issue) => [String(issue.number), issue]));
   const judged = new Set<string>();
@@ -138,7 +173,7 @@ export function applyVerdicts(
         log(`  ⚠ Skipping intake's verdict on ${ref}: another run has judged it since this round read the queue.`);
         continue;
       }
-      applyVerdict(issue.number, verdict, run, repo, report, log);
+      applyVerdict(issue.number, verdict, run, repo, report, log, splitGithub);
     } catch (error) {
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again in a later round or run: ${error}`);
       continue;
@@ -176,11 +211,20 @@ function applyVerdict(
   repo: string,
   report: HandBackReport,
   log: (line: string) => void,
+  splitGithub: SplitGitHub,
 ): void {
   if (verdict.verdict === "needs-info") {
     if (verdict.bug) addIssueLabel(number, "bug", run, repo);
     handBack({ kind: "issue", number }, "sandcastle:needs-info", verdict.reason, needsInfoComment(verdict), run, repo, report);
     return;
+  }
+  if (verdict.verdict === "split") {
+    // A split with no children, or a child with no acceptance criteria, is
+    // treated as needs-info with a question asking a human to split the
+    // issue (#75's "malformed split falls back to needs-info" criterion).
+    // Creating the children, linking them and turning the original into an
+    // umbrella isn't implemented yet.
+    throw new Error("Not implemented");
   }
   addIssueLabel(number, verdict.bug ? ["bug", "sandcastle:ready"] : "sandcastle:ready", run, repo);
   try {
