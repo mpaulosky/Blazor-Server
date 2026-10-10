@@ -58,4 +58,13 @@ describe("main.mts's intake wiring", () => {
     assert.notEqual(gateCall, -1, "main.mts doesn't call gateIssues()");
     assert.ok(intakeCall < gateCall, "main.mts doesn't run intake before the blocker gate");
   });
+
+  // Without the open PRs, intake would judge, and might hand back, an issue
+  // whose work is already waiting for review.
+  it("passes intake the open pull requests", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const call = mainMts.slice(mainMts.indexOf("intakeRound("), mainMts.indexOf(";", mainMts.indexOf("intakeRound(")));
+
+    assert.match(call, /openPullRequests\(\)/);
+  });
 });

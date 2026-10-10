@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import type { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
-import type { SandcastleIssue } from "./github.mts";
+import { BUILDING_LABEL, SANDCASTLE_LABELS } from "./config.mts";
+import type { OpenPullRequest, SandcastleIssue } from "./github.mts";
 import { applyVerdicts, intakeRound, needsIntake, type IntakeVerdict } from "./intake.mts";
 import { HandBackReport } from "./report.mts";
 
@@ -58,6 +59,22 @@ describe("needsIntake", () => {
     const sent = needsIntake([issue(1, ["Sandcastle", "sandcastle:needs-human"])]);
 
     assert.deepEqual(sent, []);
+  });
+
+  // Already built or being built: questions on it now would be noise for
+  // whoever reviews the work.
+  it("doesn't send an issue another run is building", () => {
+    const sent = needsIntake([issue(1, ["Sandcastle", BUILDING_LABEL])]);
+
+    assert.deepEqual(sent, []);
+  });
+
+  it("doesn't send an issue whose PR is open, and still sends the others", () => {
+    const openPrs: OpenPullRequest[] = [{ number: 50, headRefName: "feature/1-add-a-thing" }];
+
+    const sent = needsIntake([issue(1), issue(2)], openPrs);
+
+    assert.deepEqual(sent.map((i) => i.number), [2]);
   });
 
   it("sends a blocked issue too, so questions reach the human while a blocker is still in flight", () => {
@@ -280,6 +297,23 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
     assert.ok(lines.some((line) => line.includes("#1") && line.includes("HTTP 422")), lines.join("\n"));
   });
 
+  // Removing a label takes triage access, which an issue's author may not
+  // have, and their replies don't reach intake.
+  it("tells an author without triage access to ask a maintainer to re-queue the issue", () => {
+    const gh = recordingGh();
+
+    applyVerdicts(
+      [issue(7)],
+      [verdict(7, { verdict: "needs-info", questions: ["Which page?"], reason: "the page isn't named" })],
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+    );
+
+    const body = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.match(body, /ask a maintainer/);
+  });
+
   it("explains in the needs-info comment why, and how to re-queue the issue", () => {
     const gh = recordingGh();
 
@@ -297,7 +331,37 @@ describe("applyVerdicts beyond the acceptance criteria", () => {
   });
 });
 
+// gh issue edit --add-label fails for a label the repository doesn't have,
+// which would leave every verdict unapplied and Sandcastle building nothing.
+describe("the labels intake adds", () => {
+  it("are all created at startup by ensureLabels", () => {
+    const ensured = SANDCASTLE_LABELS.map((label) => label.name);
+
+    for (const label of ["sandcastle:ready", "sandcastle:needs-info", "bug"]) {
+      assert.ok(ensured.includes(label), `${label} isn't in SANDCASTLE_LABELS`);
+    }
+  });
+});
+
 describe("intakeRound", () => {
+  it("doesn't judge an issue whose PR is open", async () => {
+    let ran = false;
+
+    await intakeRound(
+      [issue(1)],
+      [{ number: 50, headRefName: "fix/1-a-thing" }],
+      async () => {
+        ran = true;
+        return [];
+      },
+      recordingGh().run,
+      "o/r",
+      new HandBackReport(),
+    );
+
+    assert.equal(ran, false);
+  });
+
   it("skips the intake run when every issue already has a verdict label", async () => {
     let ran = false;
     const report = new HandBackReport();
@@ -305,6 +369,7 @@ describe("intakeRound", () => {
 
     await intakeRound(
       [issue(1, ["Sandcastle", "sandcastle:ready"])],
+      [],
       async () => {
         ran = true;
         return [];
@@ -324,6 +389,7 @@ describe("intakeRound", () => {
 
     await intakeRound(
       [issue(2, ["Sandcastle"])],
+      [],
       async (promptArgs) => {
         sentIds = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => String(i.number));
         return [verdict(2, { reason: "clear and checkable" })];

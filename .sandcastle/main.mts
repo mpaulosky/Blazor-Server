@@ -70,7 +70,7 @@ import { BUILDING_LABEL, MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
 import { UncountedStopError } from "./lib/errors.mts";
 import { gateIssues } from "./lib/gate.mts";
-import { cacheHostLogin, ensureLabels, listSandcastleIssues } from "./lib/github.mts";
+import { cacheHostLogin, ensureLabels, listSandcastleIssues, openPullRequests } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakeRound } from "./lib/intake.mts";
 import { planRound } from "./lib/plan.mts";
@@ -124,7 +124,7 @@ try {
     // costs its issues this round: without sandcastle:ready the gate holds
     // them back, and the issues already ready can still be built.
     try {
-      await intakeRound(listSandcastleIssues());
+      await intakeRound(listSandcastleIssues(), openPullRequests());
     } catch (error) {
       if (error instanceof UncountedStopError) throw error;
       console.error(`  ✗ Intake failed, so the issues it was judging wait for the next round: ${error}`);

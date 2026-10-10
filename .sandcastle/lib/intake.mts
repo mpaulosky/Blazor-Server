@@ -15,8 +15,18 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { hooks } from "./config.mts";
-import { addIssueLabel, commentOnIssue, handBack, hasLabel, issueLabels, repoName, type SandcastleIssue } from "./github.mts";
+import { BUILDING_LABEL, hooks } from "./config.mts";
+import { openPrReason } from "./gate.mts";
+import {
+  addIssueLabel,
+  commentOnIssue,
+  handBack,
+  hasLabel,
+  issueLabels,
+  repoName,
+  type OpenPullRequest,
+  type SandcastleIssue,
+} from "./github.mts";
 import { intakePromptArgs } from "./prompts.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
@@ -42,9 +52,17 @@ const JUDGED_LABELS = ["sandcastle:ready", "sandcastle:needs-info", "sandcastle:
 // The open Sandcastle issues intake hasn't judged yet: carrying none of
 // sandcastle:ready, sandcastle:needs-info and sandcastle:needs-human.
 // Includes blocked issues, so a human sees intake's questions while a
-// blocker is still in flight; the blocker gate runs after intake.
-export function needsIntake(issues: readonly SandcastleIssue[]): SandcastleIssue[] {
-  return issues.filter((issue) => !JUDGED_LABELS.some((label) => hasLabel(issue, label)));
+// blocker is still in flight; the blocker gate runs after intake. Leaves out
+// an issue another run is building (sandcastle:building) or whose PR is in
+// `openPrs`: its work is already done or under way, so questions on it would
+// only be noise for whoever reviews it.
+export function needsIntake(issues: readonly SandcastleIssue[], openPrs: readonly OpenPullRequest[] = []): SandcastleIssue[] {
+  return issues.filter(
+    (issue) =>
+      !JUDGED_LABELS.some((label) => hasLabel(issue, label)) &&
+      !hasLabel(issue, BUILDING_LABEL) &&
+      openPrReason(issue.number, [...openPrs]) === undefined,
+  );
 }
 
 export type IntakeRun = (promptArgs: ReturnType<typeof intakePromptArgs>) => Promise<IntakeVerdict[]>;
@@ -185,22 +203,25 @@ export function needsInfoComment(verdict: IntakeVerdict): string {
     ...(questions.length > 0
       ? ["Please answer these questions by editing the issue:", questions.map((question, i) => `${i + 1}. ${question}`).join("\n")]
       : []),
-    "Once the issue is edited, remove `sandcastle:needs-info` to put it back in the queue, and intake judges it again. A reply alone doesn't re-queue it.",
+    "Once the issue is edited, remove `sandcastle:needs-info` to put it back in the queue, and intake judges it again. " +
+      "Removing a label takes triage access: if you can't, ask a maintainer to remove it. A reply alone doesn't re-queue it.",
   ].join("\n\n");
 }
 
 // Judge every issue intake hasn't judged yet against the Definition of Ready,
 // and apply the verdicts. Skipped, without running intake, when there's
-// nothing left to judge.
+// nothing left to judge. `openPrs` are the open pull requests, whose issues
+// intake leaves alone (see needsIntake).
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
+  openPrs: readonly OpenPullRequest[],
   run: IntakeRun = runIntake,
   gh: typeof execFileSync = execFileSync,
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
 ): Promise<void> {
-  const toJudge = needsIntake(issues);
+  const toJudge = needsIntake(issues, openPrs);
   if (toJudge.length === 0) return;
   log(`Intake is judging ${toJudge.length} issue(s) against the Definition of Ready: ${toJudge.map((issue) => `#${issue.number}`).join(", ")}`);
   const verdicts = await run(intakePromptArgs(toJudge));
