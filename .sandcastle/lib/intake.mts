@@ -101,10 +101,11 @@ export function applyVerdicts(
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again next round: ${error}`);
       continue;
     }
+    const bugNote = verdict.bug ? " (a bug)" : "";
     log(
       verdict.verdict === "ready"
-        ? `  ✓ Intake marks ${ref} ready${verdict.bug ? " (a bug)" : ""}: ${verdict.reason}`
-        : `  ✋ Intake hands ${ref} back with sandcastle:needs-info${verdict.bug ? " (a bug)" : ""}: ${verdict.reason}`,
+        ? `  ✓ Intake marks ${ref} ready${bugNote}: ${verdict.reason}`
+        : `  ✋ Intake hands ${ref} back with sandcastle:needs-info${bugNote}: ${verdict.reason}`,
     );
   }
 
@@ -148,9 +149,10 @@ export function readyComment(verdict: IntakeVerdict): string {
 // questions a person must answer, and how to put it back in the queue.
 export function needsInfoComment(verdict: IntakeVerdict): string {
   const questions = verdict.questions ?? [];
+  const bugNote = verdict.bug ? " and labelled `bug` (so its branch is `fix/`)" : "";
   return [
-    "Sandcastle's intake found this issue doesn't meet the Definition of Ready yet, so it's handed back with `sandcastle:needs-info`" +
-      `${verdict.bug ? " and labelled `bug` (so its branch is `fix/`)" : ""}. Sandcastle won't build it while it carries that label.`,
+    `Sandcastle's intake found this issue doesn't meet the Definition of Ready yet, so it's handed back with \`sandcastle:needs-info\`${bugNote}. ` +
+      "Sandcastle won't build it while it carries that label.",
     `**Reason:** ${verdict.reason}`,
     ...(questions.length > 0
       ? ["Please answer these questions by editing the issue:", questions.map((question, i) => `${i + 1}. ${question}`).join("\n")]
