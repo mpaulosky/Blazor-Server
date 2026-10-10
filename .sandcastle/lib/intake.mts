@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE } from "./config.mts";
+import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { openPrReason } from "./gate.mts";
 import {
@@ -105,9 +105,10 @@ export function applyVerdicts(
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
-): void {
+): { applied: number; failed: number } {
   const sent = new Map(issues.map((issue) => [String(issue.number), issue]));
   const judged = new Set<string>();
+  const counts = { applied: 0, failed: 0 };
 
   for (const verdict of verdicts) {
     const ref = `#${verdict.id}`;
@@ -145,8 +146,10 @@ export function applyVerdicts(
       applyVerdict(issue.number, verdict, run, repo, report, log);
     } catch (error) {
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again in a later round or run: ${error}`);
+      counts.failed += 1;
       continue;
     }
+    counts.applied += 1;
     const bugNote = verdict.bug ? " (a bug)" : "";
     log(
       verdict.verdict === "ready"
@@ -158,6 +161,7 @@ export function applyVerdicts(
   for (const id of sent.keys()) {
     if (!judged.has(id)) log(`  ⚠ Intake gave no verdict on #${id}, so it's judged again in a later round or run.`);
   }
+  return counts;
 }
 
 // Adds the verdict's labels and posts its one comment.
@@ -266,13 +270,18 @@ export function needsInfoComment(verdict: IntakeVerdict): string {
 //
 // Intake runs once per batch of INTAKE_BATCH_SIZE issues, so a malformed or
 // truncated answer costs only its batch (#224), and the next batch is still
-// judged (#227). A batch whose run fails is tried again in halves, and the
-// half that fails again in halves, so one issue that always breaks intake's
+// judged (#227). A batch whose run fails is tried again in halves, and each
+// half that fails again in halves, so an issue that always breaks intake's
 // answer is left unjudged on its own rather than with its batch-mates: they'd
-// otherwise re-form the same batch every round (#229). When both halves fail,
-// the trouble isn't one issue, so the splitting stops there. Whatever is left
-// unjudged is logged and judged again in a later round or run. An
-// UncountedStopError (a usage limit or time budget) still ends the run.
+// otherwise re-form the same batch every round (#229). Whatever is left
+// unjudged is logged and judged again in a later round or run.
+//
+// Intake stops for the round after INTAKE_FAILED_RUNS_LIMIT failed runs in a
+// row, since a failure every run hits (a sandbox that won't start, say) would
+// otherwise cost a run for every split of every batch, and when GitHub
+// refuses every verdict in a batch, since each later batch would then cost a
+// run for nothing. An UncountedStopError (a usage limit or time budget) still
+// ends the run.
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
   openPrs: readonly OpenPullRequest[],
@@ -284,10 +293,12 @@ export async function intakeRound(
   warn: (message: string) => void = console.error,
 ): Promise<void> {
   const refs = (batch: readonly SandcastleIssue[]) => batch.map((issue) => `#${issue.number}`).join(", ");
+  let failedInARow = 0;
+  // Why intake stopped for the round, once it has.
+  let stopped: string | undefined;
 
   // Runs intake over `batch` and applies its verdicts. Returns the run's
-  // error when it failed, or undefined. A failure applying the verdicts is
-  // the host's, not the batch's, so it's logged here and not split on.
+  // error when it failed, or undefined.
   async function judge(batch: SandcastleIssue[]): Promise<unknown> {
     log(`Intake is judging ${batch.length} issue(s) against the Definition of Ready: ${refs(batch)}`);
     let verdicts: IntakeVerdict[];
@@ -295,40 +306,39 @@ export async function intakeRound(
       verdicts = await run(intakePromptArgs(batch));
     } catch (error) {
       if (error instanceof UncountedStopError) throw error;
+      failedInARow += 1;
+      if (failedInARow >= INTAKE_FAILED_RUNS_LIMIT) stopped = `${INTAKE_FAILED_RUNS_LIMIT} intake runs in a row failed`;
       return error ?? new Error("intake failed");
     }
-    try {
-      applyVerdicts(batch, verdicts, gh, repo, report, log);
-    } catch (error) {
-      warn(`  ✗ Applying intake's verdicts on ${refs(batch)} failed, so any left unjudged are judged again in a later round or run: ${error}`);
-    }
+    failedInARow = 0;
+    const { applied, failed } = applyVerdicts(batch, verdicts, gh, repo, report, log);
+    if (applied === 0 && failed > 0) stopped = "GitHub refused every verdict in the last batch";
     return undefined;
   }
 
-  // Narrows a batch whose run failed with `error` down to the issue that
-  // breaks it (see above).
+  // Narrows a batch whose run failed with `error` down to the issues that
+  // break it (see above), until intake stops for the round.
   async function narrow(batch: SandcastleIssue[], error: unknown): Promise<void> {
-    if (batch.length > 1) {
-      log(`  Intake failed on ${refs(batch)}, so it's trying them in halves: ${error}`);
-      const middle = Math.ceil(batch.length / 2);
-      const halves = [batch.slice(0, middle), batch.slice(middle)];
-      const failed: { half: SandcastleIssue[]; error: unknown }[] = [];
-      for (const half of halves) {
-        const halfError = await judge(half);
-        if (halfError !== undefined) failed.push({ half, error: halfError });
-      }
-      if (failed.length === 1) return narrow(failed[0]!.half, failed[0]!.error);
-      if (failed.length === 0) return;
+    if (batch.length === 1) {
+      warn(`  ✗ Intake failed on ${refs(batch)}, so it's judged again in a later round or run: ${error}`);
+      return;
     }
-    warn(`  ✗ Intake failed on ${refs(batch)}, so they're judged again in a later round or run: ${error}`);
+    log(`  Intake failed on ${refs(batch)}, so it's trying them in halves: ${error}`);
+    const middle = Math.ceil(batch.length / 2);
+    for (const half of [batch.slice(0, middle), batch.slice(middle)]) {
+      if (stopped) return;
+      const halfError = await judge(half);
+      if (halfError !== undefined) await narrow(half, halfError);
+    }
   }
 
   const unjudged = needsIntake(issues, openPrs);
-  for (let start = 0; start < unjudged.length; start += INTAKE_BATCH_SIZE) {
+  for (let start = 0; start < unjudged.length && !stopped; start += INTAKE_BATCH_SIZE) {
     const batch = unjudged.slice(start, start + INTAKE_BATCH_SIZE);
     const error = await judge(batch);
     if (error !== undefined) await narrow(batch, error);
   }
+  if (stopped) warn(`  ✗ ${stopped}, so intake stops for this round; the issues it hadn't judged are judged again in a later round or run.`);
 }
 
 // Phase 0a as main.mts runs it: load the queue and the open PRs, then run

@@ -69,6 +69,15 @@ export const MAX_ITERATIONS = 10;
 // runs of this many issues each (#224, #227).
 export const INTAKE_BATCH_SIZE = 10;
 
+// How many intake runs in a row may fail before intake stops for the round.
+// A failed batch is split in halves to find the issues that break it, which
+// takes up to 5 failed runs in a row for one bad issue in a full batch, and a
+// few more for bad issues next to each other: 8 leaves room for three. A
+// failure every run hits (a sandbox that won't start, an answer the parser
+// always rejects) then costs 8 runs a round, not one for every split of every
+// batch (#229).
+export const INTAKE_FAILED_RUNS_LIMIT = 8;
+
 // Gate-fixer runs allowed at each gate checkpoint before the issue's round is
 // given up, and how much of the final gate output the issue comment quotes.
 export const GATE_FIXER_ATTEMPTS = 2;
