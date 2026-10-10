@@ -77,26 +77,49 @@
 // in lib/config.mts. The sandbox gets no GitHub token: the host reads GitHub
 // with its own gh auth and passes each role what it needs through its prompt.
 //
+// Every phase reads the queue through lib/queue.mts#loadQueue, scoped to the
+// run's queue (lib/config.mts#queueScopeFrom): in GitHub Actions every issue
+// labelled Sandcastle, and locally only the issue or label the command line
+// names. Within it, an issue reaches the phases only when the repository
+// owner added its queue label and nobody else has edited it since; anything
+// else is skipped and logged. An untrusted sandcastle:ready is removed, and
+// a hand-back label someone else removed is put back (#146).
+//
 // Usage:
-//   pnpm run sandcastle
+//   SANDCASTLE_ISSUE=<n> pnpm run sandcastle         (only issue #n and its PR)
+//   SANDCASTLE_LABEL=<label> pnpm run sandcastle     (the issues labelled <label>, e.g. Sandcastle:dev)
 
 import { existsSync, readFileSync } from "node:fs";
 import { buildIssue } from "./lib/build.mts";
 import { clearStaleBuildingLabels, installBuildingLabelRelease, releaseAllBuildingLabels } from "./lib/building.mts";
 import { fetchMain, prepareBranches } from "./lib/branches.mts";
-import { BUILDING_LABEL, MAX_ITERATIONS } from "./lib/config.mts";
+import { BUILDING_LABEL, describeQueueScope, MAX_ITERATIONS, QueueScopeError, queueScopeFrom, type QueueScope } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
 import { followUpPhase } from "./lib/follow-up.mts";
 import { gateIssues } from "./lib/gate.mts";
-import { cacheHostLogin, ensureLabels, listSandcastleIssues, openPullRequests } from "./lib/github.mts";
+import { cacheHostLogin, ensureLabels, openPullRequests } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { planRound, resolveRoles } from "./lib/plan.mts";
+import { loadQueue, useQueueScope } from "./lib/queue.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
 import { umbrellaPhase } from "./lib/umbrella.mts";
+
+// The queue scope comes first, so a local run that names none exits with
+// the usage message before it touches git, gh or a sandbox (#146).
+let scope: QueueScope;
+try {
+  scope = queueScopeFrom(process.env);
+} catch (error) {
+  if (!(error instanceof QueueScopeError)) throw error;
+  console.error(error.message);
+  process.exit(2);
+}
+useQueueScope(scope);
+console.log(`Queue: ${describeQueueScope(scope)}`);
 
 const envFile = ".sandcastle/.env";
 const leakedTokens = existsSync(envFile) ? githubTokensIn(readFileSync(envFile, "utf8")) : [];
@@ -148,7 +171,7 @@ try {
     // -----------------------------------------------------------------------
     // See lib/intake.mts#intakePhase: a failed intake is logged and costs only
     // the issues it was judging this round.
-    await intakePhase(() => ({ issues: listSandcastleIssues(), openPrs: openPullRequests() }));
+    await intakePhase(() => ({ issues: loadQueue(), openPrs: openPullRequests() }));
 
     // -----------------------------------------------------------------------
     // Phase 0b: Gate
@@ -170,7 +193,7 @@ try {
       console.log(
         blocked.length > 0
           ? "Every open issue is waiting on a blocker, a pull request, another run, intake or a human. Exiting."
-          : "No open Sandcastle issues. Exiting.",
+          : `No open, owner-approved issues in the queue (${describeQueueScope(scope)}). Exiting.`,
       );
       break;
     }

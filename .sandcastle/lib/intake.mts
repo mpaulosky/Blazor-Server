@@ -82,7 +82,8 @@ export type SplitGitHub = {
   addBlockedBy(child: number, blocker: number): void;
   // The original issue's native "blocked by" links in this repository.
   blockersOf(issue: number): number[];
-  // Removes Sandcastle from the original issue, which has become an umbrella.
+  // Removes the queue label (see queueLabel) from the original issue, which
+  // has become an umbrella.
   removeSandcastle(issue: number): void;
   comment(issue: number, body: string): void;
   // Adds and removes the mark (sandcastle:needs-human) that keeps the issue
@@ -102,7 +103,9 @@ export const liveSplitGitHub: SplitGitHub = {
   addSubIssue,
   addBlockedBy,
   blockersOf: (issue) => sameRepoBlockers(issue),
-  removeSandcastle: (issue) => removeIssueLabel(issue, "Sandcastle"),
+  // The scope's own queue label (see queueLabel), which a split moves from
+  // the original to its children.
+  removeSandcastle: (issue) => removeIssueLabel(issue, queueLabelOf(activeQueueScope())),
   comment: commentOnIssue,
   markSplitting: (issue) => addIssueLabel(issue, "sandcastle:needs-human"),
   unmarkSplitting: (issue) => removeIssueLabel(issue, "sandcastle:needs-human"),
@@ -338,7 +341,8 @@ function applySplit(
     }
     throw error;
   }
-  const labels = [...(verdict.bug ? ["Sandcastle", "bug"] : ["Sandcastle"]), "sandcastle:needs-human"];
+  const queueLabel = splitGithub.queueLabel();
+  const labels = [...(verdict.bug ? [queueLabel, "bug"] : [queueLabel]), "sandcastle:needs-human"];
   const children: SplitChild[] = [];
   let sandcastleRemoved = false;
   // The title of the child being created, while its create call runs.
