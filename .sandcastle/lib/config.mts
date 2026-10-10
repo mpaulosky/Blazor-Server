@@ -48,6 +48,12 @@ export const MAX_ITERATIONS = 10;
 export const GATE_FIXER_ATTEMPTS = 2;
 export const GATE_COMMENT_LINES = 100;
 
+// Attempts allowed for a publish step (git push, gh pr create) that keeps
+// failing with a GitHub server error, before Sandcastle gives up on the round
+// and comments on the issue. A push rejected for any other reason isn't
+// retried at all.
+export const PUBLISH_RETRY_ATTEMPTS = 4;
+
 // Hooks run inside the sandbox before the agent starts each iteration.
 // pnpm install ensures the sandbox always has fresh dependencies. The copied
 // node_modules records the host's pnpm store, so pnpm may rebuild it against

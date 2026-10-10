@@ -53,6 +53,7 @@ import { gateIssues } from "./lib/gate.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { planRound } from "./lib/plan.mts";
 import { usageReport } from "./lib/report.mts";
+import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
 
@@ -155,21 +156,15 @@ try {
       }
     }
 
-    const published = settled.flatMap((outcome, i) =>
-      outcome.status === "fulfilled" && outcome.value.prUrl
-        ? [{ ...work[i]!, prUrl: outcome.value.prUrl }]
-        : [],
-    );
-
-    console.log(`\nExecution complete. ${published.length} pull request(s):`);
-    for (const { issue, branch, prUrl } of published) {
-      console.log(`  #${issue.number} (${branch}) → ${prUrl}`);
+    const summary = roundSummary(work, settled);
+    for (const line of summary.lines) {
+      console.log(line);
     }
 
-    if (published.length === 0) {
+    if (summary.stop !== undefined) {
       // Nothing reached a PR, so the next plan would pick the same issues and
       // repeat the same round. Stop and let a human look.
-      console.log("No pull requests opened this round. Stopping.");
+      console.log(summary.stop);
       break;
     }
   }
