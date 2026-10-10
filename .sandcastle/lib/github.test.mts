@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { execFileSync } from "node:child_process";
-import { commentOnIssue, openPullRequest, ownerApproved, sameRepository, type GhIssue } from "./github.mts";
+import { SANDCASTLE_LABELS } from "./config.mts";
+import {
+  commentOnIssue,
+  ensureLabels,
+  handBack,
+  markerCommentsSince,
+  openPullRequest,
+  ownerApproved,
+  sameRepository,
+  type GhIssue,
+  type TimelineLabelEvent,
+  type TimestampedComment,
+} from "./github.mts";
+import { HandBackReport } from "./report.mts";
 
 describe("ownerApproved", () => {
   const issue: GhIssue = {
@@ -86,5 +99,140 @@ describe("openPullRequest", () => {
       "pr", "create", "--repo", "o/r", "--base", "main", "--head", branch, "--title", "Add search", "--body-file", "-",
     ]);
     assert.equal(calls[1]!.input, "Closes #4");
+  });
+});
+
+// A gh stub recording every call's args and stdin input, answering `output`
+// for each call in order.
+function recordingGh(output: string[] = []) {
+  const calls: { args: readonly string[]; input: unknown }[] = [];
+  const queue = [...output];
+  const run = ((_cmd: string, args: readonly string[], options: { input?: unknown }) => {
+    calls.push({ args, input: options.input });
+    return queue.shift() ?? "";
+  }) as unknown as typeof execFileSync;
+  return { calls, run };
+}
+
+describe("ensureLabels", () => {
+  it("creates every sandcastle:* label when the repository has none of them", () => {
+    const { calls, run } = recordingGh(["[]"]);
+
+    ensureLabels(SANDCASTLE_LABELS, run, "o/r");
+
+    const created = calls.filter((call) => call.args[1] === "create");
+    assert.deepEqual(
+      created.map((call) => call.args[2]),
+      SANDCASTLE_LABELS.map((label) => label.name),
+    );
+    for (const label of SANDCASTLE_LABELS) {
+      const call = created.find((candidate) => candidate.args[2] === label.name)!;
+      assert.deepEqual(call.args, ["label", "create", label.name, "--repo", "o/r", "--color", label.color, "--description", label.description]);
+    }
+  });
+
+  it("doesn't recreate a label the repository already has", () => {
+    const { calls, run } = recordingGh([JSON.stringify(["sandcastle:ready"])]);
+
+    ensureLabels(SANDCASTLE_LABELS, run, "o/r");
+
+    const created = calls.filter((call) => call.args[1] === "create").map((call) => call.args[2]);
+    assert.ok(!created.includes("sandcastle:ready"));
+    assert.ok(created.includes("sandcastle:needs-info"));
+    assert.ok(created.includes("sandcastle:needs-human"));
+  });
+});
+
+describe("markerCommentsSince", () => {
+  const marker = "<!-- sandcastle:build-failed -->";
+  const comment = (body: string, createdAt: string): TimestampedComment => ({ body, createdAt });
+  const unlabeled = (label: string, createdAt: string): TimelineLabelEvent => ({ event: "unlabeled", label, createdAt });
+
+  it("drops a marker comment posted before the label was last removed", () => {
+    const comments = [
+      comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z"),
+      comment(`${marker} attempt 1`, "2026-01-03T00:00:00Z"),
+    ];
+    const timeline = [unlabeled("sandcastle:needs-human", "2026-01-02T00:00:00Z")];
+
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+
+    assert.deepEqual(kept, [comments[1]]);
+  });
+
+  it("counts every marker comment since creation when the label was never removed", () => {
+    const comments = [comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z")];
+    const timeline: TimelineLabelEvent[] = [];
+
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+
+    assert.deepEqual(kept, comments);
+  });
+
+  it("drops a comment that doesn't carry the marker", () => {
+    const comments = [comment("A plain comment.", "2026-01-05T00:00:00Z")];
+    const timeline: TimelineLabelEvent[] = [];
+
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+
+    assert.deepEqual(kept, []);
+  });
+
+  it("uses the label's most recent removal, not an earlier one", () => {
+    const comments = [
+      comment(`${marker} attempt 1`, "2026-01-02T12:00:00Z"),
+      comment(`${marker} attempt 2`, "2026-01-04T00:00:00Z"),
+    ];
+    const timeline = [
+      unlabeled("sandcastle:needs-human", "2026-01-01T00:00:00Z"),
+      unlabeled("sandcastle:needs-human", "2026-01-03T00:00:00Z"),
+    ];
+
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+
+    assert.deepEqual(kept, [comments[1]]);
+  });
+
+  it("ignores an unlabeled event for a different label", () => {
+    const comments = [comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z")];
+    const timeline = [unlabeled("sandcastle:needs-info", "2026-01-02T00:00:00Z")];
+
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z");
+
+    assert.deepEqual(kept, comments);
+  });
+});
+
+describe("handBack", () => {
+  it("adds sandcastle:needs-human to an issue, removes sandcastle:ready, and posts one comment", () => {
+    const { calls, run } = recordingGh();
+    const report = new HandBackReport();
+
+    handBack({ kind: "issue", number: 69 }, "sandcastle:needs-human", "two failed build attempts", "Giving up.", run, "o/r", report);
+
+    assert.deepEqual(calls[0]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-human", "--remove-label", "sandcastle:ready"]);
+    assert.deepEqual(calls[1]!.args, ["issue", "comment", "69", "--repo", "o/r", "--body-file", "-"]);
+    assert.equal(calls[1]!.input, "Giving up.");
+    assert.deepEqual(report.items(), [{ target: "issue #69", label: "sandcastle:needs-human", reason: "two failed build attempts" }]);
+  });
+
+  it("adds sandcastle:needs-info to an issue without touching sandcastle:ready", () => {
+    const { calls, run } = recordingGh();
+
+    handBack({ kind: "issue", number: 69 }, "sandcastle:needs-info", "the issue fails the Definition of Ready", "Answer these questions.", run, "o/r");
+
+    assert.deepEqual(calls[0]!.args, ["issue", "edit", "69", "--repo", "o/r", "--add-label", "sandcastle:needs-info"]);
+  });
+
+  it("hands a PR back without touching sandcastle:ready", () => {
+    const { calls, run } = recordingGh();
+    const report = new HandBackReport();
+
+    handBack({ kind: "pr", number: 17 }, "sandcastle:needs-human", "follow-up gave up", "Giving up on this PR.", run, "o/r", report);
+
+    assert.deepEqual(calls[0]!.args, ["pr", "edit", "17", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
+    assert.deepEqual(calls[1]!.args, ["pr", "comment", "17", "--repo", "o/r", "--body-file", "-"]);
+    assert.equal(calls[1]!.input, "Giving up on this PR.");
+    assert.deepEqual(report.items(), [{ target: "pr #17", label: "sandcastle:needs-human", reason: "follow-up gave up" }]);
   });
 });

@@ -39,3 +39,26 @@ export class UsageReport {
 
 // The one report every role run records into.
 export const usageReport = new UsageReport();
+
+// One hand-back this run made: an issue or PR that got `sandcastle:needs-info`
+// or `sandcastle:needs-human`, and why.
+export type HandBackEntry = { target: string; label: string; reason: string };
+
+// Every hand-back this run made, so a final workflow step can fail the job
+// when the list isn't empty: the owner's PAT means GitHub never notifies
+// anyone about Sandcastle's own labels or comments (see "Notification: the
+// run ends red" in docs/plans/sandcastle-workflow.md).
+export class HandBackReport {
+  private readonly entries: HandBackEntry[] = [];
+
+  record(entry: HandBackEntry): void {
+    this.entries.push(entry);
+  }
+
+  items(): readonly HandBackEntry[] {
+    return this.entries;
+  }
+}
+
+// The one report every hand-back this run makes records into.
+export const handBackReport = new HandBackReport();

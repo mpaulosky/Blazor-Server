@@ -54,6 +54,35 @@ export const GATE_COMMENT_LINES = 100;
 // retried at all.
 export const PUBLISH_RETRY_ATTEMPTS = 4;
 
+// A label the host manages: created at startup if the repository doesn't
+// have it yet (see docs/plans/sandcastle-workflow.md, "Labels").
+export type SandcastleLabel = { name: string; color: string; description: string };
+
+// Every label from the Labels table that the host, not a human, is
+// responsible for creating. `Sandcastle` and `bug` are a human's to add.
+export const SANDCASTLE_LABELS: readonly SandcastleLabel[] = [
+  { name: "sandcastle:ready", color: "0E8A16", description: "The issue passed the Definition of Ready and isn't re-checked." },
+  {
+    name: "sandcastle:needs-info",
+    color: "FBCA04",
+    description: "The issue's text is the problem: answer the questions and edit the issue.",
+  },
+  {
+    name: "sandcastle:needs-human",
+    color: "D93F0B",
+    description: "Sandcastle tried and couldn't. A person needs to look at this issue or pull request.",
+  },
+];
+
+// The HTML comment marking an issue comment as a failed build attempt, so the
+// count survives a restart (see lib/github.mts#markerCommentsSince).
+export const BUILD_FAILED_MARKER = "<!-- sandcastle:build-failed -->";
+
+// Failed build attempts, counted by BUILD_FAILED_MARKER comments posted since
+// `sandcastle:needs-human` was last removed, before the issue is handed back
+// (see "Giving up and telling the human" in docs/plans/sandcastle-workflow.md).
+export const BUILD_FAILURE_CAP = 2;
+
 // Hooks run inside the sandbox before the agent starts each iteration.
 // pnpm install ensures the sandbox always has fresh dependencies. The copied
 // node_modules records the host's pnpm store, so pnpm may rebuild it against

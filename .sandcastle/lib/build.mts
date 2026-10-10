@@ -94,12 +94,29 @@ function developerFailureComment(failure: string, branch: string): string {
   return `Sandcastle stopped building this issue: ${failure}, so \`${branch}\` wasn't pushed. The branch keeps its commits.`;
 }
 
+// Thrown by a role run that stopped because of the Claude usage limit or the
+// run's time budget, not because the role itself failed. developerFinishes
+// and gatePasses rethrow it rather than treating it as a failed build
+// attempt (see "Giving up and telling the human" in
+// docs/plans/sandcastle-workflow.md): a round that runs out of usage or time
+// must not spend one of the issue's two attempts for it.
+export class UncountedStopError extends Error {}
+
 // What buildIssue needs from outside the pipeline; tests pass stubs.
 export type BuildHost = {
   createSandbox(branch: string): Promise<sandcastle.Sandbox>;
   // The commits on the branch that `base` doesn't have, counted by ref.
   commitsAhead(branch: string, base: string): number;
   commentOnIssue(issueNumber: number, body: string): void;
+  // Records a failed build attempt (anything that stops the issue's
+  // pipeline, see "When a role fails" in docs/plans/sandcastle-workflow.md):
+  // posts the issue's `sandcastle:build-failed` comment with this attempt's
+  // number and `detail` (the tail of the gate output, or the role's error),
+  // and once that's the BUILD_FAILURE_CAPth attempt since
+  // `sandcastle:needs-human` was last removed, hands the issue back instead
+  // (see lib/handback.mts#recordFailedAttempt). Never called for a role run
+  // that threw UncountedStopError.
+  recordBuildFailure(issueNumber: number, branch: string, detail: string): void;
   // Whether what the commits from `base` to `commit` publish (see
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
   leaksSecret(base: string, commit: string): boolean;
@@ -139,6 +156,9 @@ const liveHost: BuildHost = {
   commentOnIssue,
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
+  recordBuildFailure: () => {
+    throw new Error("Not implemented");
+  },
   publish,
   worktreeProblems,
   log: console.log,
