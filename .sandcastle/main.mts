@@ -181,6 +181,16 @@ console.log(`Time budget: ${budgetMinutes} minutes`);
 // the try below, so anything that throws past it reads as a crash.
 let ending: RunEnding = { kind: "crashed" };
 
+// Whether protectHostGit() has pinned every git command's environment. Only
+// past this point is it safe for the finally's reportRepo() to shell out to
+// gh, which reads git remotes: before it, a planted .git/commondir (the case
+// protectHostGit() guards against) could make gh read a config an agent
+// wrote. Set once startup has finished, not right after protectHostGit()
+// itself, so one failed later startup step (ensureLabels, cacheHostLogin)
+// still leaves the report unlinked rather than guess which of them left git
+// safe to use.
+let startedUp = false;
+
 // An UncountedStopError from any phase (intake, the planner, the critique)
 // means the budget has passed or Claude's usage limit was hit: the catch below
 // ends the run cleanly rather than crash, since the next run picks the work up.
@@ -220,6 +230,8 @@ try {
   for (const issueNumber of clearStaleBuildingLabels()) {
     console.log(`  🧹 #${issueNumber}: cleared a stale ${BUILDING_LABEL} label left by a run that didn't finish.`);
   }
+
+  startedUp = true;
 
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // No new round once the budget has passed or the usage limit was hit.
@@ -441,9 +453,15 @@ try {
 console.log("\nAll done.");
 
 // The repository the run report links to: GitHub Actions names it, and a
-// local run asks gh. Undefined when neither can, since gh may be what failed,
-// and the report then names its issues and PRs unlinked.
+// local run asks gh, but only once startup has pinned every git command's
+// environment (startedUp): asking before then would run gh, which reads git
+// remotes, before protectHostGit() has ruled out a planted commondir file.
+// Undefined when neither can, since gh may be what failed, or startup hasn't
+// finished, and the report then names its issues and PRs unlinked.
 function reportRepo(): string | undefined {
+  if (!startedUp) {
+    return process.env.GITHUB_REPOSITORY;
+  }
   try {
     return process.env.GITHUB_REPOSITORY || repoName();
   } catch {

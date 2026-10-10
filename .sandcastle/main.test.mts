@@ -299,6 +299,26 @@ describe(".sandcastle/.gitignore follow-up.json", () => {
   });
 });
 
+// The run report's reportRepo() shells out to gh (repoName()) to link its
+// issues and PRs. Doing that before protectHostGit() has run would read git
+// remotes through an environment that check hasn't pinned yet, defeating the
+// very protection a failed startup (a planted .git/commondir, say) is there
+// to guard. reportRepo() must wait for startedUp before it tries gh.
+describe("main.mts's reportRepo wiring", () => {
+  it("sets startedUp only after clearStaleBuildingLabels(), and reportRepo() checks it before calling repoName()", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const clearStaleCall = mainMts.indexOf("clearStaleBuildingLabels()");
+    const startedUpTrue = mainMts.indexOf("startedUp = true;");
+    const reportRepoFn = mainMts.slice(mainMts.indexOf("function reportRepo"));
+
+    assert.notEqual(clearStaleCall, -1, "main.mts doesn't call clearStaleBuildingLabels()");
+    assert.notEqual(startedUpTrue, -1, "main.mts never sets startedUp = true");
+    assert.ok(clearStaleCall < startedUpTrue, "main.mts doesn't set startedUp = true after clearStaleBuildingLabels()");
+    assert.match(reportRepoFn, /if \(!startedUp\)/, "reportRepo() doesn't check startedUp before calling repoName()");
+    assert.ok(reportRepoFn.indexOf("repoName()") > reportRepoFn.indexOf("if (!startedUp)"));
+  });
+});
+
 // #147: SANDCASTLE_BUDGET_MINUTES reaches the sandbox like every other key in
 // this file, and the host reads the budget from its own environment instead,
 // so it must stay commented out, as SANDCASTLE_ISSUE and SANDCASTLE_LABEL do.
