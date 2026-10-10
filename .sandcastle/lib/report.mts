@@ -62,3 +62,26 @@ export class HandBackReport {
 
 // The one report every hand-back this run makes records into.
 export const handBackReport = new HandBackReport();
+
+// One review thread a follow-up pass kept from the follow-up role because
+// someone other than the repository owner or a bot opened it
+// (lib/follow-up-pass.mts#threadsForRole): left for a person, never acted on.
+export type HumanThreadEntry = { pr: number; author: string | null; url: string };
+
+// Every such thread this run found, so main.mts's finally can print them
+// under "Review threads waiting on a person:", next to the hand-backs, until
+// #81 writes a fuller job summary.
+export class HumanThreadReport {
+  private readonly entries: HumanThreadEntry[] = [];
+
+  record(entry: HumanThreadEntry): void {
+    this.entries.push(entry);
+  }
+
+  items(): readonly HumanThreadEntry[] {
+    return this.entries;
+  }
+}
+
+// The one report every follow-up pass this run makes records into.
+export const humanThreadReport = new HumanThreadReport();

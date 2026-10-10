@@ -9,8 +9,9 @@
 // need no agent: re-requesting a stale Copilot review, updating a branch
 // that's only behind main, and handing an issue back when its latest PR
 // closed without merging. A PR that needs more than that (DIRTY, a red
-// check, an unresolved bot thread) is only logged here: the agent pass that
-// fixes it is a later issue (#77).
+// check, an unresolved bot thread) is logged here and returned as a
+// PassTarget: the agent pass that fixes it lives in lib/follow-up-pass.mts
+// (#78).
 // ---------------------------------------------------------------------------
 
 import { discardClosedWork, isIssueBranch, type BranchRefs } from "./branches.mts";
@@ -255,10 +256,12 @@ export const liveFollowUpGitHub: FollowUpGitHub = {
   addPullRequestLabel: (number, label) => addPullRequestLabel(number, label),
 };
 
-// What the sweep found that needs an agent: the PRs it logged as needing a
-// follow-up pass (#147's early exit reads this, so a round with one of these
-// still has work).
-export type SweepResult = { needsPass: number[] };
+// What the sweep found that needs an agent: the numbers of the PRs it logged
+// as needing a follow-up pass (#147's early exit reads this, so a round with
+// one of these still has work), and those same PRs as PassTargets for
+// lib/follow-up-pass.mts#followUpPassPhase to run a pass on. A failed sweep
+// (see followUpPhase) returns both empty, never treated as work found.
+export type SweepResult = { needsPass: number[]; passes: PassTarget[] };
 
 // Reads the host's login, the in-scope issues and the open PRs once, then
 // for each PR either skips it (sweepSkipReason) or applies `decide`, logging
@@ -279,6 +282,7 @@ export function sweepPullRequests(
   const inScope = new Set(issues.map((issue) => issue.number));
   const openPrs = github.openPullRequests();
   const needsPass: number[] = [];
+  const passes: PassTarget[] = [];
 
   for (const pr of openPrs) {
     try {
@@ -302,7 +306,10 @@ export function sweepPullRequests(
       }
       const decision = decide(pr, now);
       followUp(pr, decision, github, log);
-      if (decision.action === "needs-pass") needsPass.push(pr.number);
+      if (decision.action === "needs-pass") {
+        needsPass.push(pr.number);
+        passes.push(passTarget(pr, decision.reasons));
+      }
     } catch (error) {
       log(`  ⚠ Couldn't follow up PR #${pr.number}, so it's swept again next round: ${error}`);
     }
@@ -314,7 +321,7 @@ export function sweepPullRequests(
     openPrs.filter((pr) => pr.isCrossRepository === false).flatMap((pr) => issueNumberOf(pr.headRefName) ?? []),
   );
   const candidates = issues.filter((issue) => !hasLabel(issue, NEEDS_HUMAN) && !withOpenPr.has(issue.number));
-  if (candidates.length === 0) return { needsPass };
+  if (candidates.length === 0) return { needsPass, passes };
   const closed = github.closedPullRequests(host);
   for (const issue of candidates) {
     try {
@@ -328,7 +335,39 @@ export function sweepPullRequests(
       log(`  ⚠ Couldn't check whether #${issue.number}'s last PR closed without merging, so it's checked again next round: ${error}`);
     }
   }
-  return { needsPass };
+  return { needsPass, passes };
+}
+
+// One PR the sweep marked as needing a follow-up pass, with what
+// lib/follow-up-pass.mts#runPass needs to start one: tests pin this directly,
+// since the sweep's full SweepPullRequest carries far more than a pass reads.
+export type PassTarget = {
+  number: number;
+  id: string;
+  headRefName: string;
+  headRefOid: string;
+  issueNumber: number;
+  reasons: string[];
+  // GitHub said the PR conflicts with main (DIRTY), so a pass merges main
+  // in. A PR that's only behind isn't merged by a pass: the sweep updates it
+  // on GitHub once it's settled.
+  conflicted: boolean;
+};
+
+// What lib/follow-up-pass.mts#runPass reads of a needs-pass PR. Only an
+// issue branch gets this far (sweepSkipReason), so the issue number is there.
+function passTarget(pr: SweepPullRequest, reasons: string[]): PassTarget {
+  const issueNumber = issueNumberOf(pr.headRefName);
+  if (issueNumber === undefined) throw new Error(`PR #${pr.number}'s branch ${pr.headRefName} names no issue`);
+  return {
+    number: pr.number,
+    id: pr.id,
+    headRefName: pr.headRefName,
+    headRefOid: pr.headRefOid,
+    issueNumber,
+    reasons,
+    conflicted: pr.mergeStateStatus === "DIRTY",
+  };
 }
 
 // Carries out one PR's decision and logs it.
@@ -357,8 +396,8 @@ function followUp(pr: SweepPullRequest, decision: SweepDecision, github: FollowU
 // The follow-up sweep as main.mts runs it at the start of each round, before
 // intake. A failure, such as GitHub's API being unavailable, is logged and
 // the sweep runs again next round: it's housekeeping, never a reason to stop
-// building. Returns { needsPass: [] } for a failed sweep, so #147's early
-// exit never treats a sweep failure as work found.
+// building. Returns { needsPass: [], passes: [] } for a failed sweep, so
+// #147's early exit never treats a sweep failure as work found.
 export function followUpPhase(
   sweep: () => SweepResult = () => sweepPullRequests(),
   warn: (message: string) => void = console.error,
@@ -367,7 +406,7 @@ export function followUpPhase(
     return sweep();
   } catch (error) {
     warn(`  ✗ Couldn't sweep the open pull requests, so they're swept again next round: ${error}`);
-    return { needsPass: [] };
+    return { needsPass: [], passes: [] };
   }
 }
 

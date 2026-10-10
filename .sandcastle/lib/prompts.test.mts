@@ -2,8 +2,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { withSharedRules } from "./agents.mts";
+import type { PromptThread } from "./follow-up-pass.mts";
 import type { SandcastleIssue } from "./github.mts";
-import { architectPromptArgs, backendPromptArgs, critiquePromptArgs, gateFixerPromptArgs, intakePromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import {
+  architectPromptArgs,
+  backendPromptArgs,
+  critiquePromptArgs,
+  followUpPromptArgs,
+  gateFixerPromptArgs,
+  intakePromptArgs,
+  issuePromptArgs,
+  plannerPromptArgs,
+} from "./prompts.mts";
 
 // What ownerApproved (see github.test.mts) leaves of an issue: only the
 // comments of authors with write access.
@@ -121,6 +131,37 @@ describe("intakePromptArgs", () => {
     const args = intakePromptArgs([issue]);
 
     assert.deepEqual(JSON.parse(args.ISSUES_JSON).map((i: { number: number }) => i.number), [3]);
+  });
+});
+
+// #78: the follow-up role can't reach GitHub, so everything it learns about
+// the PR and its threads travels through these prompt arguments.
+describe("followUpPromptArgs", () => {
+  const threads: PromptThread[] = [
+    {
+      threadId: "RT_1",
+      from: "bot",
+      path: "src/Domain/Result.cs",
+      line: 10,
+      outdated: false,
+      comments: [{ author: "copilot-pull-request-reviewer", body: "Consider returning a Result<T> here." }],
+    },
+  ];
+
+  it("preserves issue context alongside the PR number and the threads given to the role", () => {
+    const args = followUpPromptArgs(issue, "feature/3-add-a-thing", 42, threads, "already contains main.");
+
+    assert.equal(args.TASK_ID, "3");
+    assert.equal(args.BRANCH, "feature/3-add-a-thing");
+    assert.equal(args.PR_NUMBER, "42");
+    assert.deepEqual(JSON.parse(String(args.THREADS_JSON)), threads);
+    assert.equal(args.MERGE, "already contains main.");
+  });
+
+  it("gives the role an empty JSON array when no thread is for it", () => {
+    const args = followUpPromptArgs(issue, "feature/3-add-a-thing", 42, [], "already contains main.");
+
+    assert.deepEqual(JSON.parse(String(args.THREADS_JSON)), []);
   });
 });
 

@@ -494,6 +494,122 @@ export function updatePullRequestBranch(
   ghWithStderr(run, ["api", "--method", "PUT", `repos/${repo}/pulls/${number}/update-branch`, "-f", `expected_head_sha=${expectedHeadSha}`]);
 }
 
+// One comment in a review thread, first comment first (lib/github.mts#reviewThreadsOf).
+// byBot: whether its author.__typename is "Bot".
+export type ThreadComment = { author: string | null; byBot: boolean; body: string; url: string };
+
+// One review thread on a pull request (lib/follow-up-pass.mts#threadsForRole),
+// with its comments, first comment first.
+export type ReviewThread = {
+  id: string;
+  resolved: boolean;
+  outdated: boolean;
+  path: string | null;
+  line: number | null;
+  comments: ThreadComment[];
+};
+
+// The PR's head and every open-or-not review thread
+// (lib/follow-up-pass.mts#runPass), through one GraphQL query. Throws when
+// any nested list (threads or a thread's comments) is truncated, or the
+// answer names no such PR, so a pass never decides from partial information
+// (#78, fail closed as lib/github.mts#bodyEdits already does for issues).
+export function reviewThreadsOf(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): { headRefOid: string; threads: ReviewThread[] } {
+  const [owner, name] = repo.split("/") as [string, string];
+  const page = JSON.parse(
+    ghWithStderr(run, [
+      "api", "graphql", "-f", `query=${REVIEW_THREADS_QUERY}`, "-f", `owner=${owner}`, "-f", `name=${name}`, "-F", `number=${number}`,
+    ]),
+  ) as { data?: { repository?: { pullRequest?: ReviewThreadsNode | null } } };
+  const pr = page.data?.repository?.pullRequest;
+  if (!pr || typeof pr.headRefOid !== "string" || !pr.reviewThreads?.nodes) {
+    throw new Error(`gh api graphql answered no such pull request #${number}: ${JSON.stringify(page)}`);
+  }
+  if (truncated(pr.reviewThreads) || nodesOf(pr.reviewThreads).some((thread) => truncated(thread.comments))) {
+    throw new Error(`Pull request #${number}'s review threads are truncated, so they can't be read in full`);
+  }
+  return {
+    headRefOid: pr.headRefOid,
+    threads: nodesOf(pr.reviewThreads).map((thread) => ({
+      id: thread.id,
+      resolved: thread.isResolved,
+      outdated: thread.isOutdated,
+      path: thread.path ?? null,
+      line: thread.line ?? null,
+      comments: nodesOf(thread.comments).map((comment) => ({
+        author: authorLogin(comment.author),
+        byBot: comment.author?.__typename === "Bot",
+        body: comment.body ?? "",
+        url: comment.url ?? "",
+      })),
+    })),
+  };
+}
+
+const REVIEW_THREADS_QUERY = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      headRefOid
+      reviewThreads(first: 100) {
+        pageInfo { hasNextPage }
+        nodes {
+          id isResolved isOutdated path line
+          comments(first: 100) { pageInfo { hasNextPage } nodes { author { __typename login } body url } }
+        }
+      }
+    }
+  }
+}`;
+
+type ReviewThreadsNode = {
+  headRefOid?: string;
+  reviewThreads: Connection<{
+    id: string;
+    isResolved: boolean;
+    isOutdated: boolean;
+    path?: string | null;
+    line?: number | null;
+    comments: Connection<{ author?: { __typename?: string; login?: string } | null; body?: string; url?: string }>;
+  }>;
+};
+
+// Replies to a review thread (lib/follow-up-pass.mts#runPass), through
+// addPullRequestReviewThreadReply. The body travels as a GraphQL variable in
+// a JSON request on stdin, never interpolated into the query or put on the
+// command line: it carries the role's reasoning, unchecked model text.
+export function replyToReviewThread(threadId: string, body: string, run: typeof execFileSync = execFileSync): void {
+  const mutation =
+    "mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: " +
+    "{ pullRequestReviewThreadId: $threadId, body: $body }) { comment { id } } }";
+  ghWithStderr(run, ["api", "graphql", "--input", "-"], JSON.stringify({ query: mutation, variables: { threadId, body } }));
+}
+
+// Resolves a review thread (lib/follow-up-pass.mts#runPass), through
+// resolveReviewThread. GitHub's mutation takes only the thread id: there's no
+// ADDRESSED/WONT_FIX/INVALID argument, so that resolution travels in the
+// reply and the pass summary instead (#78).
+export function resolveReviewThread(threadId: string, run: typeof execFileSync = execFileSync): void {
+  const mutation = "mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id } } }";
+  ghWithStderr(run, ["api", "graphql", "-f", `query=${mutation}`, "-f", `threadId=${threadId}`]);
+}
+
+// Posts the follow-up pass's summary comment on a pull request
+// (lib/follow-up-pass.mts#runPass#passSummaryComment), through gh pr comment,
+// with the body on stdin.
+export function commentOnPullRequest(
+  number: number,
+  body: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  ghWithStderr(run, ["pr", "comment", String(number), "--repo", repo, "--body-file", "-"], body);
+}
+
 // The paths an open PR changes.
 export function pullRequestFiles(pr: number): string[] {
   return JSON.parse(

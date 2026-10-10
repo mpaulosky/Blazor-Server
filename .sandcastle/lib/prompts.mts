@@ -6,6 +6,7 @@
 import type { PromptArgs } from "@ai-hero/sandcastle";
 import type { Checkpoint } from "./checkpoint.mts";
 import { BASE_BRANCH } from "./config.mts";
+import type { PromptThread } from "./follow-up-pass.mts";
 import type { SandcastleIssue } from "./github.mts";
 
 // Sandcastle sets {{TARGET_BRANCH}} itself (to the sandbox's own branch inside
@@ -26,6 +27,28 @@ export function issuePromptArgs(issue: SandcastleIssue, branch: string) {
 // implementation, plus the red gate's output and which checkpoint it's at.
 export function gateFixerPromptArgs(issue: SandcastleIssue, branch: string, checkpoint: Checkpoint, gateOutput: string) {
   return { ...issuePromptArgs(issue, branch), CHECKPOINT: String(checkpoint), GATE_OUTPUT: gateOutput };
+}
+
+// The follow-up role (lib/follow-up-pass.mts#runPass) needs the issue, the
+// PR number (its prompt can't reach GitHub to learn it), the open review
+// threads it must act on (already sorted and trimmed by
+// lib/follow-up-pass.mts#threadsForRole, so no stranger's comment reaches
+// it), and one plain sentence on where the merge with main stands: already
+// contains main, merged main cleanly, or merging main conflicted in which
+// files (and that it must finish the merge with `git commit --no-edit`).
+export function followUpPromptArgs(
+  issue: SandcastleIssue,
+  branch: string,
+  pr: number,
+  threads: readonly PromptThread[],
+  merge: string,
+): PromptArgs {
+  return {
+    ...issuePromptArgs(issue, branch),
+    PR_NUMBER: String(pr),
+    THREADS_JSON: JSON.stringify(threads),
+    MERGE: merge,
+  };
 }
 
 // The architect also gets the body of its own latest design note comment

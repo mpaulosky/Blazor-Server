@@ -285,3 +285,19 @@ export const COPILOT_REVIEWER = "copilot-pull-request-reviewer[bot]";
 // or request, before the follow-up sweep asks Copilot again, once per head
 // (lib/follow-up.mts#decide).
 export const COPILOT_REREQUEST_AFTER_MS = 60 * 60 * 1000;
+
+// Marks the follow-up pass's summary PR comment (lib/follow-up-pass.mts), so
+// markerComments can count passes already run toward FOLLOW_UP_PASS_CAP
+// (#78).
+export const FOLLOW_UP_MARKER = "<!-- sandcastle:follow-up -->";
+
+// Marks the host's own reply in a review thread (lib/follow-up-pass.mts), so
+// an owner thread the host already answered isn't handed to the follow-up
+// role again: the host posts replies from the same login the owner may be,
+// so an author check alone can't tell the two apart (#78).
+export const FOLLOW_UP_REPLY_MARKER = "<!-- sandcastle:follow-up-reply -->";
+
+// Passes per PR, counted by FOLLOW_UP_MARKER comments since
+// sandcastle:needs-human was last removed from it (lib/follow-up-pass.mts,
+// "Giving up" in docs/plans/sandcastle-workflow.md, #78).
+export const FOLLOW_UP_PASS_CAP = 3;

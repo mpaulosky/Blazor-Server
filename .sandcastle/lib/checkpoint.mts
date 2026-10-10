@@ -24,14 +24,15 @@ export type CheckpointSteps = {
 };
 
 // The gate prints in colour, which only gets in the way of a prompt or an
-// issue comment.
-const ansiEscape = /\u001b\[[0-9;]*[A-Za-z]/g;
+// issue comment. lib/follow-up-pass.mts's gate strips it too.
+export const ansiEscape = /\u001b\[[0-9;]*[A-Za-z]/g;
 
 // A full commit id, SHA-1 or SHA-256.
 const commitId = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 
-// The sandbox's HEAD commit, or undefined when it can't be read.
-async function headOf(sandbox: Pick<Sandbox, "exec">): Promise<string | undefined> {
+// The sandbox's HEAD commit, or undefined when it can't be read. Also how
+// lib/follow-up-pass.mts's gate learns the commit it passed on.
+export async function headOf(sandbox: Pick<Sandbox, "exec">): Promise<string | undefined> {
   const { stdout, exitCode } = await sandbox.exec("git rev-parse HEAD");
   const commit = stdout.trim();
   return exitCode === 0 && commitId.test(commit) ? commit : undefined;

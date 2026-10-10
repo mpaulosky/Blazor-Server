@@ -12,6 +12,7 @@ import {
   closedPullRequests,
   closeIssueAsCompleted,
   commentOnIssue,
+  commentOnPullRequest,
   type ContentEdit,
   createIssue,
   ensureLabels,
@@ -33,7 +34,10 @@ import {
   ownerApproved,
   pushAccess,
   removeIssueLabel,
+  replyToReviewThread,
   requestCopilotReview,
+  resolveReviewThread,
+  reviewThreadsOf,
   sameRepoBlockers,
   sameRepository,
   signedInHostLogin,
@@ -1074,6 +1078,139 @@ describe("openPullRequestsForSweep", () => {
       assert.equal(pr!.truncated, true);
     });
   }
+});
+
+// #78: a follow-up pass reads a PR's open review threads through one
+// GraphQL query, so it decides from the same shape of answer as
+// openPullRequestsForSweep's query, just for one PR's threads and comments.
+describe("reviewThreadsOf", () => {
+  // One GraphQL page shaped as the query lib/follow-up-pass.mts#runPass
+  // reads from: the PR's head and one bot-opened thread with one comment.
+  function page() {
+    return {
+      data: {
+        repository: {
+          pullRequest: {
+            headRefOid: "a".repeat(40),
+            reviewThreads: {
+              pageInfo: { hasNextPage: false },
+              nodes: [
+                {
+                  id: "RT_1",
+                  isResolved: false,
+                  isOutdated: false,
+                  path: "src/Domain/Result.cs",
+                  line: 10,
+                  comments: {
+                    pageInfo: { hasNextPage: false },
+                    nodes: [
+                      {
+                        author: { __typename: "Bot", login: "copilot-pull-request-reviewer" },
+                        body: "Consider returning a Result<T> here.",
+                        url: "https://github.com/o/r/pull/42#discussion_r1",
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+  }
+
+  it("normalises the PR's head and its review threads from one GraphQL answer", () => {
+    const { run } = recordingGh([JSON.stringify(page())]);
+
+    const { headRefOid, threads } = reviewThreadsOf(42, run, "o/r");
+
+    assert.equal(headRefOid, "a".repeat(40));
+    assert.deepEqual(threads, [
+      {
+        id: "RT_1",
+        resolved: false,
+        outdated: false,
+        path: "src/Domain/Result.cs",
+        line: 10,
+        comments: [
+          {
+            author: "copilot-pull-request-reviewer",
+            byBot: true,
+            body: "Consider returning a Result<T> here.",
+            url: "https://github.com/o/r/pull/42#discussion_r1",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("throws when the review threads list is truncated, rather than deciding from part of it", () => {
+    const truncated = page();
+    truncated.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage = true;
+    const { run } = recordingGh([JSON.stringify(truncated)]);
+
+    assert.throws(() => reviewThreadsOf(42, run, "o/r"), /truncated/i);
+  });
+
+  it("throws when a thread's own comment list is truncated", () => {
+    const truncated = page();
+    truncated.data.repository.pullRequest.reviewThreads.nodes[0]!.comments.pageInfo.hasNextPage = true;
+    const { run } = recordingGh([JSON.stringify(truncated)]);
+
+    assert.throws(() => reviewThreadsOf(42, run, "o/r"), /truncated/i);
+  });
+
+  it("throws when the answer names no such pull request, rather than reading it as one with no threads", () => {
+    const run = (() => JSON.stringify({ data: { repository: { pullRequest: null } } })) as unknown as typeof execFileSync;
+
+    assert.throws(() => reviewThreadsOf(42, run, "o/r"), /no such pull request|pull request 42/i);
+  });
+});
+
+describe("replyToReviewThread", () => {
+  it("replies to the thread through addPullRequestReviewThreadReply, with the body as a GraphQL variable", () => {
+    const { calls, run } = recordingGh();
+
+    replyToReviewThread("RT_1", "Fixed in abc1234.", run);
+
+    assert.equal(calls[0]!.args[0], "api");
+    assert.equal(calls[0]!.args[1], "graphql");
+    assert.ok(
+      !calls[0]!.args.some((arg) => arg.includes("Fixed in abc1234.")),
+      "the reply body must travel as a variable, never interpolated into the query",
+    );
+    const sent = calls[0]!.args.join(" ") + String(calls[0]!.input ?? "");
+    assert.match(sent, /addPullRequestReviewThreadReply/);
+    assert.match(sent, /RT_1/);
+    assert.match(sent, /Fixed in abc1234\./);
+  });
+});
+
+describe("resolveReviewThread", () => {
+  it("resolves the thread through resolveReviewThread, sending only the thread id", () => {
+    const { calls, run } = recordingGh();
+
+    resolveReviewThread("RT_1", run);
+
+    const sent = calls[0]!.args.join(" ") + String(calls[0]!.input ?? "");
+    assert.match(sent, /resolveReviewThread/);
+    assert.match(sent, /RT_1/);
+    // GitHub's mutation takes no resolution argument at all: ADDRESSED,
+    // WONT_FIX and INVALID only ever reach the reply and the pass summary.
+    assert.ok(!/ADDRESSED|WONT_FIX|INVALID/.test(sent), `expected no resolution argument in ${sent}`);
+  });
+});
+
+describe("commentOnPullRequest", () => {
+  it("posts the comment with gh pr comment, piping the body in on stdin", () => {
+    const { calls, run } = recordingGh();
+
+    commentOnPullRequest(42, "Follow-up pass 1 of 3.", run, "o/r");
+
+    assert.deepEqual(calls[0]!.args, ["pr", "comment", "42", "--repo", "o/r", "--body-file", "-"]);
+    assert.equal(calls[0]!.input, "Follow-up pass 1 of 3.");
+  });
 });
 
 // Who counts as "the repository owner" for the queue's approval and

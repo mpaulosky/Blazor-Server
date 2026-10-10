@@ -11,7 +11,7 @@ describe("developer role prompts", () => {
     assert.equal(existsSync(sandcastleFile("implement-prompt.md")), false);
   });
 
-  for (const role of ["architect", "tester", "backend", "ui", "scribe"]) {
+  for (const role of ["architect", "tester", "backend", "ui", "scribe", "follow-up"]) {
     it(`gives the ${role} the shared rules`, () => {
       assert.match(read(`roles/${role}.md`), /\{\{SHARED_RULES\}\}/);
     });
@@ -103,6 +103,35 @@ describe("optional role prompts", () => {
     }
     assert.match(prompt, /commit nothing/i);
     assert.match(prompt, /markdownlint-cli2/);
+  });
+});
+
+// #78: the follow-up role resolves a PR's merge conflicts and review
+// threads, writing its verdicts to a file the host reads back, never
+// rewriting history itself.
+describe("follow-up role prompt", () => {
+  const prompt = () => read("roles/follow-up.md");
+
+  it("takes the PR number, the merge note and the threads given to it", () => {
+    for (const placeholder of ["{{PR_NUMBER}}", "{{MERGE}}", "{{THREADS_JSON}}"]) {
+      assert.ok(prompt().includes(placeholder), placeholder);
+    }
+  });
+
+  it("writes its verdicts to .sandcastle/follow-up.json, naming every verdict", () => {
+    const text = prompt();
+
+    assert.match(text, /\.sandcastle\/follow-up\.json/);
+    for (const verdict of ["fixed", "declined", "outdated"]) {
+      assert.ok(text.includes(verdict), verdict);
+    }
+  });
+
+  it("forbids rebasing, amending or force-pushing: the host pushes without force", () => {
+    const text = prompt();
+
+    assert.match(text, /rebase/i);
+    assert.match(text, /force/i);
   });
 });
 
