@@ -20,7 +20,7 @@ so Sandcastle builds its own upgrade.
   unless the owner approved it. Anything that can only be done with write access (reusing a branch, `workflow_dispatch`) isn't guarded further. Granting someone write access means trusting
   them with Sandcastle too.
 - **Agents can't reach GitHub.** The sandbox gets no GitHub token, and no prompt tells a role to run `gh`. The host puts everything a role needs into its prompt: the issue's title
-  and body, the owner's comments, the design note, and the review threads it may act on. What a role sees is exactly what the host chose to give it.
+  and body, the comments of people with write access, the design note, and the review threads it may act on. What a role sees is exactly what the host chose to give it.
 - **Anything that must be stable is host code.** Branch names, retry counts and gate results come from code, never from a model.
 - **State lives on GitHub.** Labels, marker comments and native "blocked by" links carry state between runs, so any run can resume after a crash, a timeout or a restart.
 
@@ -43,9 +43,14 @@ repository, and an agent holding a write token acts on what it reads. So when th
 - nobody but the owner has changed its title (`renamed` events) or body (the GraphQL `userContentEdits` editors) since that event.
 
 The PAT is the owner's, so the labels the host adds to split children pass. Any other issue is skipped and logged, without a comment. The owner re-approves an edited issue by removing and
-re-adding `Sandcastle`. Only the owner's comments reach a role: the host drops everyone else's when it builds a prompt, and the sandbox has no token to fetch them itself (see
-**Principles**). On PRs, follow-up acts only on bot threads and the owner's threads (see **Thread rules**). The workflow applies the label rule to the events that start it (see **Trigger and
-run environment**), and the host checks cover scheduled, manual and local runs.
+re-adding `Sandcastle`. Only the comments of people with write access (`admin`, `maintain` or `write` on the repository, from the collaborator-permission API) reach a role: the
+host drops everyone else's when it builds a prompt, and the sandbox has no token to fetch them itself (see **Principles**). Write access, not the owner's login, decides this, because in a
+repository an organization owns the owner never comments. The host looks each author up once per run, so write access revoked during a run isn't seen until
+the next run: stop the run to cut someone off at once.
+A login GitHub says "is not a user" (a 404, as for a bot's bare login) counts as no access. Any other lookup that fails, including a 404 for the repository itself,
+drops that author's comments and is logged once, and the host asks again in the next round rather than remember the failure.
+On PRs, follow-up acts only on bot threads and the owner's threads (see **Thread rules**).
+The workflow applies the label rule to the events that start it (see **Trigger and run environment**), and the host checks cover scheduled, manual and local runs.
 
 The same goes for every label that moves an issue or PR along. The host trusts `sandcastle:ready` only when its most recent add was the owner's (which includes the host itself);
 otherwise it removes the label and intake judges the issue. A `sandcastle:needs-info` or `sandcastle:needs-human` removal counts as a re-queue only when the owner made it; otherwise

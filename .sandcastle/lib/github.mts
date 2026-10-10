@@ -19,10 +19,6 @@ export function repoName(): string {
   return repo;
 }
 
-export function repoOwner(): string {
-  return repoName().split("/")[0]!;
-}
-
 export type GhIssue = {
   number: number;
   title: string;
@@ -32,33 +28,105 @@ export type GhIssue = {
 };
 
 export type SandcastleIssue = Omit<GhIssue, "comments"> & {
-  // Only the repository owner's comments; see ownerApproved.
+  // Only the comments of authors with write access to the repository; see ownerApproved.
   comments: string[];
 };
 
-// Keep only the owner's comments, so text from anyone else never reaches a
-// role's prompt.
-export function ownerApproved(issue: GhIssue, owner: string): SandcastleIssue {
+// Keep only the comments of authors with admin, maintain or write permission
+// on `repo`, so text from anyone else never reaches a role's prompt.
+// Permission rather than the owner's login decides this, because in a
+// repository an organization owns the owner never comments (#214). A
+// permission lookup that fails drops that author's comments, so an error
+// never lets a stranger's text through. `canPush` caches each author's
+// answer, so a caller that shares one map across issues looks each author up
+// once. Only GitHub's answer is cached, never a failure: one transient error
+// would otherwise drop a maintainer's guidance for the rest of the run. A
+// failure goes in `failed` instead, which a caller shares across one round's
+// issues and starts afresh each round: the author's comments are dropped
+// without another lookup or warning until then, since a retry within the same
+// burst would most likely fail too and deepen a rate limit.
+export function ownerApproved(
+  issue: GhIssue,
+  repo: string = repoName(),
+  run: typeof execFileSync = execFileSync,
+  canPush: Map<string, boolean> = new Map(),
+  warn: (message: string) => void = console.error,
+  failed: Set<string> = new Set(),
+): SandcastleIssue {
+  const trusted = (author: string): boolean => {
+    const cached = canPush.get(author);
+    if (cached !== undefined) return cached;
+    if (failed.has(author)) return false;
+    const allowed = hasWriteAccess(author, repo, run, warn);
+    if (allowed === undefined) failed.add(author);
+    else canPush.set(author, allowed);
+    return allowed ?? false;
+  };
   return {
     number: issue.number,
     title: issue.title,
     body: issue.body,
     labels: issue.labels,
-    comments: issue.comments.filter((comment) => comment.author === owner).map((comment) => comment.body),
+    comments: issue.comments.filter((comment) => trusted(comment.author)).map((comment) => comment.body),
   };
 }
 
-// The open Sandcastle issues, with everyone's comments but the owner's dropped.
-export function listSandcastleIssues(): SandcastleIssue[] {
+const PUSH_PERMISSIONS: ReadonlySet<unknown> = new Set(["admin", "maintain", "write"]);
+
+// Whether `login` can push to `repo`. GitHub reports maintain as "write" in
+// `.permission` and names it only in `.role_name`, so either field counts. A
+// 404 whose message says the login "is not a user", as for the bare
+// "github-actions" gh prints for a GitHub App's comment, is a definite no,
+// cached and not reported. Any other 404 means the token can't see the
+// repository, which says nothing about the author. Any other failure, or an answer with neither field, is reported
+// through `warn` and returns undefined: it says nothing about the author's
+// access.
+function hasWriteAccess(
+  login: string,
+  repo: string,
+  run: typeof execFileSync,
+  warn: (message: string) => void,
+): boolean | undefined {
+  try {
+    const answer = JSON.parse(
+      ghWithStderr(run, ["api", `repos/${repo}/collaborators/${encodeURIComponent(login)}/permission`]),
+    ) as { permission?: unknown; role_name?: unknown };
+    if (typeof answer.permission !== "string" && typeof answer.role_name !== "string") {
+      throw new Error(`unexpected answer: ${JSON.stringify(answer)}`);
+    }
+    return PUSH_PERMISSIONS.has(answer.permission) || PUSH_PERMISSIONS.has(answer.role_name);
+  } catch (error) {
+    if (/is not a user \(HTTP 404\)/.test(String(error))) return false;
+    warn(`  ⚠ Couldn't read ${login}'s permission on ${repo}, so their comments are left out this time: ${error}`);
+    return undefined;
+  }
+}
+
+// Each comment author's answer from ownerApproved, kept for the whole run so
+// no author is looked up twice, however many issues or rounds they comment on.
+// The trade-off: write access revoked partway through a run isn't seen until
+// the next run, so stop the run to cut someone off at once.
+const commenterCanPush = new Map<string, boolean>();
+
+// The open Sandcastle issues, with every comment dropped but those from
+// authors with write access. The gate calls this once per round: `canPush`
+// carries authors' answers across the run, and each call starts a fresh set
+// of failed lookups, so a failure is retried next round.
+export function listSandcastleIssues(
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  canPush: Map<string, boolean> = commenterCanPush,
+  warn: (message: string) => void = console.error,
+): SandcastleIssue[] {
   const issues = JSON.parse(
-    sh(
-      process.cwd(), "gh", "issue", "list", "--repo", repoName(), "--state", "open", "--label", "Sandcastle", "--limit", "1000",
+    ghWithStderr(run, [
+      "issue", "list", "--repo", repo, "--state", "open", "--label", "Sandcastle", "--limit", "1000",
       "--json", "number,title,body,labels,comments",
       "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}]",
-    ),
+    ]),
   ) as GhIssue[];
-  const owner = repoOwner();
-  return issues.map((issue) => ownerApproved(issue, owner));
+  const failed = new Set<string>();
+  return issues.map((issue) => ownerApproved(issue, repo, run, canPush, warn, failed));
 }
 
 export type OpenPullRequest = { number: number; headRefName: string };
