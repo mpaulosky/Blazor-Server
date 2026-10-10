@@ -2,8 +2,9 @@
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<IsAspireHost>true</IsAspireHost>
-		<!-- ASPIRE010: the CLI bundle brings dashboard features this sandbox doesn't need to build or test. -->
+		<!-- ASPIRE010 warns that the AppHost restores the dashboard and DCP packages instead of using the Aspire CLI
+		     bundle (AspireUseCliBundle=false). Those packages are all it needs, so `dotnet run` and the tests work
+		     without the Aspire CLI installed. -->
 		<NoWarn>$(NoWarn);ASPIRE010</NoWarn>
 	</PropertyGroup>
 
