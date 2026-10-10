@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.113](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.113) | 2026-10-10 | feat(sandcastle): Stop unattended runs cleanly when there's no work, time or usage left | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-241-feat-sandcastle-stop-unattended-runs-cleanly-when-there-s-no-work-time-or-usage-left.md) |
 | [v0.0.112](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.112) | 2026-10-10 | feat(sandcastle): Scope the queue to work the repository owner approved | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-239-feat-sandcastle-scope-the-queue-to-work-the-repository-owner-approved.md) |
 | [v0.0.111](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.111) | 2026-10-10 | feat(sandcastle): Sweep open Sandcastle PRs each round and keep them current | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-237-feat-sandcastle-sweep-open-sandcastle-prs-each-round-and-keep-them-current.md) |
 | [v0.0.110](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.110) | 2026-10-10 | feat(sandcastle): Intake splits oversized issues into blocked child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-234-feat-sandcastle-intake-splits-oversized-issues-into-blocked-child-issues.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.106](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.106) | 2026-10-10 | fix(sandcastle): Keep one bad intake verdict from costing the batch, and post intake's text as plain text | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-225-fix-sandcastle-keep-one-bad-intake-verdict-from-costing-the-batch-and-post-intake-s-text-as-plain-text.md) |
 | [v0.0.105](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.105) | 2026-10-10 | feat(sandcastle): Intake judges each issue against the Definition of Ready | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-222-feat-sandcastle-intake-judges-each-issue-against-the-definition-of-ready.md) |
 | [v0.0.104](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.104) | 2026-10-10 | feat(sandcastle): Mark an issue while Sandcastle builds it | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-219-feat-sandcastle-mark-an-issue-while-sandcastle-builds-it.md) |
-| [v0.0.103](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.103) | 2026-10-10 | fix(sandcastle): Keep comments from anyone with write access, not only the repository owner's | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-218-fix-sandcastle-keep-comments-from-anyone-with-write-access-not-only-the-repository-owner-s.md) |
 
 <!-- RELEASES_END -->
 
