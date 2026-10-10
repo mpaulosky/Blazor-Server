@@ -27,4 +27,4 @@ Blocked by #N
 ## Acceptance criteria
 
 - [ ] An outcome someone can check without judgement, ending in "(tested)" when a test should cover it.
-- [ ] The repository's checks for the changed code pass (for example `pnpm run check:sandcastle` or `dotnet test`).
+- [ ] `scripts/gate.sh` passes.
