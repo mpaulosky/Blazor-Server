@@ -17,6 +17,7 @@ import {
   copyToWorktree,
   DESIGN_MARKER,
   hooks,
+  PR_MARKER,
   PUBLISH_RETRY_ATTEMPTS,
   type OptionalRole,
 } from "./config.mts";
@@ -74,7 +75,9 @@ export async function publish(
   const docsNote = docsFailed
     ? "\n\n⚠️ The documentation step failed, so this PR may leave `CONTEXT.md`, `README.md` or the guides out of date."
     : "";
-  const body = `Closes #${issue.number}\n\n${reviewNote}${docsNote}`;
+  // PR_MARKER is how the follow-up sweep (lib/follow-up.mts) tells a PR the
+  // host published from a collaborator's on a matching branch (#77).
+  const body = `${PR_MARKER}\nCloses #${issue.number}\n\n${reviewNote}${docsNote}`;
   // A retry after a create that GitHub carried out but answered with an error
   // finds that PR rather than open a second one: openPullRequest looks for an
   // open PR from the branch first.
@@ -354,6 +357,15 @@ async function buildMarkedIssue(
   base: string,
   host: BuildHost,
 ): Promise<BuildResult> {
+  // Only once the issue is marked, so two runs never delete the same refs,
+  // and before the sandbox, so a closed PR's work is never built on. A throw
+  // stops the build uncounted (see buildIssue): building on the old work is
+  // what the hand-back's comment promised wouldn't happen.
+  const fresh = host.startFromMain(issue.number, branch, base);
+  if (fresh !== undefined && fresh.deleted.length > 0) {
+    host.log(`  #${issue.number} PR #${fresh.pr} was closed without merging, so the build starts from main: deleted ${fresh.deleted.join(", ")}`);
+  }
+
   const sandbox = await host.createSandbox(branch);
 
   const promptArgs = issuePromptArgs(issue, branch);

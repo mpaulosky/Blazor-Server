@@ -114,25 +114,39 @@ export type BranchRefs = {
   deleteRemote(branch: string, expectedSha: string): void;
 };
 
+// A git failure's exit status, read from the execFileSync error runHostGit
+// keeps as the cause.
+function exitStatus(error: unknown): unknown {
+  return ((error as { cause?: { status?: unknown } }).cause ?? {}).status;
+}
+
 const originRefs: BranchRefs = {
-  remoteHead: () => {
-    throw new Error("Not implemented");
+  remoteHead: (branch) => git("ls-remote", "origin", `refs/heads/${branch}`).split(/\s/)[0] || undefined,
+  localHead: (ref) => {
+    try {
+      return git("rev-parse", "--verify", "--quiet", `${ref}^{commit}`);
+    } catch (error) {
+      // --quiet exits 1 with no output only when the ref doesn't exist; any
+      // other failure is rethrown rather than read as a missing ref.
+      if (exitStatus(error) === 1) return undefined;
+      throw error;
+    }
   },
-  localHead: () => {
-    throw new Error("Not implemented");
+  contains: (commit, ancestor) => {
+    try {
+      git("merge-base", "--is-ancestor", ancestor, commit);
+      return true;
+    } catch (error) {
+      if (exitStatus(error) === 1) return false;
+      // An object this repository doesn't have can't be in any of its refs.
+      if (/Not a valid (?:object|commit) name/.test(String(error))) return false;
+      throw error;
+    }
   },
-  contains: () => {
-    throw new Error("Not implemented");
-  },
-  deleteLocalBranch: () => {
-    throw new Error("Not implemented");
-  },
-  deleteRef: () => {
-    throw new Error("Not implemented");
-  },
-  deleteRemote: () => {
-    throw new Error("Not implemented");
-  },
+  deleteLocalBranch: (branch) => void git("branch", "-D", branch),
+  deleteRef: (ref) => void git("update-ref", "-d", ref),
+  deleteRemote: (branch, expectedSha) =>
+    void git("push", "--quiet", `--force-with-lease=refs/heads/${branch}:${expectedSha}`, "origin", `:refs/heads/${branch}`),
 };
 
 // Deletes each ref of `branch` that still holds `closedHead`, the head of an
@@ -141,10 +155,35 @@ const originRefs: BranchRefs = {
 // origin/<branch>, in that order (lib/follow-up.mts#startFromMain). Leaves
 // everything alone when `base` already contains closedHead. A ref that
 // doesn't contain closedHead is left alone too, so a fresh attempt's commits,
-// which start from main, survive. Every call goes through `refs`, never git()
-// directly, so this runs the same in the main checkout as in a test.
+// which start from main, survive. All three go because Sandcastle's
+// `git worktree add` checks out a local branch if there is one, else DWIMs
+// from origin/<branch>, and starts fresh from main only when neither exists.
+// Every call goes through `refs` (live: git(), hooks off, main checkout), so a
+// test can stub it.
 export function discardClosedWork(branch: string, closedHead: string, base: string, refs: BranchRefs = originRefs): string[] {
-  throw new Error("Not implemented");
+  if (refs.contains(base, closedHead)) return [];
+  const deleted: string[] = [];
+  // The local branch goes first: it's the one git can refuse to delete (a
+  // worktree still has it checked out), and failing there leaves origin's
+  // branch untouched.
+  const localRef = `refs/heads/${branch}`;
+  const local = refs.localHead(localRef);
+  if (local !== undefined && refs.contains(local, closedHead)) {
+    refs.deleteLocalBranch(branch);
+    deleted.push(localRef);
+  }
+  const trackingRef = `refs/remotes/origin/${branch}`;
+  const tracking = refs.localHead(trackingRef);
+  if (tracking !== undefined && refs.contains(tracking, closedHead)) {
+    refs.deleteRef(trackingRef);
+    deleted.push(trackingRef);
+  }
+  const remote = refs.remoteHead(branch);
+  if (remote !== undefined && refs.contains(remote, closedHead)) {
+    refs.deleteRemote(branch, remote);
+    deleted.push(`origin/${branch}`);
+  }
+  return deleted;
 }
 
 // Name each issue's branch, and fetch the ones that already exist on origin
