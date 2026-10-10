@@ -229,6 +229,24 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.106">v0.0.106</a></td>
+                <td>2026-10-10</td>
+                <td>fix(sandcastle): Keep one bad intake verdict from costing the batch, and post intake&#x27;s text as plain text</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-225-fix-sandcastle-keep-one-bad-intake-verdict-from-costing-the-batch-and-post-intake-s-text-as-plain-text.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.105">v0.0.105</a></td>
+                <td>2026-10-10</td>
+                <td>feat(sandcastle): Intake judges each issue against the Definition of Ready</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-222-feat-sandcastle-intake-judges-each-issue-against-the-definition-of-ready.md">Post</a></td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.104">v0.0.104</a></td>
+                <td>2026-10-10</td>
+                <td>feat(sandcastle): Mark an issue while Sandcastle builds it</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-219-feat-sandcastle-mark-an-issue-while-sandcastle-builds-it.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.103">v0.0.103</a></td>
                 <td>2026-10-10</td>
                 <td>fix(sandcastle): Keep comments from anyone with write access, not only the repository owner&#x27;s</td>
@@ -270,24 +288,6 @@
                 <td>docs(claude): Add Sandcastle and Baseline rules for agents</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-207-docs-claude-add-sandcastle-and-baseline-rules-for-agents.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.96">v0.0.96</a></td>
-                <td>2026-10-10</td>
-                <td>build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-201-build-sandcastle-install-actionlint-shellcheck-and-zizmor-in-the-sandbox-image.md">Post</a></td>
-              </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.95">v0.0.95</a></td>
-                <td>2026-10-10</td>
-                <td>docs(review): Check that Sandcastle role prompts can always finish</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-200-docs-review-check-that-sandcastle-role-prompts-can-always-finish.md">Post</a></td>
-              </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.94">v0.0.94</a></td>
-                <td>2026-10-10</td>
-                <td>chore(sandcastle): Add a pnpm script to start a run</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-199-chore-sandcastle-add-a-pnpm-script-to-start-a-run.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,30 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.106</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-225-fix-sandcastle-keep-one-bad-intake-verdict-from-costing-the-batch-and-post-intake-s-text-as-plain-text.md">fix(sandcastle): Keep one bad intake verdict from costing the batch, and post intake&#x27;s text as plain text</a></h3>
+              <p class="post-excerpt">Claude&#x27;s review of #222&#x27;s final push, posted 41 seconds after the PR merged, found three problems in intake (.sandcastle/lib/intake.mts) (#224):</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/225">PR #225</a></p>
+            </article>
+          </li>
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.105</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-222-feat-sandcastle-intake-judges-each-issue-against-the-definition-of-ready.md">feat(sandcastle): Intake judges each issue against the Definition of Ready</a></h3>
+              <p class="post-excerpt">Sandcastle built whatever carried the Sandcastle label, even when the issue was unclear, so the tester and backend developer had to guess at what was wanted. This PR adds an intake step before the…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/222">PR #222</a></p>
+            </article>
+          </li>
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.104</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-219-feat-sandcastle-mark-an-issue-while-sandcastle-builds-it.md">feat(sandcastle): Mark an issue while Sandcastle builds it</a></h3>
+              <p class="post-excerpt">While Sandcastle built an issue, GitHub showed no sign of it until the PR opened. On 2026-10-07 a manual /implement-spec #71 started while Sandcastle was already building #71. Only the run log…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/219">PR #219</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.103</span></p>
@@ -352,30 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-207-docs-claude-add-sandcastle-and-baseline-rules-for-agents.md">docs(claude): Add Sandcastle and Baseline rules for agents</a></h3>
               <p class="post-excerpt">Sandcastle&#x27;s agents load CLAUDE.md and the path-scoped rules in .claude/rules/. Two kinds of work had no rule:</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/207">PR #207</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.96</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-201-build-sandcastle-install-actionlint-shellcheck-and-zizmor-in-the-sandbox-image.md">build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image</a></h3>
-              <p class="post-excerpt">scripts/gate.sh runs actionlint, zizmor and shellcheck from PATH when they&#x27;re installed, and otherwise through Docker or uvx. The Sandcastle sandbox has neither, so in the sandbox the gate skipped…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/201">PR #201</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.95</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-200-docs-review-check-that-sandcastle-role-prompts-can-always-finish.md">docs(review): Check that Sandcastle role prompts can always finish</a></h3>
-              <p class="post-excerpt">Sandcastle&#x27;s reviewer approved #71 even though its role prompts contradicted each other in two places. Copilot caught them later, on #148:</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/200">PR #200</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-10">10 Oct 2026</time><span class="post-tag">v0.0.94</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-199-chore-sandcastle-add-a-pnpm-script-to-start-a-run.md">chore(sandcastle): Add a pnpm script to start a run</a></h3>
-              <p class="post-excerpt">Implemented and reviewed by Sandcastle.</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/199">PR #199</a></p>
             </article>
           </li>
         </ul>

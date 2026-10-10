@@ -4,6 +4,9 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [fix(sandcastle): Keep one bad intake verdict from costing the batch, and post intake's text as plain text](2026-10-10-pr-225-fix-sandcastle-keep-one-bad-intake-verdict-from-costing-the-batch-and-post-intake-s-text-as-plain-text.md) | release,automation |
+| 2026-10-10 | [feat(sandcastle): Intake judges each issue against the Definition of Ready](2026-10-10-pr-222-feat-sandcastle-intake-judges-each-issue-against-the-definition-of-ready.md) | release,automation |
+| 2026-10-10 | [feat(sandcastle): Mark an issue while Sandcastle builds it](2026-10-10-pr-219-feat-sandcastle-mark-an-issue-while-sandcastle-builds-it.md) | release,automation |
 | 2026-10-10 | [fix(sandcastle): Keep comments from anyone with write access, not only the repository owner's](2026-10-10-pr-218-fix-sandcastle-keep-comments-from-anyone-with-write-access-not-only-the-repository-owner-s.md) | release,automation |
 | 2026-10-10 | [docs(sandcastle): Add #214 to the plan table and record the blockers added since](2026-10-10-pr-216-docs-sandcastle-add-214-to-the-plan-table-and-record-the-blockers-added-since.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Hand an issue back to a human after two failed builds](2026-10-10-pr-213-feat-sandcastle-hand-an-issue-back-to-a-human-after-two-failed-builds.md) | release,automation |

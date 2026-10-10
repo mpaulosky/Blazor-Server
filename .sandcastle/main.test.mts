@@ -61,3 +61,27 @@ describe(".sandcastle/.gitignore", () => {
     );
   });
 });
+
+// main.mts runs at import, so its wiring is checked in its source: intake
+// must run before the blocker gate, so a human's questions reach them even
+// while a blocker is still in flight (#74).
+describe("main.mts's intake wiring", () => {
+  it("runs intake before the blocker gate", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const intakeCall = mainMts.indexOf("intakePhase(");
+    const gateCall = mainMts.indexOf("gateIssues()");
+
+    assert.notEqual(intakeCall, -1, "main.mts doesn't call intakePhase(");
+    assert.notEqual(gateCall, -1, "main.mts doesn't call gateIssues()");
+    assert.ok(intakeCall < gateCall, "main.mts doesn't run intake before the blocker gate");
+  });
+
+  // Without the open PRs, intake would judge, and might hand back, an issue
+  // whose work is already waiting for review.
+  it("passes intake the open pull requests", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const call = mainMts.slice(mainMts.indexOf("intakePhase("), mainMts.indexOf(";", mainMts.indexOf("intakePhase(")));
+
+    assert.match(call, /openPullRequests\(\)/);
+  });
+});
