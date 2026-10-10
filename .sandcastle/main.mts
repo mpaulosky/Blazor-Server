@@ -55,6 +55,7 @@ import { gateIssues } from "./lib/gate.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { planRound } from "./lib/plan.mts";
 import { usageReport } from "./lib/report.mts";
+import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
 
@@ -157,38 +158,15 @@ try {
       }
     }
 
-    const published = settled.flatMap((outcome, i) =>
-      outcome.status === "fulfilled" && outcome.value.prUrl
-        ? [{ ...work[i]!, prUrl: outcome.value.prUrl }]
-        : [],
-    );
-
-    console.log(`\nExecution complete. ${published.length} pull request(s):`);
-    for (const { issue, branch, prUrl } of published) {
-      console.log(`  #${issue.number} (${branch}) → ${prUrl}`);
+    const summary = roundSummary(work, settled);
+    for (const line of summary.lines) {
+      console.log(line);
     }
 
-    // Branches that passed the gate and review but couldn't be pushed or get a
-    // PR: their work is done but stranded, which a person needs to hear apart
-    // from a round that built nothing.
-    const stranded = settled.flatMap((outcome, i) =>
-      outcome.status === "fulfilled" && outcome.value.publishFailed ? [work[i]!] : [],
-    );
-    if (stranded.length > 0) {
-      console.log(`\n${stranded.length} gated branch(es) couldn't be published, so their work is stranded:`);
-      for (const { issue, branch } of stranded) {
-        console.log(`  #${issue.number} (${branch}): see the comment on the issue`);
-      }
-    }
-
-    if (published.length === 0) {
+    if (summary.stop !== undefined) {
       // Nothing reached a PR, so the next plan would pick the same issues and
       // repeat the same round. Stop and let a human look.
-      console.log(
-        stranded.length > 0
-          ? "Publishing failed for every gated branch this round. Stopping."
-          : "No pull requests opened this round. Stopping.",
-      );
+      console.log(summary.stop);
       break;
     }
   }
