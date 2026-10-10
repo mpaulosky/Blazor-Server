@@ -24,12 +24,25 @@ An issue B is **blocked by** issue A if:
 
 An issue is **unblocked** if it has zero blocking dependencies on other open issues.
 
+# ROLES
+
+The tester, the backend developer and the reviewer build every issue. For each issue you pick, also choose which optional roles it needs, in a `roles` list. Pick a role only
+when the issue needs it: each one costs a run.
+
+- `architect`: the issue needs a design before the tests are written. Pick it when the issue adds a new type, module or public API whose shape the issue leaves open, touches
+  several modules or slices that must agree, or makes a decision that would be hard to reverse. Leave it out for a fix or a change whose shape the issue already spells out.
+- `ui`: the issue adds or changes Blazor components or pages (`.razor` files, their code-behind, layout or Tailwind styling).
+- `scribe`: the issue adds or changes a domain term in `CONTEXT.md`, or changes how the Template is set up or used (`README.md` prose, `docs/CONTRIBUTING.md` or another
+  hand-written guide).
+
+An empty list, `[]`, means the issue needs none of them. If you leave `roles` out, every optional role runs.
+
 # OUTPUT
 
 Output your plan as a JSON object wrapped in `<plan>` tags:
 
 <plan>
-{"issues": [{"id": "42", "title": "Fix auth bug"}]}
+{"issues": [{"id": "42", "title": "Fix auth bug", "roles": []}, {"id": "43", "title": "Add a Palette picker", "roles": ["architect", "ui", "scribe"]}]}
 </plan>
 
 Include only unblocked issues. If every issue is blocked, include the single highest-priority candidate (the one with the fewest or weakest dependencies).
