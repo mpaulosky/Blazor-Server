@@ -412,28 +412,83 @@ describe("the labels intake adds", () => {
 });
 
 describe("intakeRound", () => {
-  // One bad or truncated answer then costs at most a batch, and the rest are
-  // judged in a later round or run (#224).
-  it("judges at most INTAKE_BATCH_SIZE issues a round, and logs how many wait", async () => {
+  // One bad or truncated answer then costs at most its batch, while the rest
+  // of the backlog is still judged (#224, #227).
+  it("judges every batch in the same round, INTAKE_BATCH_SIZE issues at a time", async () => {
     const issues = Array.from({ length: INTAKE_BATCH_SIZE + 2 }, (_, i) => issue(i + 1));
-    let sent: number[] = [];
-    const lines: string[] = [];
+    const sent: number[][] = [];
 
     await intakeRound(
       issues,
       [],
       async (promptArgs) => {
-        sent = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        sent.push(JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number));
         return [];
       },
       recordingGh().run,
       "o/r",
       new HandBackReport(),
-      (line) => lines.push(line),
+      () => {},
+      () => {},
     );
 
-    assert.deepEqual(sent, issues.slice(0, INTAKE_BATCH_SIZE).map((i) => i.number));
-    assert.ok(lines.some((line) => line.includes("2 more") && line.includes("later round or run")), lines.join("\n"));
+    assert.deepEqual(sent, [issues.slice(0, INTAKE_BATCH_SIZE).map((i) => i.number), [INTAKE_BATCH_SIZE + 1, INTAKE_BATCH_SIZE + 2]]);
+  });
+
+  // Otherwise a batch that fails every time would starve the issues behind it
+  // (#227).
+  it("logs a batch whose intake run fails, and still judges the next batch", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE + 1 }, (_, i) => issue(i + 1));
+    const last = INTAKE_BATCH_SIZE + 1;
+    const gh = recordingGh();
+    const warnings: string[] = [];
+    let runs = 0;
+
+    await intakeRound(
+      issues,
+      [],
+      async () => {
+        runs += 1;
+        if (runs === 1) throw new Error("no <intake> block");
+        return [verdict(last, { reason: "clear and checkable" })];
+      },
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+      () => {},
+      (message) => warnings.push(message),
+    );
+
+    assert.equal(warnings.length, 1, warnings.join("\n"));
+    assert.match(warnings[0]!, /#1, /);
+    assert.match(warnings[0]!, /no <intake> block/);
+    assert.match(warnings[0]!, /a later round or run/);
+    assert.ok(gh.calls.some((call) => call.args.includes("edit") && call.args.includes(String(last))), JSON.stringify(gh.calls));
+  });
+
+  // A usage limit or time budget ends the whole run, not just one batch.
+  it("rethrows an UncountedStopError from a batch without judging the next", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE + 1 }, (_, i) => issue(i + 1));
+    const stop = new UncountedStopError("usage limit");
+    let runs = 0;
+
+    await assert.rejects(
+      intakeRound(
+        issues,
+        [],
+        async () => {
+          runs += 1;
+          throw stop;
+        },
+        recordingGh().run,
+        "o/r",
+        new HandBackReport(),
+        () => {},
+        () => {},
+      ),
+      (error) => error === stop,
+    );
+    assert.equal(runs, 1);
   });
 
   it("doesn't judge an issue whose PR is open", async () => {
@@ -645,20 +700,24 @@ describe("intakeRunner", () => {
 // The reason and questions come from a model that read untrusted issue text,
 // so they're posted as plain text (#224).
 describe("intake's comments", () => {
-  const hostile = "Use ``` here, cc @someone, see #123 and owner/repo#45";
+  const hostile =
+    "Use ``` here, cc @someone, see #123 and owner/repo#45, GH-67 and https://github.com/owner/repo/issues/89 <details><summary>ok</summary> <!-- hidden";
 
   for (const [name, body] of [
     ["the ready comment's reason", () => readyComment(verdict(1, { reason: hostile }))],
     ["the needs-info comment's reason", () => needsInfoComment(verdict(1, { verdict: "needs-info", questions: ["Which?"], reason: hostile }))],
     ["a needs-info question", () => needsInfoComment(verdict(1, { verdict: "needs-info", questions: [hostile], reason: "r" }))],
   ] as const) {
-    it(`posts ${name} without a code fence, mention or cross-reference`, () => {
+    it(`posts ${name} without a code fence, HTML, mention or cross-reference`, () => {
       const text = body();
 
       assert.doesNotMatch(text, /(^|[^\\])```/m);
       assert.doesNotMatch(text, /@someone/);
       assert.doesNotMatch(text, /#123/);
       assert.doesNotMatch(text, /#45/);
+      assert.doesNotMatch(text, /GH-67/i);
+      assert.doesNotMatch(text, /github\.com/i);
+      assert.doesNotMatch(text, /<details|<summary|<!--/);
       assert.match(text, /Use \\`\\`\\` here/);
     });
   }

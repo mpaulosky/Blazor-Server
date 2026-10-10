@@ -52,9 +52,8 @@ export const BASE_BRANCH = "origin/main";
 export const MAX_ITERATIONS = 10;
 
 // How many issues one intake run judges. A malformed or truncated <intake>
-// block costs every verdict in it, so a large backlog is judged a batch per
-// round rather than in one answer (#224); the rest wait for a later round or
-// run.
+// block costs every verdict in it, so a large backlog is judged in several
+// runs of this many issues each (#224, #227).
 export const INTAKE_BATCH_SIZE = 10;
 
 // Gate-fixer runs allowed at each gate checkpoint before the issue's round is

@@ -218,18 +218,23 @@ function questionsOf(verdict: IntakeVerdict): string[] {
 
 // `text` from intake, as plain text for an issue comment. Intake read
 // untrusted issue text, and its words go to the issue's author, so nothing in
-// them may restructure the comment or reach anyone else (#224): it's kept to
-// one line, backslashes and backticks are escaped (no code span or fence to
-// swallow the re-queue instructions), a zero-width space after @ and # stops
-// a mention or a cross-reference, and a leading Markdown marker is escaped so
-// it can't start a list, heading or quote.
+// them may restructure the comment or reach anyone else (#224, #227): it's
+// kept to one line; backslashes and backticks are escaped (no code span or
+// fence to swallow the re-queue instructions), and so is < (no HTML tag, such
+// as an unclosed <details>, or comment to hide them); a zero-width space after
+// @, a # or GH- before digits, and the dot of github.com stops a mention, a
+// cross-reference or a link to another issue or PR; and a leading Markdown
+// marker is escaped so it can't start a list, heading or quote.
 export function plainText(text: string): string {
   return text
     .replace(/\s+/g, " ")
     .trim()
     .replace(/[\\`]/g, "\\$&")
+    .replace(/</g, "&lt;")
     .replace(/@(?=[A-Za-z0-9])/g, "@\u200B")
     .replace(/#(?=\d)/g, "#\u200B")
+    .replace(/\b(GH)-(?=\d)/gi, "$1-\u200B")
+    .replace(/\b(github)\.(com)\b/gi, "$1\u200B.$2")
     .replace(/^[-+*#>]/, "\\$&")
     .replace(/^(\d+)([.)])(?=\s)/, "$1\\$2");
 }
@@ -255,6 +260,13 @@ export function needsInfoComment(verdict: IntakeVerdict): string {
 // and apply the verdicts. Skipped, without running intake, when there's
 // nothing left to judge. `openPrs` are the open pull requests, whose issues
 // intake leaves alone (see needsIntake).
+//
+// Intake runs once per batch of INTAKE_BATCH_SIZE issues, so a malformed or
+// truncated answer costs only its batch (#224). A batch whose run fails is
+// logged and judged again in a later round or run, and the next batch is
+// still judged, so one that fails every time can't starve the issues behind
+// it (#227). An UncountedStopError (a usage limit or time budget) still ends
+// the run.
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
   openPrs: readonly OpenPullRequest[],
@@ -263,17 +275,21 @@ export async function intakeRound(
   repo: string = repoName(),
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
+  warn: (message: string) => void = console.error,
 ): Promise<void> {
   const unjudged = needsIntake(issues, openPrs);
-  if (unjudged.length === 0) return;
-  // A batch at a time: a malformed or truncated answer costs every verdict in
-  // it (#224).
-  const toJudge = unjudged.slice(0, INTAKE_BATCH_SIZE);
-  log(`Intake is judging ${toJudge.length} issue(s) against the Definition of Ready: ${toJudge.map((issue) => `#${issue.number}`).join(", ")}`);
-  const waiting = unjudged.length - toJudge.length;
-  if (waiting > 0) log(`  ${waiting} more wait for intake in a later round or run.`);
-  const verdicts = await run(intakePromptArgs(toJudge));
-  applyVerdicts(toJudge, verdicts, gh, repo, report, log);
+  for (let start = 0; start < unjudged.length; start += INTAKE_BATCH_SIZE) {
+    const batch = unjudged.slice(start, start + INTAKE_BATCH_SIZE);
+    const refs = batch.map((issue) => `#${issue.number}`).join(", ");
+    log(`Intake is judging ${batch.length} issue(s) against the Definition of Ready: ${refs}`);
+    try {
+      const verdicts = await run(intakePromptArgs(batch));
+      applyVerdicts(batch, verdicts, gh, repo, report, log);
+    } catch (error) {
+      if (error instanceof UncountedStopError) throw error;
+      warn(`  ✗ Intake failed on ${refs}, so they're judged again in a later round or run: ${error}`);
+    }
+  }
 }
 
 // Phase 0a as main.mts runs it: load the queue and the open PRs, then run
