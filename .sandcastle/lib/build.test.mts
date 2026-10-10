@@ -337,6 +337,10 @@ describe("buildIssue publishing", () => {
     // asks the reader to check rather than saying none is open.
     assert.match(comments[0]!.body, /check whether a pull request from it is already open/i);
     assert.doesNotMatch(comments[0]!.body, /no pull request is open/);
+    // The push runs before the PR is opened, so the advice covers a branch
+    // origin lacks and one it already has.
+    assert.match(comments[0]!.body, /If origin doesn't have the branch/);
+    assert.match(comments[0]!.body, new RegExp(`open one by hand with \`Closes #${issue.number}\``));
     assert.equal(steps.at(-1), "close");
   });
 

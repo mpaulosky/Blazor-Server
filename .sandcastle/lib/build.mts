@@ -289,10 +289,11 @@ export async function buildIssue(
         issue.number,
         `Sandcastle couldn't publish \`${branch}\`: it passed the gate, but pushing it or opening its pull request ` +
           "failed. The branch keeps its commits. A person needs to look at it. First check whether a pull request " +
-          "from it is already open: GitHub can create one and still answer with an error. A GitHub server error " +
-          "that outlasted the retries can be pushed by hand once GitHub recovers, and if origin's " +
-          "branch has commits the local one doesn't (an agent rewrote one an earlier round pushed), the two need " +
-          `reconciling before Sandcastle can push it.\n\n${fence}text\n${detail}\n${fence}`,
+          "from it is already open: GitHub can create one and still answer with an error. Once GitHub recovers from " +
+          "a server error: If origin doesn't have the branch, push it from its worktree; if it does, the push " +
+          `succeeded and opening the pull request failed, so open one by hand with \`Closes #${issue.number}\` in ` +
+          "its body. If origin's branch has commits the local one doesn't (an agent rewrote one an earlier round " +
+          `pushed), the two need reconciling before Sandcastle can push it.\n\n${fence}text\n${detail}\n${fence}`,
       );
       return { commits, prUrl: undefined, publishFailed: true };
     }
