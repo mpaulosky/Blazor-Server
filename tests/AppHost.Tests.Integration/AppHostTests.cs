@@ -10,6 +10,7 @@
 using System.Net;
 
 using Aspire.Hosting;
+using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 
 using Domain.Constants;
@@ -50,7 +51,10 @@ public class AppHostTests : IAsyncLifetime
 		// Arrange
 		DistributedApplication application = _application ?? throw new InvalidOperationException("The AppHost has not started yet.");
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-		await application.ResourceNotifications.WaitForResourceHealthyAsync(ApplicationConstants.Website, cancellationToken);
+		using CancellationTokenSource healthyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+		healthyTimeout.CancelAfter(s_startupTimeout);
+		await application.ResourceNotifications.WaitForResourceHealthyAsync(
+			ApplicationConstants.Website, WaitBehavior.StopOnResourceUnavailable, healthyTimeout.Token);
 		using HttpClient client = application.CreateHttpClient(ApplicationConstants.Website);
 
 		// Act
