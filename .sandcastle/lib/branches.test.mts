@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { branchFor, isIssueBranch, parseHeads, prepareBranches, slugFor } from "./branches.mts";
+import { branchFor, discardClosedWork, isIssueBranch, parseHeads, prepareBranches, slugFor, type BranchRefs } from "./branches.mts";
 
 // The branch standard, from the script the pre-push hook and CI's Branch name check share.
 const checkBranchName = fileURLToPath(new URL("../../scripts/check-branch-name.sh", import.meta.url));
@@ -154,6 +154,118 @@ describe("parseHeads", () => {
 
   it("returns nothing for empty output", () => {
     assert.deepEqual(parseHeads(""), []);
+  });
+});
+
+// A BranchRefs stub for discardClosedWork (#77). Each ref's current commit
+// (local, tracking, and origin's real branch) and whether it contains
+// closedHead are configurable independently, and every call is recorded in
+// `calls` so a test can check the order of operations.
+function stubRefs(
+  branch: string,
+  closedHead: string,
+  base: string,
+  {
+    baseContainsClosedHead = false,
+    localCommit = "1".repeat(40),
+    trackingCommit = "2".repeat(40),
+    remoteCommit = "3".repeat(40),
+    localExists = true,
+    trackingExists = true,
+    remoteExists = true,
+    localContainsClosedHead = true,
+    trackingContainsClosedHead = true,
+    remoteContainsClosedHead = true,
+    failDeleteLocalBranch,
+  }: {
+    baseContainsClosedHead?: boolean;
+    localCommit?: string;
+    trackingCommit?: string;
+    remoteCommit?: string;
+    localExists?: boolean;
+    trackingExists?: boolean;
+    remoteExists?: boolean;
+    localContainsClosedHead?: boolean;
+    trackingContainsClosedHead?: boolean;
+    remoteContainsClosedHead?: boolean;
+    failDeleteLocalBranch?: Error;
+  } = {},
+) {
+  const localRef = `refs/heads/${branch}`;
+  const trackingRef = `refs/remotes/origin/${branch}`;
+  const calls: string[] = [];
+  const refs: BranchRefs = {
+    remoteHead: (b) => {
+      calls.push(`remoteHead ${b}`);
+      return remoteExists ? remoteCommit : undefined;
+    },
+    localHead: (ref) => {
+      calls.push(`localHead ${ref}`);
+      if (ref === localRef) return localExists ? localCommit : undefined;
+      if (ref === trackingRef) return trackingExists ? trackingCommit : undefined;
+      return undefined;
+    },
+    contains: (commit, ancestor) => {
+      calls.push(`contains ${commit} ${ancestor}`);
+      if (ancestor !== closedHead) return false;
+      if (commit === base) return baseContainsClosedHead;
+      if (commit === localCommit) return localContainsClosedHead;
+      if (commit === trackingCommit) return trackingContainsClosedHead;
+      if (commit === remoteCommit) return remoteContainsClosedHead;
+      return false;
+    },
+    deleteLocalBranch: (b) => {
+      calls.push(`deleteLocalBranch ${b}`);
+      if (failDeleteLocalBranch) throw failDeleteLocalBranch;
+    },
+    deleteRef: (ref) => void calls.push(`deleteRef ${ref}`),
+    deleteRemote: (b, sha) => void calls.push(`deleteRemote ${b} ${sha}`),
+  };
+  return { refs, calls };
+}
+
+describe("discardClosedWork", () => {
+  const branch = "feature/42-add-search";
+  const closedHead = "c".repeat(40);
+  const base = "m".repeat(40);
+
+  it("deletes the local branch, the tracking ref and origin's branch (with the lease SHA), in that order, when each contains the closed head", () => {
+    const { refs, calls } = stubRefs(branch, closedHead, base);
+
+    const deleted = discardClosedWork(branch, closedHead, base, refs);
+
+    assert.deepEqual(calls.filter((call) => call.startsWith("delete")), [
+      `deleteLocalBranch ${branch}`,
+      `deleteRef refs/remotes/origin/${branch}`,
+      `deleteRemote ${branch} ${"3".repeat(40)}`,
+    ]);
+    assert.deepEqual(deleted, [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`, `origin/${branch}`]);
+  });
+
+  it("keeps a local branch that doesn't contain the closed head, because a fresh attempt's commits start from main", () => {
+    const { refs, calls } = stubRefs(branch, closedHead, base, { localContainsClosedHead: false });
+
+    const deleted = discardClosedWork(branch, closedHead, base, refs);
+
+    assert.ok(!calls.some((call) => call.startsWith("deleteLocalBranch")));
+    assert.ok(!deleted.includes(`refs/heads/${branch}`));
+  });
+
+  it("does nothing when base already contains the closed head", () => {
+    const { refs, calls } = stubRefs(branch, closedHead, base, { baseContainsClosedHead: true });
+
+    const deleted = discardClosedWork(branch, closedHead, base, refs);
+
+    assert.deepEqual(deleted, []);
+    assert.ok(!calls.some((call) => call.startsWith("delete")));
+  });
+
+  it("rethrows when deleteLocalBranch fails, without deleting origin's branch", () => {
+    const failure = new Error("git branch -D failed: worktree in use");
+    const { refs, calls } = stubRefs(branch, closedHead, base, { failDeleteLocalBranch: failure });
+
+    assert.throws(() => discardClosedWork(branch, closedHead, base, refs), /worktree in use/);
+    assert.ok(!calls.some((call) => call.startsWith("deleteRemote")));
   });
 });
 

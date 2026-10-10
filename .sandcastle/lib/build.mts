@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
+import { startFromMain as sweepStartFromMain } from "./follow-up.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
 import {
   BASE_BRANCH,
@@ -235,6 +236,12 @@ export type BuildHost = {
   // Whether what the commits from `base` to `commit` publish (see
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
   leaksSecret(base: string, commit: string): boolean;
+  // Deletes the refs of `branch` that still hold the work of the issue's
+  // latest Sandcastle PR, when that PR was closed without merging, so the
+  // build starts from main (#77). Returns that PR's number and the refs it
+  // deleted, or undefined when there was nothing to do. Throws when a ref
+  // can't be deleted.
+  startFromMain(issueNumber: number, branch: string, base: string): { pr: number; deleted: string[] } | undefined;
   publish: typeof publish;
   // What's wrong with how the worktree finds its repository (see
   // lib/host-safety.mts); empty when nothing is.
@@ -281,6 +288,7 @@ const liveHost: BuildHost = {
   markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
   unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
+  startFromMain: (issueNumber, branch, base) => sweepStartFromMain(issueNumber, branch, base),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
   worktreeProblems,

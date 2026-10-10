@@ -98,6 +98,55 @@ export function fetchMain(): string {
   return git("rev-parse", "--verify", "refs/remotes/origin/main^{commit}");
 }
 
+// The git operations discardClosedWork needs; tests pass a stub.
+export type BranchRefs = {
+  // git ls-remote origin refs/heads/<branch>; undefined when origin has no such branch.
+  remoteHead(branch: string): string | undefined;
+  // git rev-parse --verify --quiet <ref>^{commit}; undefined when the ref doesn't exist.
+  localHead(ref: string): string | undefined;
+  // git merge-base --is-ancestor; false on exit 1 or a missing object.
+  contains(commit: string, ancestor: string): boolean;
+  // git branch -D; git refuses when a worktree has the branch checked out.
+  deleteLocalBranch(branch: string): void;
+  // git update-ref -d.
+  deleteRef(ref: string): void;
+  // git push --force-with-lease=refs/heads/<b>:<sha> origin :refs/heads/<b>.
+  deleteRemote(branch: string, expectedSha: string): void;
+};
+
+const originRefs: BranchRefs = {
+  remoteHead: () => {
+    throw new Error("Not implemented");
+  },
+  localHead: () => {
+    throw new Error("Not implemented");
+  },
+  contains: () => {
+    throw new Error("Not implemented");
+  },
+  deleteLocalBranch: () => {
+    throw new Error("Not implemented");
+  },
+  deleteRef: () => {
+    throw new Error("Not implemented");
+  },
+  deleteRemote: () => {
+    throw new Error("Not implemented");
+  },
+};
+
+// Deletes each ref of `branch` that still holds `closedHead`, the head of an
+// issue's Sandcastle PR that closed without merging, and returns the refs it
+// deleted: refs/heads/<branch>, refs/remotes/origin/<branch> and
+// origin/<branch>, in that order (lib/follow-up.mts#startFromMain). Leaves
+// everything alone when `base` already contains closedHead. A ref that
+// doesn't contain closedHead is left alone too, so a fresh attempt's commits,
+// which start from main, survive. Every call goes through `refs`, never git()
+// directly, so this runs the same in the main checkout as in a test.
+export function discardClosedWork(branch: string, closedHead: string, base: string, refs: BranchRefs = originRefs): string[] {
+  throw new Error("Not implemented");
+}
+
 // Name each issue's branch, and fetch the ones that already exist on origin
 // into their remote-tracking refs so createSandbox() checks them out from
 // origin/<branch>. Without the fetch, Sandcastle finds no such branch and

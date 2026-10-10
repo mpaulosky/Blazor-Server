@@ -6,6 +6,7 @@
 
 import { execFileSync } from "node:child_process";
 import { SANDCASTLE_LABELS, type SandcastleLabel } from "./config.mts";
+import type { SweepPullRequest } from "./follow-up.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { sh } from "./shell.mts";
 
@@ -200,6 +201,60 @@ export function openPullRequest(
     ["pr", "create", "--repo", repo, "--base", "main", "--head", branch, "--title", title, "--body-file", "-"],
     body,
   ).trim();
+}
+
+// The fields the follow-up sweep (lib/follow-up.mts) checks on every PR it
+// reads, open or closed.
+export type PullRequestIdentity = {
+  number: number;
+  author: string | null;
+  body: string;
+  baseRefName: string;
+  headRefName: string;
+  isCrossRepository: boolean;
+};
+
+// A closed PR, as lib/follow-up.mts#closedWithoutMerging reads it to find an
+// issue's latest PR that closed without merging. state is "CLOSED" (closed
+// without merging) or "MERGED".
+export type ClosedPullRequest = PullRequestIdentity & { headRefOid: string; state: string; closedAt: string };
+
+// The host's closed PRs into main, newest first, for
+// lib/follow-up.mts#closedWithoutMerging and #startFromMain.
+export function closedPullRequests(
+  author: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): ClosedPullRequest[] {
+  throw new Error("Not implemented");
+}
+
+// The open PRs into main with everything the follow-up sweep decides from
+// (lib/follow-up.mts#sweepPullRequests), through one paginated GraphQL query.
+// Normalised to SweepPullRequest.
+export function openPullRequestsForSweep(
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): SweepPullRequest[] {
+  throw new Error("Not implemented");
+}
+
+// Asks Copilot to review a PR again (lib/follow-up.mts#decide), once CI has
+// been done for a while with no review of the head and no pending request.
+export function requestCopilotReview(pullRequestId: string, run: typeof execFileSync = execFileSync): void {
+  throw new Error("Not implemented");
+}
+
+// Updates a PR's branch from its base on GitHub's server
+// (lib/follow-up.mts#decide), for a settled PR whose only problem is being
+// behind main.
+export function updatePullRequestBranch(
+  number: number,
+  expectedHeadSha: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  throw new Error("Not implemented");
 }
 
 // The paths an open PR changes.
@@ -508,6 +563,14 @@ let signedInLogin: string | undefined;
 export function cacheHostLogin(run: typeof execFileSync = execFileSync): string {
   signedInLogin = hostLogin(run);
   return signedInLogin;
+}
+
+// The host's own login (see hostLogin), cached the same way markerComments and
+// openIssuesWithComment already do, for the follow-up sweep
+// (lib/follow-up.mts), which needs it outside any single GitHub read: "the
+// repository owner opened it" means this login authored the PR (#77, #214).
+export function signedInHostLogin(run: typeof execFileSync = execFileSync): string {
+  throw new Error("Not implemented");
 }
 
 // The comments on the issue or PR `number` that carry `marker` and were posted

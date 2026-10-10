@@ -169,3 +169,17 @@ export const hooks = {
 // starts. Avoids a full pnpm install from scratch; the hook above handles
 // platform-specific binaries and any packages added since the last copy.
 export const copyToWorktree = ["node_modules"];
+
+// Marks a PR body as one the host published (lib/build.mts#publish), so the
+// follow-up sweep (lib/follow-up.mts) never acts on a collaborator's PR from
+// a matching branch (#77).
+export const PR_MARKER = "<!-- sandcastle:pr -->";
+
+// The login requestReviewsByLogin takes for Copilot's code review
+// (lib/follow-up.mts#sweepPullRequests).
+export const COPILOT_REVIEWER = "copilot-pull-request-reviewer[bot]";
+
+// How long CI on a PR's head must have been complete, with no Copilot review
+// or request, before the follow-up sweep asks Copilot again, once per head
+// (lib/follow-up.mts#decide).
+export const COPILOT_REREQUEST_AFTER_MS = 60 * 60 * 1000;
