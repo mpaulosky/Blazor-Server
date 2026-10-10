@@ -235,11 +235,9 @@ export function closedPullRequests(
   return listed.map((pr) => ({ ...pr, author: authorLogin(pr.author) }));
 }
 
-// The login in an author field: gh's --json gives an object with a login (or
-// null for a deleted account), and a stubbed answer may give the login
-// itself, so both read alike.
+// The login in an author field: gh's --json and GraphQL give an object with
+// a login, or null for a deleted account.
 function authorLogin(author: unknown): string | null {
-  if (typeof author === "string") return author;
   const login = (author as { login?: unknown } | null)?.login;
   return typeof login === "string" ? login : null;
 }
@@ -319,7 +317,7 @@ type SweepNode = {
   labels: Connection<{ name: string }>;
   reviewRequests: Connection<{ requestedReviewer: Login }>;
   reviews: Connection<{ author: Login; commit: { oid?: string } | null }>;
-  reviewThreads: Connection<{ isResolved: boolean; comments: Connection<{ author?: { __typename?: string } | null; __typename?: string }> }>;
+  reviewThreads: Connection<{ isResolved: boolean; comments: Connection<{ author?: { __typename?: string } | null }> }>;
   commits: Connection<{ commit: { oid?: string; statusCheckRollup: { contexts: Connection<CheckContext> } | null } | null }>;
   timelineItems: Connection<{ createdAt?: string; requestedReviewer?: Login }>;
 };
@@ -380,10 +378,8 @@ function sweepPullRequest(node: SweepNode): SweepPullRequest {
     }),
     reviews: nodesOf(node.reviews).map((review) => ({ author: authorLogin(review.author), commitOid: review.commit?.oid ?? null })),
     threads: nodesOf(node.reviewThreads).map((thread) => {
-      // The query nests the author under the comment; a stubbed answer may
-      // give the author's fields on the comment itself, which reads alike.
       const first = nodesOf(thread.comments)[0];
-      const author = first?.author ?? first;
+      const author = first?.author;
       return { resolved: thread.isResolved, byBot: author?.__typename === "Bot" };
     }),
     checks: nodesOf(contexts).map(checkState),

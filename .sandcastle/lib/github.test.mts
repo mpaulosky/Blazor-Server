@@ -853,7 +853,9 @@ describe("closedPullRequests", () => {
         closedAt: "2026-10-01T00:00:00Z",
       },
     ];
-    const { calls, run } = recordingGh([JSON.stringify(closed)]);
+    // gh's --json gives each author as an object with a login.
+    const answer = closed.map((pr) => ({ ...pr, author: { login: pr.author } }));
+    const { calls, run } = recordingGh([JSON.stringify(answer)]);
 
     const result = closedPullRequests("host", run, "o/r");
 
@@ -926,7 +928,10 @@ describe("openPullRequestsForSweep", () => {
                 },
                 reviewThreads: {
                   pageInfo: { hasNextPage: false },
-                  nodes: [{ isResolved: false, comments: { nodes: [{ __typename: "Bot", login: "github-advanced-security[bot]" }] } }],
+                  nodes: [
+                    { isResolved: false, comments: { nodes: [{ author: { __typename: "Bot", login: "github-advanced-security[bot]" } }] } },
+                    { isResolved: false, comments: { nodes: [{ author: { __typename: "User", login: "reviewer" } }] } },
+                  ],
                 },
                 commits: {
                   nodes: [
@@ -943,6 +948,7 @@ describe("openPullRequestsForSweep", () => {
                   ],
                 },
                 timelineItems: {
+                  pageInfo: { hasPreviousPage: false },
                   nodes: [{ createdAt: "2026-10-01T00:00:00Z", requestedReviewer: { login: COPILOT_REVIEWER } }],
                 },
               },
@@ -962,19 +968,39 @@ describe("openPullRequestsForSweep", () => {
     assert.equal(pr!.headRefOid, "a".repeat(40));
     assert.deepEqual(pr!.reviewRequests, [COPILOT_REVIEWER]);
     assert.deepEqual(pr!.reviews, [{ author: COPILOT_REVIEWER, commitOid: "a".repeat(40) }]);
-    assert.deepEqual(pr!.threads, [{ resolved: false, byBot: true }]);
+    assert.deepEqual(pr!.threads, [
+      { resolved: false, byBot: true },
+      { resolved: false, byBot: false },
+    ]);
     assert.deepEqual(pr!.checks, [{ name: "build", completed: true, green: true, completedAt: "2026-10-01T00:00:00Z" }]);
     assert.equal(pr!.truncated, false);
   });
 
-  it("marks a PR truncated when any nested list has a next page, rather than deciding from part of the data", () => {
-    const truncatedPage = page();
-    (truncatedPage.data.repository.pullRequests.nodes[0] as { reviews: { pageInfo: { hasNextPage: boolean } } }).reviews.pageInfo.hasNextPage =
-      true;
-    const { run } = recordingGh([JSON.stringify(truncatedPage)]);
+  // Each list is read from the end it pages from: reviews and timelineItems
+  // with last:, so GitHub flags what's left with hasPreviousPage, and the
+  // rest with first:, flagged by hasNextPage.
+  type Paged = { pageInfo: Record<string, boolean> };
+  const cases: [list: string, flag: string, pick: (node: Record<string, unknown>) => Paged][] = [
+    ["labels", "hasNextPage", (node) => node.labels as Paged],
+    ["reviewRequests", "hasNextPage", (node) => node.reviewRequests as Paged],
+    ["reviews", "hasPreviousPage", (node) => node.reviews as Paged],
+    ["reviewThreads", "hasNextPage", (node) => node.reviewThreads as Paged],
+    [
+      "the head's check contexts",
+      "hasNextPage",
+      (node) => (node.commits as { nodes: { commit: { statusCheckRollup: { contexts: Paged } } }[] }).nodes[0]!.commit.statusCheckRollup.contexts,
+    ],
+    ["timelineItems", "hasPreviousPage", (node) => node.timelineItems as Paged],
+  ];
+  for (const [list, flag, pick] of cases) {
+    it(`marks a PR truncated when ${list} sets ${flag}, rather than deciding from part of the data`, () => {
+      const truncatedPage = page();
+      pick(truncatedPage.data.repository.pullRequests.nodes[0] as unknown as Record<string, unknown>).pageInfo[flag] = true;
+      const { run } = recordingGh([JSON.stringify(truncatedPage)]);
 
-    const [pr] = openPullRequestsForSweep(run, "o/r");
+      const [pr] = openPullRequestsForSweep(run, "o/r");
 
-    assert.equal(pr!.truncated, true);
-  });
+      assert.equal(pr!.truncated, true);
+    });
+  }
 });
