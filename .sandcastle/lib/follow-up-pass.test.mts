@@ -682,7 +682,7 @@ describe("runPass", () => {
     it(`replies to an owner thread given a "${verdict}" verdict, but never resolves it`, async () => {
       const commit = verdict === "fixed" ? { commit: ROLE_COMMIT.slice(0, 7) } : {};
       const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_owner", verdict, reason: "Noted.", ...commit }]) });
-      const { passHost, calls } = passHostFake({ threads: [ownerThread()], containsBase: true, sandbox });
+      const { passHost, calls } = passHostFake({ threads: [ownerThread(), botThread()], containsBase: true, sandbox });
 
       await runPass(passTarget(), issue, BASE, passHost);
 
@@ -697,11 +697,12 @@ describe("runPass", () => {
       comments: [...ownerThread().comments, { author: "sandcastle-bot", byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nNoted.`, url: "https://github.com/o/r/pull/7#discussion_r4" }],
     });
     const sandbox = sandboxFake({ followUpJson: "[]" });
-    const { passHost } = passHostFake({ threads: [answered], containsBase: true, sandbox });
+    const { passHost } = passHostFake({ threads: [answered, botThread()], containsBase: true, sandbox });
 
     await runPass(passTarget(), issue, BASE, passHost);
 
     const roleRun = sandbox.runs.find((run) => run.name === "follow-up");
+    assert.ok(roleRun !== undefined, "the bot thread starts a pass");
     assert.ok(!String(roleRun?.promptArgs?.THREADS_JSON ?? "").includes("RT_owner"));
   });
 
@@ -709,13 +710,16 @@ describe("runPass", () => {
   // or a bot never reaches the follow-up role (tested)."
   it("never gives a stranger's thread to the follow-up role, and records it for a person instead", async () => {
     const sandbox = sandboxFake({ followUpJson: "[]" });
-    const { passHost, calls } = passHostFake({ threads: [strangerThread()], containsBase: true, sandbox });
+    const { passHost, calls } = passHostFake({ threads: [strangerThread(), botThread()], containsBase: true, sandbox });
 
     await runPass(passTarget(), issue, BASE, passHost);
 
     const roleRun = sandbox.runs.find((run) => run.name === "follow-up");
+    assert.ok(roleRun !== undefined, "the bot thread starts a pass");
     assert.ok(!String(roleRun?.promptArgs?.THREADS_JSON ?? "").includes("RT_stranger"));
-    assert.deepEqual(calls.recordHumanThread, [{ pr: PR_NUMBER, author: "stranger", url: strangerThread().comments[0]!.url }]);
+    // Recorded on each read of the PR, before and after the claim; the live
+    // host lists each thread once (livePassHost.recordHumanThread).
+    assert.deepEqual(new Set(calls.recordHumanThread.map((entry) => JSON.stringify(entry))), new Set([JSON.stringify({ pr: PR_NUMBER, author: "stranger", url: strangerThread().comments[0]!.url })]));
   });
 
   it("creates no sandbox when a thread's author can't be confirmed as the repository owner", async () => {
@@ -744,7 +748,7 @@ describe("runPass", () => {
   // force-push) and is pushed once the gate is green."
   it("merges main before running the role when the PR needs it, never rebasing or force-pushing", async () => {
     const sandbox = sandboxFake({ followUpJson: "[]" });
-    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: false, sandbox });
 
     await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
 
@@ -800,6 +804,27 @@ describe("runPass", () => {
 
     assert.equal(outcome.kind, "skipped");
     assert.deepEqual(calls.createSandbox, []);
+  });
+
+  it("skips a PR whose only threads for the role are owner threads and that needs no merge, without creating a sandbox", async () => {
+    const { passHost, calls } = passHostFake({ threads: [ownerThread()], containsBase: true });
+
+    const outcome = await runPass(passTarget({ reasons: ["CI is red"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.createSandbox, []);
+  });
+
+  it("doesn't run the follow-up role when main merges in cleanly and no thread is left for it, but still gates and pushes the merge", async () => {
+    const sandbox = sandboxFake();
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
+
+    const outcome = await runPass(passTarget({ reasons: ["it's behind main"] }), issue, BASE, passHost);
+
+    assert.deepEqual(sandbox.runs, []);
+    assert.deepEqual(outcome, { kind: "passed", pushed: sandbox.headOf() });
+    assert.deepEqual(calls.push, [{ branch: BRANCH, commit: sandbox.headOf() }]);
+    assert.match(calls.commentOnPullRequest[0]!.body, /Merged `main` into the branch\./);
   });
 
   it("skips a PR that needs no merge and has no thread for the role, without creating a sandbox", async () => {
@@ -926,6 +951,7 @@ describe("runPass", () => {
 
     assert.equal(outcome.kind, "gave-up");
     assert.deepEqual(calls.push, []);
+    assert.match(calls.handBack[0]!.reason, /HEAD moved while it ran/);
     assert.match(calls.handBack[0]!.body, /moved while it ran/);
   });
 
@@ -1029,7 +1055,7 @@ describe("runPass's other give-ups", () => {
   });
 
   it("treats a missing follow-up.json as no verdicts when the role was given no threads", async () => {
-    const sandbox = sandboxFake();
+    const sandbox = sandboxFake({ mergeConflictFiles: ["src/A.cs"] });
     const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
 
     const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);

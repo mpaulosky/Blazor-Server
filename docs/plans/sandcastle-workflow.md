@@ -119,8 +119,9 @@ that human resolves them. That is deliberate: a human who comments has joined th
    posts one pass-summary PR comment carrying `<!-- sandcastle:follow-up -->`. GitHub's `resolveReviewThread` takes only the thread id, so the resolution is named in the reply's first
    line and in the pass summary, not on the thread. A `declined` verdict with `"invalid": true` resolves as `INVALID`, any other as `WONT_FIX`.
 
-A PR whose only problem is red CI, with no conflict and no thread for the role, gets no pass and isn't counted yet: the red-CI half of a pass comes with
-[#79](https://github.com/mpaulosky/Blazor-Server/issues/79).
+Only a needed merge with `main` or an unresolved bot thread starts a pass; an owner thread is answered only alongside one of them. A PR whose only problem is red CI
+gets no pass and isn't counted yet: the red-CI half of a pass comes with [#79](https://github.com/mpaulosky/Blazor-Server/issues/79). When `main` merges in cleanly and
+no thread is left for the role, the follow-up role doesn't run: the host gates and pushes the merge itself.
 
 **Thread rules.** Follow-up acts on bot threads (Copilot, CodeQL) and the repository owner's threads, but resolves only bot threads. Threads anyone else opens never reach the role; they
 stay open for the owner, and the job summary lists them. The owner resolves their own threads, because that's their sign-off. It may decline a

@@ -482,6 +482,50 @@ async function sandboxContains(sandbox: Pick<sandcastle.Sandbox, "exec">, commit
   return result.exitCode === 0;
 }
 
+// Runs the follow-up role and reads its verdicts from VERDICTS_FILE. Returns
+// them, or the outcome from `stop` when the role failed, ended unfinished or
+// wrote no usable file. An UncountedStopError is rethrown.
+async function followUpVerdicts(
+  sandbox: sandcastle.Sandbox,
+  issue: SandcastleIssue,
+  target: PassTarget,
+  forRole: PromptThread[],
+  mergeNote: string,
+  host: PassHost,
+  stop: (reason: string, output?: string) => PassOutcome,
+): Promise<ThreadVerdict[] | PassOutcome> {
+  let run: sandcastle.SandboxRunResult;
+  try {
+    run = await runRoleInSandbox(
+      sandbox,
+      "follow-up",
+      {
+        promptFile: "./.sandcastle/roles/follow-up.md",
+        promptArgs: followUpPromptArgs(issue, target.headRefName, target.number, forRole, mergeNote),
+      },
+      host.limits,
+    );
+  } catch (error) {
+    if (error instanceof UncountedStopError) throw error;
+    return stop("the follow-up run failed", String(error));
+  }
+  if (run.completionSignal === undefined) return stop("the follow-up run ended unfinished");
+
+  // Read inside the sandbox, never from the host: the role wrote it, and
+  // it could be a symlink to a host file.
+  const file = await sandbox.exec(`cat ${VERDICTS_FILE} 2>/dev/null`);
+  if (file.exitCode !== 0) {
+    return forRole.length > 0 ? stop(`the follow-up run wrote no \`${VERDICTS_FILE}\` for the threads it was given`) : [];
+  }
+  try {
+    const parsed = parseVerdicts(file.stdout);
+    if (parsed.rejected.length > 0) host.log(`  PR #${target.number} ignored ${parsed.rejected.length} malformed verdict(s) in ${VERDICTS_FILE}`);
+    return parsed.verdicts;
+  } catch (error) {
+    return stop(`the follow-up run's \`${VERDICTS_FILE}\` isn't a JSON array of verdicts`, String(error));
+  }
+}
+
 // Splits `verdicts` into those the host acts on and the ids of "fixed" ones
 // it doesn't. A "fixed" verdict is kept only when its commit is one this pass
 // added: it resolves in the sandbox, `gated` contains it and `head` (the PR's
@@ -579,11 +623,14 @@ function planPass(
     const first = thread.comments[0];
     host.recordHumanThread({ pr: target.number, author: first?.author ?? null, url: first?.url ?? "" });
   }
-  // A PR that's only red on CI waits for #79, and one with only owner threads
-  // keeps the sweep's rule that human threads alone don't start a pass:
-  // neither gets here with work this pass handles.
+  // Only a needed merge or a bot thread starts a pass. A PR that's only red
+  // on CI waits for #79, and one with only owner threads keeps the sweep's
+  // rule that human threads alone don't start a pass, so an owner thread is
+  // answered only alongside one of the two.
   const needsMerge = !host.contains(target.headRefOid, base);
-  if (!needsMerge && sorted.forRole.length === 0) return skip("there's nothing a follow-up pass handles yet");
+  if (!needsMerge && !sorted.forRole.some((thread) => thread.from === "bot")) {
+    return skip("there's nothing a follow-up pass handles yet");
+  }
 
   const passCount = host.passCount(target.number);
   if (passCount >= FOLLOW_UP_PASS_CAP) {
@@ -658,38 +705,15 @@ async function passOnMarkedIssue(
       }
     }
 
-    let run: sandcastle.SandboxRunResult;
-    try {
-      run = await runRoleInSandbox(
-        sandbox,
-        "follow-up",
-        {
-          promptFile: "./.sandcastle/roles/follow-up.md",
-          promptArgs: followUpPromptArgs(issue, branch, target.number, forRole, mergeNote),
-        },
-        host.limits,
-      );
-    } catch (error) {
-      if (error instanceof UncountedStopError) throw error;
-      return stop("the follow-up run failed", String(error));
-    }
-    if (run.completionSignal === undefined) return stop("the follow-up run ended unfinished");
-    log("follow-up finished");
-
-    // Read inside the sandbox, never from the host: the role wrote it, and
-    // it could be a symlink to a host file.
+    // With no conflict to resolve and no thread to answer, the role has
+    // nothing to do, and a run of it would only cost usage or make changes
+    // nobody asked for.
     let verdicts: ThreadVerdict[] = [];
-    const file = await sandbox.exec(`cat ${VERDICTS_FILE} 2>/dev/null`);
-    if (file.exitCode !== 0) {
-      if (forRole.length > 0) return stop(`the follow-up run wrote no \`${VERDICTS_FILE}\` for the threads it was given`);
-    } else {
-      try {
-        const parsed = parseVerdicts(file.stdout);
-        verdicts = parsed.verdicts;
-        if (parsed.rejected.length > 0) log(`ignored ${parsed.rejected.length} malformed verdict(s) in ${VERDICTS_FILE}`);
-      } catch (error) {
-        return stop(`the follow-up run's \`${VERDICTS_FILE}\` isn't a JSON array of verdicts`, String(error));
-      }
+    if (merged === "conflicts" || forRole.length > 0) {
+      const role = await followUpVerdicts(sandbox, issue, target, forRole, mergeNote, host, stop);
+      if (!Array.isArray(role)) return role;
+      verdicts = role;
+      log("follow-up finished");
     }
 
     const gate = await runCheckpoint(
@@ -708,8 +732,15 @@ async function passOnMarkedIssue(
       log,
     );
     // An unresolved conflict ends here too: it leaves the worktree dirty.
+    // lib/checkpoint.mts#runGate reports a dirty worktree, or a HEAD that
+    // moved or can't be read, as a gate that didn't pass, so the reason names
+    // each and the quoted output says which.
     if (!gate.passed || gate.head === undefined) {
-      return stop(`\`scripts/gate.sh\` is still red after ${GATE_FIXER_ATTEMPTS} gate-fixer attempts`, gate.output);
+      return stop(
+        `\`scripts/gate.sh\` didn't pass on a known, clean commit after ${GATE_FIXER_ATTEMPTS} gate-fixer attempts: it's ` +
+          "red, the worktree isn't clean, or HEAD moved while it ran",
+        gate.output,
+      );
     }
     const gated = gate.head;
     if (!(await sandboxContains(sandbox, gated, target.headRefOid))) {
