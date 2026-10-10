@@ -19,26 +19,32 @@
 		<TailwindInput Include="**/*.razor;**/*.razor.cs;Styles/**" Exclude="node_modules/**;bin/**;obj/**" />
 	</ItemGroup>
 
-	<!-- The stamp in obj/<Configuration>/ makes each configuration build the CSS once with its own flags, so
-	     switching from Debug to Release rebuilds it minified. It's named here rather than in a property because
-	     IntermediateOutputPath isn't set yet when the project body is evaluated.
+	<!-- The CLI writes into obj/<Configuration>/, so Debug and Release each keep their own up-to-date check and
+	     never skip a rebuild because the other configuration already touched wwwroot/css/app.css.
 	     Skipped in design-time builds (IDEs, the code-metrics workflow), which have no pnpm. -->
 	<Target
 		Name="BuildTailwindCss"
 		BeforeTargets="BeforeBuild"
 		Condition="'$(DesignTimeBuild)' != 'true'"
 		Inputs="@(TailwindInput);package.json"
-		Outputs="$(TailwindOutput);$(IntermediateOutputPath)tailwind.stamp">
+		Outputs="$(IntermediateOutputPath)tailwind/app.css">
 		<Error
 			Condition="!Exists('$(MSBuildProjectDirectory)/node_modules/@tailwindcss/cli/package.json')"
 			Text="The Tailwind CSS CLI isn't installed in src/UI/node_modules. Run 'pnpm install' at the repository root, then build again." />
+		<MakeDir Directories="$(IntermediateOutputPath)tailwind" />
 		<!-- The CLI writes progress to stderr; IgnoreStandardErrorWarningFormat keeps it from becoming a warning under -warnaserror. -->
 		<Exec
-			Command="pnpm exec tailwindcss --input Styles/app.tailwind.css --output $(TailwindOutput)$(TailwindMinify)"
+			Command="pnpm exec tailwindcss --input Styles/app.tailwind.css --output $(IntermediateOutputPath)tailwind/app.css$(TailwindMinify)"
 			WorkingDirectory="$(MSBuildProjectDirectory)"
 			IgnoreStandardErrorWarningFormat="true" />
-		<MakeDir Directories="$(IntermediateOutputPath)" />
-		<Touch Files="$(IntermediateOutputPath)tailwind.stamp" AlwaysCreate="true" />
+	</Target>
+
+	<!-- Unconditional (no Inputs/Outputs): copies whichever configuration's CSS BuildTailwindCss last produced into
+	     wwwroot, even on a build where BuildTailwindCss itself was skipped as up to date. Without this, building
+	     Debug then Release could leave wwwroot/css/app.css holding the other configuration's CSS, because both
+	     configurations share that one output path. -->
+	<Target Name="CopyTailwindCss" AfterTargets="BuildTailwindCss" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+		<Copy SourceFiles="$(IntermediateOutputPath)tailwind/app.css" DestinationFiles="$(TailwindOutput)" />
 		<!-- Static web assets read Content at evaluation time, before this target writes the file, so a clean
 		     build would leave app.css out of its endpoints. Re-adding it here puts it in the first build too. -->
 		<ItemGroup>
