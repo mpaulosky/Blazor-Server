@@ -808,9 +808,14 @@ function passHostFake(
       calls.rerunFailedChecks.push({ pr, checkNames: [...checkNames], expectedHead });
       return options.rerunResult ?? [...checkNames].map((name) => redCheck({ name }));
     },
-    failedCheckLog: (pr, checkNames, expectedHead) => {
+    failedCheckLog: (pr, checkNames, expectedHead, limit) => {
       calls.failedCheckLog.push({ pr, checkNames: [...checkNames], expectedHead });
-      return options.failedCheckLog ?? "";
+      const text = options.failedCheckLog ?? "";
+      // Mirrors the live host's per-run truncation (lib/github.mts#failedCheckLogs)
+      // for this stub's single simulated run, keeping the end, where the
+      // error is.
+      if (limit === undefined || text.length <= limit) return text;
+      return text.slice(-limit);
     },
     replyToThread: (threadId, body) => void calls.replyToThread.push({ threadId, body }),
     resolveThread: (threadId) => void calls.resolveThread.push(threadId),
@@ -1576,6 +1581,44 @@ describe("runPass's red CI decisions", () => {
     assert.equal(outcome.kind, "skipped");
     assert.deepEqual(calls.markBuilding, []);
     assert.deepEqual(calls.rerunFailedChecks, []);
+  });
+
+  // #79's follow-up review: `pull_request` CI checks out the head merged
+  // with main, so a PR that's merely behind main (not conflicted) has its
+  // checks run against a commit the bare head's gate never sees. Merging
+  // main in first, before the gate decides, makes the gate judge the same
+  // commit CI did.
+  it("merges main into the branch before gating red CI, when the PR is behind main but not conflicted", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0] });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: false,
+      sandbox,
+      checks: [redCheck({ name: "Build Solution" })],
+    });
+
+    const outcome = await runPass(passTarget({ conflicted: false, reasons: ["check Build Solution is red"] }), issue, BASE, passHost);
+
+    const mergeIndex = sandbox.steps.findIndex((step) => step.startsWith("git merge "));
+    const gateIndex = sandbox.steps.findIndex((step) => step === "scripts/gate.sh 2>&1");
+    assert.ok(mergeIndex !== -1, "the branch was merged with main");
+    assert.ok(gateIndex !== -1, "the gate ran");
+    assert.ok(mergeIndex < gateIndex, "the merge happened before the gate decided red CI");
+    assert.equal(outcome.kind, "passed");
+    assert.equal(calls.push.length, 1);
+  });
+
+  // The counterpart to the above: being behind main, on its own, still
+  // isn't a reason to spend a counted pass. The sweep's update-branch
+  // handles that once the PR is settled (lib/follow-up.mts#decide); only a
+  // red check (or a bot thread) makes the merge worth doing here.
+  it("doesn't start a pass merely because the PR is behind main, with no red check or bot thread", async () => {
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, checks: [] });
+
+    const outcome = await runPass(passTarget({ conflicted: false }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.createSandbox, []);
   });
 
   it("doesn't re-run a flaky check when the pass pushes, since the push starts CI again", async () => {

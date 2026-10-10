@@ -72,9 +72,12 @@ const VERDICTS_FILE = ".sandcastle/follow-up.json";
 // GitHub refuses a comment over 65,536 characters; this leaves room to spare.
 const COMMENT_LIMIT = 65_000;
 
-// How much of the red checks' failed-job logs the follow-up role gets: the
-// end, where the error is. A whole CodeQL log can run to megabytes, far past
-// what a prompt should carry.
+// How much of the red checks' failed-job logs the follow-up role gets, split
+// evenly across the runs behind them (lib/github.mts#failedCheckLogs keeps
+// each run's own end, where its error is, rather than the end of the whole
+// joined text): a whole CodeQL log can run to megabytes, far past what a
+// prompt should carry, and without the split one run's log could crowd out
+// another's entirely (#79).
 const CI_LOG_LIMIT = 60_000;
 
 // One review thread given to the follow-up role, trimmed to only what it
@@ -382,14 +385,6 @@ function checkList(names: readonly string[]): string {
   return names.map(plainText).join(", ");
 }
 
-// The last `limit` characters of `text`, never starting halfway through a
-// character: a CI log's error is at its end.
-function endOf(text: string, limit: number): string {
-  if (text.length <= limit) return text;
-  const end = text.slice(-limit);
-  return /^[\uDC00-\uDFFF]/.test(end) ? end.slice(1) : end;
-}
-
 // Re-runs the failed jobs of `names` (planRedCi's `rerun`) once as flaky,
 // and returns the ones still red: red after a re-run that already happened,
 // or left out of the host's answer, since a check missing from it isn't
@@ -510,8 +505,11 @@ export type PassHost = {
   // `gh run view --log-failed` for the run(s) backing each of `checkNames`
   // (planRedCi's `forward`), concatenated: the text the follow-up role gets
   // to fix what the gate doesn't cover (lib/github.mts#failedCheckLogs).
-  // `expectedHead` is checked the same way rerunFailedChecks' is.
-  failedCheckLog(pr: number, checkNames: readonly string[], expectedHead: string): string;
+  // `expectedHead` is checked the same way rerunFailedChecks' is. `limit`,
+  // when given, keeps each run's own section to an even share of it, so one
+  // run's log can't crowd another's out when the joined text is cut to fit a
+  // prompt (#79).
+  failedCheckLog(pr: number, checkNames: readonly string[], expectedHead: string, limit?: number): string;
   // lib/github.mts#replyToReviewThread.
   replyToThread(threadId: string, body: string): void;
   // lib/github.mts#resolveReviewThread.
@@ -554,7 +552,7 @@ export const livePassHost: PassHost = {
   remoteHead: (branch) => originRefs.remoteHead(branch),
   checks: (pr) => headChecksOf(pr),
   rerunFailedChecks: (pr, checkNames, expectedHead) => rerunFailedChecksOnce(pr, checkNames, expectedHead),
-  failedCheckLog: (pr, checkNames, expectedHead) => failedCheckLogs(pr, checkNames, expectedHead),
+  failedCheckLog: (pr, checkNames, expectedHead, limit) => failedCheckLogs(pr, checkNames, expectedHead, undefined, undefined, limit),
   replyToThread: (threadId, body) => replyToReviewThread(threadId, body),
   resolveThread: (threadId) => resolveReviewThread(threadId),
   commentOnPullRequest: (pr, body) => commentOnPullRequest(pr, body),
@@ -774,13 +772,6 @@ function planPass(
     const first = thread.comments[0];
     host.recordHumanThread({ pr: target.number, author: first?.author ?? null, url: first?.url ?? "" });
   }
-  // Only a needed merge, a bot thread or a red check starts a pass. One with
-  // only owner threads keeps the sweep's rule that human threads alone don't
-  // start a pass, so an owner thread is answered only alongside one of the
-  // others. A merge is needed only when the PR conflicts with main: one
-  // that's merely behind is updated by the sweep once it's settled, so a
-  // red-CI PR doesn't spend a counted pass every time main moves.
-  const needsMerge = target.conflicted && !host.contains(target.headRefOid, base);
   // Read fresh, since a re-run may have started or finished since the sweep.
   // While any check is still running the PR isn't settled, so its red checks
   // wait for a later sweep rather than being re-run or fixed from half a
@@ -795,6 +786,18 @@ function planPass(
   if (checksRead.headRefOid !== target.headRefOid) return skip("its checks were read from a commit other than its head");
   const checks = checksRead.checks;
   const redChecks = checks.some((check) => !check.completed) ? [] : checks.filter((check) => !check.green && check.runId !== undefined);
+  // Only a needed merge, a bot thread or a red check starts a pass. One with
+  // only owner threads keeps the sweep's rule that human threads alone don't
+  // start a pass, so an owner thread is answered only alongside one of the
+  // others. A merge is needed when the PR conflicts with main, or, since
+  // `pull_request` CI builds the head merged with main, when a settled red
+  // check sits on a head that's merely behind it: gating the bare head would
+  // then judge a commit CI never built, possibly misreading a real failure
+  // main's own change caused as one the gate doesn't reproduce (#79). A head
+  // that's behind with no red check is left for the sweep's update-branch
+  // instead, so a clean PR doesn't spend a counted pass merging every time
+  // main moves.
+  const needsMerge = !host.contains(target.headRefOid, base) && (target.conflicted || redChecks.length > 0);
   if (!needsMerge && redChecks.length === 0 && !sorted.forRole.some((thread) => thread.from === "bot")) {
     return skip("there's nothing a follow-up pass handles yet");
   }
@@ -865,8 +868,53 @@ async function passOnMarkedIssue(
     const head = await sandbox.exec("git rev-parse HEAD");
     if (head.stdout.trim() !== target.headRefOid) return stop("the worktree isn't at the PR's head after resetting it to it");
 
+    // Merged, never rebased: the push that follows is a plain one, so the
+    // PR's history stays as reviewers saw it.
+    let merged: PassReport["merged"] = "none";
+    let hostMerge: string | undefined;
+    let mergeNote = "No merge with main is needed in this pass, so there's no merge to finish.";
+    // Attempts the merge `needsMerge` calls for. `merged` is "none" with
+    // `failure` set when it fails for a reason other than a conflict.
+    const tryMerge = async (): Promise<{ merged: PassReport["merged"]; hostMerge: string | undefined; mergeNote: string; failure?: string }> => {
+      const merge = await sandbox.exec(`git merge --no-edit -m ${shellWord(`Merge main into ${branch}`)} ${shellWord(base)}`);
+      if (merge.exitCode === 0) {
+        return {
+          merged: "clean",
+          hostMerge: (await sandbox.exec("git rev-parse HEAD")).stdout.trim(),
+          mergeNote: "The host merged main into the branch cleanly, so there's no merge to finish.",
+        };
+      }
+      const conflicted = await sandbox.exec("git diff --name-only --diff-filter=U");
+      const files = conflicted.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+      // No conflicted file means the merge failed for some other reason.
+      if (conflicted.exitCode !== 0 || files.length === 0) {
+        return { merged: "none", hostMerge: undefined, mergeNote: "", failure: `${merge.stdout}\n${merge.stderr}` };
+      }
+      return {
+        merged: "conflicts",
+        hostMerge: undefined,
+        mergeNote:
+          `The host's merge of main into the branch conflicted in: ${files.join(", ")}. Resolve every conflict, then ` +
+          "finish the merge with `git commit --no-edit`.",
+      };
+    };
+    // A merge main can bring in cleanly happens before the gate decides red
+    // CI, since `pull_request` CI builds the head merged with main: gating
+    // the bare head first would then judge a commit CI never built (#79).
+    // GitHub already says this PR isn't conflicted, so the merge is expected
+    // to be clean; `tryMerge` falls back to the conflict path if it isn't. A
+    // conflicted PR can't be merged without the role, so its gate still runs
+    // on the bare head, as it always has, and the merge happens after.
+    const mergeFirst = needsMerge && !target.conflicted;
+    if (mergeFirst) {
+      const attempt = await tryMerge();
+      if (attempt.failure !== undefined) return stop("merging main into the branch failed", attempt.failure);
+      ({ merged, hostMerge, mergeNote } = attempt);
+    }
+
     // Red CI is decided by the gate (see planRedCi), run on the commit CI
-    // checked, before a merge or the role changes it.
+    // checked: already merged with main above when `mergeFirst` is why the
+    // PR had a red check to begin with.
     let headGate: GateRun | undefined;
     let redCi: RedCiPlan = { fix: false, rerun: [], forward: [] };
     if (redChecks.length > 0) {
@@ -877,7 +925,7 @@ async function passOnMarkedIssue(
     let ciLog: string | undefined;
     if (redCi.forward.length > 0) {
       try {
-        ciLog = endOf(host.failedCheckLog(target.number, redCi.forward, target.headRefOid), CI_LOG_LIMIT);
+        ciLog = host.failedCheckLog(target.number, redCi.forward, target.headRefOid, CI_LOG_LIMIT);
       } catch (error) {
         // Nothing has run or pushed yet, so there's nothing of this pass's to
         // lose by giving up here (#79): a GitHub API error, a rate limit, or
@@ -886,27 +934,10 @@ async function passOnMarkedIssue(
       }
     }
 
-    // Merged, never rebased: the push that follows is a plain one, so the
-    // PR's history stays as reviewers saw it.
-    let merged: PassReport["merged"] = "none";
-    let hostMerge: string | undefined;
-    let mergeNote = "No merge with main is needed in this pass, so there's no merge to finish.";
-    if (needsMerge) {
-      const merge = await sandbox.exec(`git merge --no-edit -m ${shellWord(`Merge main into ${branch}`)} ${shellWord(base)}`);
-      if (merge.exitCode === 0) {
-        merged = "clean";
-        hostMerge = (await sandbox.exec("git rev-parse HEAD")).stdout.trim();
-        mergeNote = "The host merged main into the branch cleanly, so there's no merge to finish.";
-      } else {
-        const conflicted = await sandbox.exec("git diff --name-only --diff-filter=U");
-        const files = conflicted.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
-        // No conflicted file means the merge failed for some other reason.
-        if (conflicted.exitCode !== 0 || files.length === 0) return stop("merging main into the branch failed", `${merge.stdout}\n${merge.stderr}`);
-        merged = "conflicts";
-        mergeNote =
-          `The host's merge of main into the branch conflicted in: ${files.join(", ")}. Resolve every conflict, then ` +
-          "finish the merge with `git commit --no-edit`.";
-      }
+    if (needsMerge && !mergeFirst) {
+      const attempt = await tryMerge();
+      if (attempt.failure !== undefined) return stop("merging main into the branch failed", attempt.failure);
+      ({ merged, hostMerge, mergeNote } = attempt);
     }
 
     // With no conflict to resolve, no thread to answer and no failed-job log
@@ -923,8 +954,13 @@ async function passOnMarkedIssue(
 
     // The gate on the head is the checkpoint's first run when nothing has
     // changed the worktree since: running it again on the same commit would
-    // only cost time, and a red one goes straight to the gate-fixer.
-    let unchangedGate = merged === "none" && !roleRuns ? headGate : undefined;
+    // only cost time, and a red one goes straight to the gate-fixer. That
+    // holds when no merge happened at all, and when `mergeFirst`'s merge
+    // happened before headGate ran, so headGate already reflects it; a
+    // conflicted merge after headGate means the tree changed since, and
+    // `roleRuns` being true then (it's one of its conditions) already keeps
+    // this from reusing a gate run from before that.
+    let unchangedGate = (merged === "none" || mergeFirst) && !roleRuns ? headGate : undefined;
 
     const gate = await runCheckpoint(
       2,

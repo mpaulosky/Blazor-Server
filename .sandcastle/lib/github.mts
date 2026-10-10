@@ -5,6 +5,7 @@
 // working it out from the git remote of wherever it runs.
 
 import { execFileSync } from "node:child_process";
+import { endOf } from "./checkpoint.mts";
 import { COPILOT_REVIEWER, QUEUE_LABEL, SANDCASTLE_LABELS, type QueueScope, type SandcastleLabel } from "./config.mts";
 import type { CheckState, SweepPullRequest } from "./follow-up.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
@@ -721,19 +722,25 @@ const FAILED_LOG_BUFFER = 256 * 1024 * 1024;
 // a header naming its checks. A check with no Actions run gets a line saying
 // so rather than failing the pass: the follow-up role can still fix the rest.
 // Throws when the head has moved past `expectedHead` since the pass gated it
-// (#79), rather than quote a log for a commit the pass never judged.
+// (#79), rather than quote a log for a commit the pass never judged. `limit`,
+// when given, keeps each run's own section to an even share of it (the end,
+// where its error is) rather than cutting the joined text as a whole: two
+// runs' logs otherwise compete for the same budget, and the later one in the
+// join can crowd the earlier one out of it entirely (#79).
 export function failedCheckLogs(
   number: number,
   names: readonly string[],
   expectedHead: string,
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
+  limit: number = Number.POSITIVE_INFINITY,
 ): string {
   const { checks, runIds } = namedRuns(number, names, expectedHead, run, repo);
+  const perRun = limit / Math.max(1, runIds.length);
   const sections = runIds.map((runId) => {
     const ofRun = checks.filter((check) => check.runId === runId).map((check) => check.name);
     const log = ghWithStderr(run, ["run", "view", String(runId), "--log-failed", "--repo", repo], undefined, FAILED_LOG_BUFFER);
-    return `=== ${ofRun.join(", ")} (run ${runId}) ===\n${log.trim()}`;
+    return `=== ${ofRun.join(", ")} (run ${runId}) ===\n${endOf(log.trim(), perRun)}`;
   });
   const runless = names.filter((name) => !checks.some((check) => check.name === name && check.runId !== undefined));
   if (runless.length > 0) sections.push(`=== ${runless.join(", ")} ===\nThere's no GitHub Actions log for this check.`);

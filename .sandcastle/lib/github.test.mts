@@ -1324,6 +1324,35 @@ describe("head checks and their runs", () => {
 
       assert.throws(() => failedCheckLogs(7, ["Analyze (csharp)"], "b".repeat(40), run, "o/r"), /head moved/);
     });
+
+    // #79's follow-up review: a limit applied once to the whole joined text
+    // lets a later, longer run's log crowd an earlier run's out of it
+    // entirely. Each run gets an even share instead.
+    it("gives each run's log its own share of a limit, rather than letting a later run's log crowd an earlier one's out", () => {
+      const { run } = gh(
+        [checkRun("Analyze (csharp)", "FAILURE", 31), checkRun("Python tests", "FAILURE", 42)],
+        {},
+        { 31: "##[error] ALPHA_MARK", 42: `${"y".repeat(500)}\n##[error] BETA_MARK` },
+      );
+
+      const log = failedCheckLogs(7, ["Analyze (csharp)", "Python tests"], HEAD_OID, run, "o/r", 100);
+
+      assert.match(log, /ALPHA_MARK/);
+      assert.match(log, /BETA_MARK/);
+    });
+
+    it("reads the whole log of every run when no limit is given", () => {
+      const { run } = gh(
+        [checkRun("Analyze (csharp)", "FAILURE", 31), checkRun("Python tests", "FAILURE", 42)],
+        {},
+        { 31: "##[error] ALPHA_MARK", 42: `${"y".repeat(500)}\n##[error] BETA_MARK` },
+      );
+
+      const log = failedCheckLogs(7, ["Analyze (csharp)", "Python tests"], HEAD_OID, run, "o/r");
+
+      assert.match(log, /ALPHA_MARK/);
+      assert.match(log, new RegExp(`y{500}\\n##\\[error\\] BETA_MARK$`));
+    });
   });
 });
 

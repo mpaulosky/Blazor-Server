@@ -129,10 +129,14 @@ bot thread without a change only because the suggestion contradicts the issue's 
 the issue's scope. Outdated threads whose concern the current code handles are resolved `ADDRESSED`. When it disagrees with an owner thread, it replies with its reasoning and leaves the
 thread open.
 
-**Red CI.** The gate decides, run on the head before anything changes it. If `scripts/gate.sh` is red on the head, the gate-fixer takes it. If the gate is green but a gate-covered
-CI check (build, test, lint) is red, the host re-runs the failed jobs once as flaky, unless the pass pushed, which starts CI afresh anyway. If a check the gate doesn't cover
-(CodeQL) is red, its `gh run view --log-failed` output goes to the follow-up role. Pending checks mean the PR waits for a later sweep. The host doesn't wait for a re-run: it
-starts one and the sweep waits for it like any running check. A run already on a later attempt has had its one re-run, so a check still red there hands the PR back
+**Red CI.** The gate decides, run on the commit `pull_request` CI actually built. That's the bare head, unless the PR is behind main with a settled red check: `pull_request`
+checkout merges the head with main by default, so gating the bare head there would judge a commit CI never built. A merge GitHub already says is clean (the PR isn't conflicted)
+happens before the gate decides, so it gates the merged commit like CI did; a conflicted PR can't be merged without the role, so its gate still runs on the bare head, before the
+merge. If `scripts/gate.sh` is red, the gate-fixer takes it. If the gate is green but a gate-covered CI check (build, test, lint) is red, the host re-runs the failed jobs once as
+flaky, unless the pass pushed, which starts CI afresh anyway. If a check the gate doesn't cover (CodeQL) is red, its `gh run view --log-failed` output (each run's own share of the
+prompt budget, so one run's log can't crowd another's out) goes to the follow-up role; if the role commits nothing and the pass pushes nothing, it gives up at once rather than
+repeating the same costly, unfixable pass every sweep. Pending checks mean the PR waits for a later sweep. The host doesn't wait for a re-run: it starts one and the sweep waits
+for it like any running check. A run already on a later attempt has had its one re-run, so a check still red there hands the PR back
 ([#79](https://github.com/mpaulosky/Blazor-Server/issues/79)).
 
 **Parallelism.** The host fetches every PR branch it will pass on serially, in one step before any pass starts, because concurrent fetches contend on the shared git ref lock (the reason
