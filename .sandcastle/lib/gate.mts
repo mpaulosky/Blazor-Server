@@ -109,8 +109,8 @@ export type HeldBackIssue = { issue: SandcastleIssue; reasons: string[]; pr?: Op
 
 // Split the open Sandcastle issues into those ready to plan and those waiting
 // on an unfinished blocker, an open PR or another run building them
-// (sandcastle:building), with the reasons for each held-back
-// issue and its open PR, which the critique compares the round's picks with.
+// (sandcastle:building), with the reasons for each held-back issue and its
+// open PR, which the critique compares the round's picks with.
 // Blockers are resolved afresh on every call: an issue whose blocker's PR
 // merged during the previous round becomes ready now.
 export function gateIssues(

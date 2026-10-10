@@ -63,11 +63,10 @@ export type SandcastleLabel = { name: string; color: string; description: string
 // same issue too (#150, a near-miss on #71).
 export const BUILDING_LABEL = "sandcastle:building";
 
-// How long sandcastle:building can carry a crashed run's label before startup
-// clears it (see lib/building.mts#clearStaleBuildingLabels), chosen to run
-// longer than any real build: every role's timeoutMinutes, even with two
-// gate-fixer attempts at each of the two checkpoints, adds up to well under
-// 6 hours.
+// How old a sandcastle:building label must be before startup clears it as a
+// crashed run's (see lib/building.mts#clearStaleBuildingLabels). It outlasts
+// any real build: every role's timeoutMinutes, even with two gate-fixer
+// attempts at each of the two checkpoints, adds up to well under 6 hours.
 export const BUILDING_LABEL_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 // Every label from the Labels table that the host, not a human, is

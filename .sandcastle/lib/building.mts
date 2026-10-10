@@ -1,9 +1,8 @@
-// A crashed run leaves sandcastle:building on its issue forever, since
-// nothing else removes it (lib/build.mts#buildIssue only unmarks on its own
-// way out). That holds the issue back (lib/gate.mts) past the point any real
-// build could still be running. This module clears a label that's stuck
-// around longer than BUILDING_LABEL_MAX_AGE_MS, run once at startup alongside
-// ensureLabels (see main.mts), while leaving a live run's label alone.
+// A crashed run never reaches lib/build.mts#buildIssue's finally, so it leaves
+// sandcastle:building on its issue, and the gate (lib/gate.mts) would hold the
+// issue back forever. This module, run once at startup after ensureLabels (see
+// main.mts), clears a label older than BUILDING_LABEL_MAX_AGE_MS, past the
+// point any real build could still be running, and leaves a live run's alone.
 
 import { BUILDING_LABEL, BUILDING_LABEL_MAX_AGE_MS } from "./config.mts";
 import { issuesWithLabel, labelTimeline, removeIssueLabel, timestamp, type TimelineLabelEvent } from "./github.mts";

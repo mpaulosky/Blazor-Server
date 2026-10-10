@@ -16,7 +16,7 @@
 //                               host names each remaining pick's branch and
 //                               fetches it if it exists.
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
-//                               createSandbox() and labelled
+//                               createSandbox(), and the issue carries
 //                               sandcastle:building until its build ends,
 //                               however it ends. The tester commits failing
 //                               tests, then the backend developer makes them
