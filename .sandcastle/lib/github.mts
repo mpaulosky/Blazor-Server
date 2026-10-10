@@ -701,6 +701,11 @@ export function rerunFailedChecksOnce(
   return states;
 }
 
+// How much of a `gh run view --log-failed` answer failedCheckLogs reads: a
+// failed CodeQL job's log can run to megabytes, past execFileSync's default
+// buffer, and the caller keeps only its end.
+const FAILED_LOG_BUFFER = 256 * 1024 * 1024;
+
 // lib/follow-up-pass.mts#PassHost.failedCheckLog: `gh run view --log-failed`
 // for each Actions run behind the checks in `names`, read once per run under
 // a header naming its checks. A check with no Actions run gets a line saying
@@ -714,8 +719,7 @@ export function failedCheckLogs(
   const { checks, runIds } = namedRuns(number, names, run, repo);
   const sections = runIds.map((runId) => {
     const ofRun = checks.filter((check) => check.runId === runId).map((check) => check.name);
-    // A failed CodeQL job's log can run to megabytes; the caller keeps its end.
-    const log = ghWithStderr(run, ["run", "view", String(runId), "--log-failed", "--repo", repo], undefined, 256 * 1024 * 1024);
+    const log = ghWithStderr(run, ["run", "view", String(runId), "--log-failed", "--repo", repo], undefined, FAILED_LOG_BUFFER);
     return `=== ${ofRun.join(", ")} (run ${runId}) ===\n${log.trim()}`;
   });
   const runless = names.filter((name) => !checks.some((check) => check.name === name && check.runId !== undefined));

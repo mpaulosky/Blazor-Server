@@ -321,12 +321,14 @@ export function passSummaryComment(report: PassReport, publicError: (text: strin
     report.pushed === undefined ? "Nothing needed pushing." : `Pushed \`${report.pushed}\`, which passed \`scripts/gate.sh\`.`;
   lines.push([...MERGE_SENTENCES[report.merged], pushed].join(" "));
   const ci = report.redCi;
-  if (ci?.fix) lines.push("`scripts/gate.sh` was red on the PR's head before this pass.");
-  if (ci !== undefined && ci.forward.length > 0) {
-    lines.push(`Gave the follow-up role the failed-job logs of these checks, which \`scripts/gate.sh\` doesn't cover: ${checkList(ci.forward)}.`);
-  }
-  if (ci !== undefined && ci.rerun.length > 0) {
-    lines.push(`Re-ran the failed jobs of ${checkList(ci.rerun)} once as flaky, since \`scripts/gate.sh\` passes on the PR's head.`);
+  if (ci !== undefined) {
+    if (ci.fix) lines.push("`scripts/gate.sh` was red on the PR's head before this pass.");
+    if (ci.forward.length > 0) {
+      lines.push(`Gave the follow-up role the failed-job logs of these checks, which \`scripts/gate.sh\` doesn't cover: ${checkList(ci.forward)}.`);
+    }
+    if (ci.rerun.length > 0) {
+      lines.push(`Re-ran the failed jobs of ${checkList(ci.rerun)} once as flaky, since \`scripts/gate.sh\` passes on the PR's head.`);
+    }
   }
   if (report.actions.length > 0) {
     lines.push(["Review threads:", ...report.actions.map((action) => summaryLine(action, publicError))].join("\n"));
@@ -385,6 +387,18 @@ function endOf(text: string, limit: number): string {
   if (text.length <= limit) return text;
   const end = text.slice(-limit);
   return /^[\uDC00-\uDFFF]/.test(end) ? end.slice(1) : end;
+}
+
+// Re-runs the failed jobs of `names` (planRedCi's `rerun`) once as flaky,
+// and returns the ones still red: red after a re-run that already happened,
+// or left out of the host's answer, since a check missing from it isn't
+// known to have passed.
+function stillRedAfterRerun(pr: number, names: readonly string[], host: PassHost): string[] {
+  const after = new Map(host.rerunFailedChecks(pr, names).map((check) => [check.name, check]));
+  return names.filter((name) => {
+    const check = after.get(name);
+    return check === undefined || (check.completed && !check.green);
+  });
 }
 
 // The failed-job logs of `names`, which stayed red after their re-run, for
@@ -560,9 +574,9 @@ async function sandboxContains(sandbox: Pick<sandcastle.Sandbox, "exec">, commit
 
 // Runs the follow-up role, with `ciLog` (the failed-job logs of the red
 // checks the gate doesn't cover, when there are any), and reads its verdicts
-// from VERDICTS_FILE. Returns
-// them, or the outcome from `stop` when the role failed, ended unfinished or
-// wrote no usable file. An UncountedStopError is rethrown.
+// from VERDICTS_FILE. Returns them, or the outcome from `stop` when the role
+// failed, ended unfinished or wrote no usable file. An UncountedStopError is
+// rethrown.
 async function followUpVerdicts(
   sandbox: sandcastle.Sandbox,
   issue: SandcastleIssue,
@@ -974,13 +988,7 @@ async function passOnMarkedIssue(
     if (redCi.rerun.length > 0 && pushed !== undefined) {
       log(`didn't re-run ${redCi.rerun.join(", ")}: the push starts CI again on the new head`);
     } else if (redCi.rerun.length > 0) {
-      const after = new Map(host.rerunFailedChecks(target.number, redCi.rerun).map((check) => [check.name, check]));
-      // A check the answer leaves out isn't known to have passed, so it
-      // counts as still red.
-      const stillRed = redCi.rerun.filter((name) => {
-        const check = after.get(name);
-        return check === undefined || (check.completed && !check.green);
-      });
+      const stillRed = stillRedAfterRerun(target.number, redCi.rerun, host);
       if (stillRed.length > 0) {
         return stop(
           `\`scripts/gate.sh\` passes on the head, but ${checkList(stillRed)} stayed red after its one re-run as flaky`,
@@ -1009,7 +1017,7 @@ async function passOnMarkedIssue(
             unverified,
             failedWrites,
             leftForHuman,
-            redCi: { fix: redCi.fix, rerun, forward: redCi.forward },
+            redCi: { ...redCi, rerun },
           },
           (text) => host.publicError(text),
         ),
