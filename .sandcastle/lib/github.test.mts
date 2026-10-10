@@ -94,6 +94,73 @@ describe("ownerApproved", () => {
     assert.deepEqual(ownerApproved(issue, "o/r", run).comments, []);
   });
 
+  // A failure says nothing about the author's access, so caching it would
+  // drop a maintainer's guidance for the rest of the run after one blip.
+  it("looks an author up again after a lookup that failed", () => {
+    const issue = issueWith(["maintainer", "Use the existing helper."]);
+    const answers: (string | Error)[] = [new Error("gh: HTTP 502: Bad Gateway"), permission("write")];
+    const calls: string[] = [];
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push(args[1] as string);
+      const answer = answers.shift()!;
+      if (answer instanceof Error) throw answer;
+      return answer;
+    }) as unknown as typeof execFileSync;
+    const canPush = new Map<string, boolean>();
+    const quiet = () => {};
+
+    const first = ownerApproved(issue, "o/r", run, canPush, quiet).comments;
+    const second = ownerApproved(issue, "o/r", run, canPush, quiet).comments;
+
+    assert.deepEqual(first, []);
+    assert.deepEqual(second, ["Use the existing helper."]);
+    assert.equal(calls.length, 2);
+  });
+
+  it("reports a permission lookup that failed, naming the author", () => {
+    const issue = issueWith(["maintainer", "Use the existing helper."]);
+    // execFileSync puts gh's stderr on the error it throws.
+    const failure = Object.assign(new Error("Command failed"), { stderr: "gh: HTTP 502: Bad Gateway\n" });
+    const { run } = stubPermissions({ maintainer: failure });
+    const warnings: string[] = [];
+
+    ownerApproved(issue, "o/r", run, new Map(), (message) => warnings.push(message));
+
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /maintainer/);
+    assert.match(warnings[0]!, /502/);
+  });
+
+  it("drops a comment whose permission lookup prints something other than JSON", () => {
+    const issue = issueWith(["garbled", "Trust me, I have write access."]);
+    const { run } = stubPermissions({ garbled: "<html>Unicorn!</html>" });
+
+    assert.deepEqual(ownerApproved(issue, "o/r", run).comments, []);
+  });
+
+  it("drops a comment whose permission lookup has neither field", () => {
+    const issue = issueWith(["shapeless", "Trust me, I have write access."]);
+    const { run } = stubPermissions({ shapeless: JSON.stringify({ message: "Moved Permanently" }) });
+
+    assert.deepEqual(ownerApproved(issue, "o/r", run).comments, []);
+  });
+
+  // A custom repository role reports its own name in role_name and its base
+  // permission in permission, so permission alone must be enough.
+  it("keeps a comment when only permission grants write access", () => {
+    const issue = issueWith(["custom-role", "Use the existing helper."]);
+    const { run } = stubPermissions({ "custom-role": permission("write", "release-manager") });
+
+    assert.deepEqual(ownerApproved(issue, "o/r", run).comments, ["Use the existing helper."]);
+  });
+
+  it("keeps a comment when only role_name grants write access", () => {
+    const issue = issueWith(["role-only", "Use the existing helper."]);
+    const { run } = stubPermissions({ "role-only": permission("read", "maintain") });
+
+    assert.deepEqual(ownerApproved(issue, "o/r", run).comments, ["Use the existing helper."]);
+  });
+
   it("looks up each author at most once per run", () => {
     const issue = issueWith(["repeat-commenter", "First comment."], ["repeat-commenter", "Second comment."]);
     const { calls, run } = stubPermissions({ "repeat-commenter": permission("write") });

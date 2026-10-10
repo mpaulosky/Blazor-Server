@@ -45,7 +45,8 @@ repository, and an agent holding a write token acts on what it reads. So when th
 The PAT is the owner's, so the labels the host adds to split children pass. Any other issue is skipped and logged, without a comment. The owner re-approves an edited issue by removing and
 re-adding `Sandcastle`. Only the comments of people with write access (`admin`, `maintain` or `write` on the repository, from the collaborator-permission API) reach a role: the
 host drops everyone else's when it builds a prompt, and the sandbox has no token to fetch them itself (see **Principles**). Write access, not the owner's login, decides this, because in a
-repository an organization owns the owner never comments. The host looks each author up once per run, and a lookup that fails drops that author's comments.
+repository an organization owns the owner never comments. The host looks each author up once per run. A lookup that fails drops that author's comments and is logged,
+and the host asks again for the next issue or round rather than remember the failure.
 On PRs, follow-up acts only on bot threads and the owner's threads (see **Thread rules**).
 The workflow applies the label rule to the events that start it (see **Trigger and run environment**), and the host checks cover scheduled, manual and local runs.
 

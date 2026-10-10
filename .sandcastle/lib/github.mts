@@ -39,20 +39,21 @@ export type SandcastleIssue = Omit<GhIssue, "comments"> & {
 // permission lookup that fails drops that author's comments, so an error
 // never lets a stranger's text through. `canPush` caches each author's
 // answer, so a caller that shares one map across issues looks each author up
-// once.
+// once. Only GitHub's answer is cached, never a failure: one transient error
+// would otherwise drop a maintainer's guidance for the rest of the run.
 export function ownerApproved(
   issue: GhIssue,
   repo: string = repoName(),
   run: typeof execFileSync = execFileSync,
   canPush: Map<string, boolean> = new Map(),
+  warn: (message: string) => void = console.error,
 ): SandcastleIssue {
   const trusted = (author: string): boolean => {
-    let allowed = canPush.get(author);
-    if (allowed === undefined) {
-      allowed = hasWriteAccess(author, repo, run);
-      canPush.set(author, allowed);
-    }
-    return allowed;
+    const cached = canPush.get(author);
+    if (cached !== undefined) return cached;
+    const allowed = hasWriteAccess(author, repo, run, warn);
+    if (allowed !== undefined) canPush.set(author, allowed);
+    return allowed ?? false;
   };
   return {
     number: issue.number,
@@ -67,15 +68,25 @@ const PUSH_PERMISSIONS: ReadonlySet<unknown> = new Set(["admin", "maintain", "wr
 
 // Whether `login` can push to `repo`. GitHub reports maintain as "write" in
 // `.permission` and names it only in `.role_name`, so either field counts. A
-// lookup that fails, or an answer of an unexpected shape, counts as no access.
-function hasWriteAccess(login: string, repo: string, run: typeof execFileSync): boolean {
+// lookup that fails, or an answer with neither field, is reported through
+// `warn` and returns undefined: it says nothing about the author's access.
+function hasWriteAccess(
+  login: string,
+  repo: string,
+  run: typeof execFileSync,
+  warn: (message: string) => void,
+): boolean | undefined {
   try {
     const answer = JSON.parse(
       ghWithStderr(run, ["api", `repos/${repo}/collaborators/${encodeURIComponent(login)}/permission`]),
     ) as { permission?: unknown; role_name?: unknown };
+    if (typeof answer.permission !== "string" && typeof answer.role_name !== "string") {
+      throw new Error(`unexpected answer: ${JSON.stringify(answer)}`);
+    }
     return PUSH_PERMISSIONS.has(answer.permission) || PUSH_PERMISSIONS.has(answer.role_name);
-  } catch {
-    return false;
+  } catch (error) {
+    warn(`  ⚠ Couldn't read ${login}'s permission on ${repo}, so their comments are left out this time: ${error}`);
+    return undefined;
   }
 }
 
