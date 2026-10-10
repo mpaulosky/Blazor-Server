@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [feat(sandcastle): Sweep open Sandcastle PRs each round and keep them current](2026-10-10-pr-237-feat-sandcastle-sweep-open-sandcastle-prs-each-round-and-keep-them-current.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Intake splits oversized issues into blocked child issues](2026-10-10-pr-234-feat-sandcastle-intake-splits-oversized-issues-into-blocked-child-issues.md) | release,automation |
 | 2026-10-10 | [fix(sandcastle): Judge every intake batch each round, and keep intake's text from hiding or cross-referencing](2026-10-10-pr-229-fix-sandcastle-judge-every-intake-batch-each-round-and-keep-intake-s-text-from-hiding-or-cross-referencing.md) | release,automation |
 | 2026-10-10 | [fix(sandcastle): Close the design note's edge cases from #228's review](2026-10-10-pr-232-fix-sandcastle-close-the-design-note-s-edge-cases-from-228-s-review.md) | release,automation |
