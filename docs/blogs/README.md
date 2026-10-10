@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [fix(sandcastle): Retry a publish that fails on a GitHub server error](2026-10-10-pr-202-fix-sandcastle-retry-a-publish-that-fails-on-a-github-server-error.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Give the developer roles build, test and stub steps for both stacks](2026-10-10-pr-208-feat-sandcastle-give-the-developer-roles-build-test-and-stub-steps-for-both-stacks.md) | release,automation |
 | 2026-10-10 | [docs(sandcastle): Bring the plan's issue table up to date and add a Sandcastle task template](2026-10-10-pr-205-docs-sandcastle-bring-the-plan-s-issue-table-up-to-date-and-add-a-sandcastle-task-template.md) | release,automation |
 | 2026-10-10 | [docs(claude): Add Sandcastle and Baseline rules for agents](2026-10-10-pr-207-docs-claude-add-sandcastle-and-baseline-rules-for-agents.md) | release,automation |
