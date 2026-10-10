@@ -10,8 +10,8 @@ const commandsBlock = () => {
   const start = claudeMd.indexOf("## Commands");
   assert.notEqual(start, -1, "CLAUDE.md has no Commands section");
   const fenceStart = claudeMd.indexOf("```bash", start);
-  const fenceEnd = claudeMd.indexOf("```", fenceStart + "```bash".length);
   assert.notEqual(fenceStart, -1, "Commands section has no ```bash block");
+  const fenceEnd = claudeMd.indexOf("```", fenceStart + "```bash".length);
   return claudeMd.slice(fenceStart, fenceEnd);
 };
 
