@@ -40,7 +40,8 @@ doesn't already have.
 This is checkpoint {{CHECKPOINT}}.
 
 At either checkpoint, never weaken, skip or delete a test to make the gate pass. Don't loosen an assertion, skip or todo a test in any form
-(xUnit's `Skip`; `node:test`'s `.skip`, `.todo`, `{ skip }`, `{ todo }`, `t.skip()` or `t.todo()`), comment a test out, raise a lint limit, or disable a rule.
+(xUnit's `Skip`, `SkipUnless`, `SkipWhen`, `Explicit = true` or `Assert.Skip*`; `node:test`'s `.skip`, `.todo`, `{ skip }`, `{ todo }`, `t.skip()` or `t.todo()`),
+comment a test out, raise a lint limit, or disable a rule.
 When a test is wrong rather than the code, say so in your commit body instead of changing what it checks.
 
 # EXECUTION
