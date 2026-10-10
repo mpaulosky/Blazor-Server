@@ -288,8 +288,9 @@ export async function buildIssue(
       host.commentOnIssue(
         issue.number,
         `Sandcastle couldn't publish \`${branch}\`: it passed the gate, but pushing it or opening its pull request ` +
-          "failed, so no pull request is open for it. The branch keeps its commits. A person needs to look at it: a " +
-          "GitHub server error that outlasted the retries can be pushed by hand once GitHub recovers, and if origin's " +
+          "failed. The branch keeps its commits. A person needs to look at it. First check whether a pull request " +
+          "from it is already open: GitHub can create one and still answer with an error. A GitHub server error " +
+          "that outlasted the retries can be pushed by hand once GitHub recovers, and if origin's " +
           "branch has commits the local one doesn't (an agent rewrote one an earlier round pushed), the two need " +
           `reconciling before Sandcastle can push it.\n\n${fence}text\n${detail}\n${fence}`,
       );

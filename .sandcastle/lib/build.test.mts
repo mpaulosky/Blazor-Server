@@ -333,6 +333,10 @@ describe("buildIssue publishing", () => {
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, new RegExp(`couldn't publish \`${branch}\``));
     assert.match(comments[0]!.body, /non-fast-forward/);
+    // GitHub can create the PR and still answer with an error, so the comment
+    // asks the reader to check rather than saying none is open.
+    assert.match(comments[0]!.body, /check whether a pull request from it is already open/i);
+    assert.doesNotMatch(comments[0]!.body, /no pull request is open/);
     assert.equal(steps.at(-1), "close");
   });
 
