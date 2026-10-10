@@ -61,22 +61,21 @@ docs/                                   -- Documentation and guides
 
 src/                                    -- Source code
   AppHost/                              -- Aspire AppHost (local orchestration, E2E host)
-  Core/                                 -- Class library: feature slices and shared types
-    Features/                           -- One folder per feature (Vertical Slice Architecture)
-      <Feature>/                        -- Requests, handlers, validators for one use case
-    Shared/                             -- Cross-cutting infrastructure (e.g. auth, theming)
   Domain/                               -- Shared Kernel: Result, Result<T>, ApplicationConstants
     Abstractions/                       -- Operation outcomes (Result, Result<T>, ResultErrorCode)
     Constants/                          -- Names the Template relies on (policy, role, cookies)
   ServiceDefaults/                      -- Aspire service defaults (telemetry, health checks)
   UI/                                   -- Blazor Web App (server-rendered)
-    Components/                         -- App-wide components
-      Layout/                           -- Layout components
+    Components/                         -- Razor components
+      Features/                         -- One folder per feature (Vertical Slice Architecture)
+        <Feature>/                      -- Components, requests, handler, validator for one use case
+      Layout/                           -- Layout components (MainLayout, NavMenu, ReconnectModal)
+      Pages/                            -- App-wide pages (Error, NotFound)
       _Imports.razor                    -- Razor imports
       App.razor                         -- App root component
       Routes.razor                      -- Route definitions
-    Features/                           -- Feature pages and components, one folder per feature
     Styles/                             -- Tailwind CSS v4 sources
+    package.json                        -- Tailwind CLI (pnpm workspace package)
     Properties/                         -- UI project properties
     wwwroot/                            -- Static web assets (CSS, JS, etc.)
     appsettings.json                    -- UI configuration
@@ -84,9 +83,8 @@ src/                                    -- Source code
 
 tests/                                  -- Test projects (<Project>.Tests.<Kind>)
   Architecture.Tests/                   -- Architecture and slice-boundary rules
-  Core.Tests.Unit/                      -- Core handler and validator unit tests
   Domain.Tests.Unit/                    -- Shared Kernel unit tests
-  UI.Tests.Unit/                        -- UI component tests (bUnit)
+  UI.Tests.Unit/                        -- UI component, handler and validator tests (bUnit)
   UI.Tests.Integration/                 -- UI integration tests (WebApplicationFactory)
   UI.Tests.E2E/                         -- End-to-end tests (Playwright)
 

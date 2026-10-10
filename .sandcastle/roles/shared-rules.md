@@ -8,8 +8,10 @@ An issue changes one stack or both. Use the commands for each stack the issue to
 | --- | --- | --- | --- |
 | .NET | `src/`, `tests/` | `dotnet build Blazor-Server.slnx`, with no warnings (`TreatWarningsAsErrors` is on) | `dotnet test --project tests/<Project>/<Project>.csproj` |
 | Sandcastle's TypeScript | `.sandcastle/`, `package.json` | `pnpm exec tsc --noEmit -p .sandcastle`, with no errors | `pnpm exec tsx --test <file>.test.mts` |
+| pnpm workspace | `package.json`, `src/UI/package.json`, `pnpm-workspace.yaml` | run `pnpm install` after changing a `package.json`, and commit `pnpm-lock.yaml` in the same commit | the tests of the stack that uses the package |
 
 - Tests must pass by the end of the last developer run, not on every commit.
+- The .NET build of `src/UI` runs the Tailwind CLI from `src/UI`'s pnpm packages, so it fails with an error naming `pnpm install` when they're missing.
 - The standards for each stack: `docs/CODING_STANDARDS.md` for .NET, and `.claude/rules/sandcastle.md` for `.sandcastle/`.
 
 ## The gate

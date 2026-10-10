@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 This repository is a GitHub template for a server-rendered Blazor Web App on .NET 10 and C# 14, with Tailwind CSS v4
-theming and Auth0 authentication. Today it holds only the Shared Kernel (`src/Domain/`) and its tests; the Blazor app
-itself is on the README roadmap.
+theming and Auth0 authentication. Today it holds the Shared Kernel (`src/Domain/`), the Blazor Web App scaffold
+(`src/UI/`, with a Home page and the Tailwind build) and their tests; Theme, Palette and Auth0 are on the README roadmap.
 
 ## Domain language
 
@@ -20,8 +20,14 @@ matching files.
 
 - `src/Domain/`: the Shared Kernel (`Result`/`Result<T>` and `ApplicationConstants`). It references no other project
   or package (see `docs/adr/0001-shared-kernel-in-domain-project.md`).
-- `tests/Architecture.Tests/`, `tests/Domain.Tests.Unit/`: test projects, named `<Project>.Tests.<Kind>`.
-- Planned, not yet created: `src/UI/` (the Blazor Web App) and `src/Core/` (feature slices).
+- `src/UI/`: the Blazor Web App. Each feature slice (components, request and response records, handler, validator,
+  `Add<Feature>Feature()` registration) lives in its own folder under `Components/Features/<Feature>/`; the layout is in
+  `Components/Layout/`, and the app-wide Error and NotFound pages are in `Components/Pages/`. It references only
+  `src/Domain` (see `docs/adr/0005-feature-slices-live-in-the-ui-project.md`).
+- `src/UI/Styles/app.tailwind.css`: the Tailwind CSS v4 source. The build runs the Tailwind CLI (a devDependency in
+  `src/UI/package.json`, part of the pnpm workspace) to write `src/UI/wwwroot/css/app.css`, which git ignores.
+- `tests/Architecture.Tests/`, `tests/Domain.Tests.Unit/`, `tests/UI.Tests.Unit/` (bUnit),
+  `tests/UI.Tests.Integration/` (`WebApplicationFactory<Program>`): test projects, named `<Project>.Tests.<Kind>`.
 - `aspire.config.json` (the Aspire CLI's shared settings) is committed together with this repo's own AppHost, not
   before. Until then, delete any copy the CLI writes: one that points at another repo's AppHost is per-machine noise.
 - `.sandcastle/`: the unattended agent pipeline (TypeScript, run with Claude Code).
@@ -32,12 +38,17 @@ matching files.
 
 ## Commands
 
-The repo uses pnpm (pinned by `packageManager` in `package.json`); npm is refused. Run `pnpm install` first.
+The repo uses pnpm (pinned by `packageManager` in `package.json`); npm is refused. Run `pnpm install` first: the UI
+build runs the Tailwind CLI from the pnpm packages and fails with an error naming `pnpm install` when they're missing.
+Run it again after changing any `package.json`, and commit `pnpm-lock.yaml` with the change.
 
 ```bash
+pnpm install                                          # the pnpm workspace: root tooling and src/UI's Tailwind CLI
 scripts/gate.sh                                       # the full check; needs a fresh `git fetch origin main`
 dotnet build Blazor-Server.slnx                       # quick build while iterating
 dotnet test --project tests/<Project>/<Project>.csproj  # one test project while iterating
+dotnet run --project src/UI                           # run the Blazor Web App
+pnpm --dir src/UI run watch:css                       # rebuild the CSS live while editing markup
 pnpm run check:sandcastle                             # type-check and test .sandcastle/
 SANDCASTLE_ISSUE=<n> pnpm run sandcastle              # build one issue (and its PR) locally
 SANDCASTLE_LABEL=<label> pnpm run sandcastle          # work the issues labelled <label>, e.g. Sandcastle:dev
