@@ -524,19 +524,20 @@ describe("intakeRound", () => {
   });
 
   // applyVerdicts handles a failure on one issue itself; when it fails on
-  // every verdict, GitHub is refusing the host (#229), so each later batch
-  // would cost a run for nothing.
-  it("stops for the round when GitHub refuses every verdict in a batch, and logs it", async () => {
-    const issues = Array.from({ length: INTAKE_BATCH_SIZE + 1 }, (_, i) => issue(i + 1));
+  // every verdict in two batches in a row, GitHub is refusing the host
+  // (#229), so each later batch would cost a run for nothing.
+  it("stops for the round when GitHub refuses every verdict in two batches in a row, and logs it", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE * 3 }, (_, i) => issue(i + 1));
     const warnings: string[] = [];
     let runs = 0;
 
     await intakeRound(
       issues,
       [],
-      async () => {
+      async (promptArgs) => {
         runs += 1;
-        return [verdict(1, { reason: "clear and checkable" })];
+        const sent: number[] = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        return sent.map((number) => verdict(number, { reason: "clear and checkable" }));
       },
       recordingGh(["Sandcastle"], () => new Error("gh: HTTP 401")).run,
       "o/r",
@@ -545,8 +546,62 @@ describe("intakeRound", () => {
       (message) => warnings.push(message),
     );
 
-    assert.equal(runs, 1);
+    assert.equal(runs, 2);
     assert.ok(warnings.some((warning) => /GitHub refused every verdict/.test(warning) && /later round or run/.test(warning)), warnings.join("\n"));
+  });
+
+  // One refused edit can be the issue's own (closed or transferred since the
+  // queue was read), so a batch of one whose verdict GitHub refuses isn't
+  // reason enough to stop (#229).
+  it("still judges the next batch when GitHub refuses the only verdict in one batch", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE + 1 }, (_, i) => issue(i + 1));
+    const last = INTAKE_BATCH_SIZE + 1;
+    const gh = recordingGh(["Sandcastle"], (args) => (args.includes("1") ? new Error("gh: issue #1 was transferred") : undefined));
+    const warnings: string[] = [];
+
+    await intakeRound(
+      issues,
+      [],
+      async (promptArgs) => {
+        const sent: number[] = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        return [verdict(sent[0]!, { reason: "clear and checkable" })];
+      },
+      gh.run,
+      "o/r",
+      new HandBackReport(),
+      () => {},
+      (message) => warnings.push(message),
+    );
+
+    assert.ok(gh.calls.some((call) => call.args.includes("edit") && call.args.includes(String(last))), JSON.stringify(gh.calls));
+    assert.deepEqual(warnings, []);
+  });
+
+  // The run that reaches the limit may be a batch's own: intake mustn't then
+  // log that it's splitting a batch it never tries (#229).
+  it("doesn't log a split it won't try once intake has stopped for the round", async () => {
+    const lines: string[] = [];
+
+    await intakeRound(
+      Array.from({ length: INTAKE_BATCH_SIZE * 3 }, (_, i) => issue(i + 1)),
+      [],
+      async () => {
+        throw new Error("the sandbox didn't start");
+      },
+      recordingGh().run,
+      "o/r",
+      new HandBackReport(),
+      (line) => lines.push(line),
+      () => {},
+    );
+
+    const splits = lines.filter((line) => /trying them in halves/.test(line)).length;
+    const runs = lines.filter((line) => /^Intake is judging/.test(line)).length;
+    assert.equal(runs, INTAKE_FAILED_RUNS_LIMIT);
+    // Every split logged is followed by at least one run of its halves.
+    assert.ok(splits < runs, lines.join("\n"));
+    const last = lines.at(-1)!;
+    assert.match(last, /^Intake is judging/, lines.join("\n"));
   });
 
   // Batches are slices of the unjudged issues, so a failed batch re-forms

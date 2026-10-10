@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT } from "./config.mts";
+import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, INTAKE_REFUSED_BATCHES_LIMIT } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { openPrReason } from "./gate.mts";
 import {
@@ -278,9 +278,9 @@ export function needsInfoComment(verdict: IntakeVerdict): string {
 //
 // Intake stops for the round after INTAKE_FAILED_RUNS_LIMIT failed runs in a
 // row, since a failure every run hits (a sandbox that won't start, say) would
-// otherwise cost a run for every split of every batch, and when GitHub
-// refuses every verdict in a batch, since each later batch would then cost a
-// run for nothing. An UncountedStopError (a usage limit or time budget) still
+// otherwise cost a run for every split of every batch, and once GitHub has
+// refused every verdict in INTAKE_REFUSED_BATCHES_LIMIT batches in a row,
+// since each later batch would then cost a run for nothing. An UncountedStopError (a usage limit or time budget) still
 // ends the run.
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
@@ -294,6 +294,7 @@ export async function intakeRound(
 ): Promise<void> {
   const refs = (batch: readonly SandcastleIssue[]) => batch.map((issue) => `#${issue.number}`).join(", ");
   let failedInARow = 0;
+  let refusedInARow = 0;
   // Why intake stopped for the round, once it has.
   let stopped: string | undefined;
 
@@ -312,13 +313,18 @@ export async function intakeRound(
     }
     failedInARow = 0;
     const { applied, failed } = applyVerdicts(batch, verdicts, gh, repo, report, log);
-    if (applied === 0 && failed > 0) stopped = "GitHub refused every verdict in the last batch";
+    if (applied > 0) refusedInARow = 0;
+    else if (failed > 0) refusedInARow += 1;
+    if (refusedInARow >= INTAKE_REFUSED_BATCHES_LIMIT) {
+      stopped = `GitHub refused every verdict in ${INTAKE_REFUSED_BATCHES_LIMIT} batches in a row`;
+    }
     return undefined;
   }
 
   // Narrows a batch whose run failed with `error` down to the issues that
   // break it (see above), until intake stops for the round.
   async function narrow(batch: SandcastleIssue[], error: unknown): Promise<void> {
+    if (stopped) return;
     if (batch.length === 1) {
       warn(`  ✗ Intake failed on ${refs(batch)}, so it's judged again in a later round or run: ${error}`);
       return;
