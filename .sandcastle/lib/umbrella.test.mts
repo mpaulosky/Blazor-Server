@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SubIssue } from "./github.mts";
+import { useQueueScope } from "./queue.mts";
 import { closeFinishedUmbrellas, umbrellaPhase, type UmbrellaGitHub } from "./umbrella.mts";
+
+// Every pre-existing test here predates queue scope (#146) and expects
+// today's behaviour, under the scope closeFinishedUmbrellas defaults to
+// outside GitHub Actions: every issue labelled Sandcastle. Set once, so
+// omitting the new third argument doesn't throw activeQueueScope's "no
+// scope set" error.
+useQueueScope({ kind: "label", label: "Sandcastle" });
 
 const child = (number: number, state: "open" | "closed", stateReason: string | null = null): SubIssue => ({
   number,
@@ -123,6 +131,28 @@ describe("closeFinishedUmbrellas", () => {
     assert.deepEqual(closed, [30]);
     assert.deepEqual(result, [30]);
     assert.ok(lines.some((line) => line.includes("#10") && line.includes("HTTP 502")), lines.join("\n"));
+  });
+
+  // A local run's queue scope (#146) governs which label means "held" and
+  // which umbrellas are even checked.
+  it("leaves an umbrella open while it carries the scope's own queue label, not just the literal Sandcastle", () => {
+    const { github, closed } = stubGithub({ 10: [child(11, "closed", "completed")] }, { 10: ["Sandcastle:dev"] });
+
+    closeFinishedUmbrellas(github, () => {}, { kind: "label", label: "Sandcastle:dev" });
+
+    assert.deepEqual(closed, []);
+  });
+
+  it("checks only the scope's one issue in issue scope, leaving every other open umbrella alone", () => {
+    const { github, closed } = stubGithub({
+      10: [child(11, "closed", "completed")],
+      20: [child(21, "closed", "completed")],
+    });
+
+    const result = closeFinishedUmbrellas(github, () => {}, { kind: "issue", number: 20 });
+
+    assert.deepEqual(closed, [20]);
+    assert.deepEqual(result, [20]);
   });
 });
 

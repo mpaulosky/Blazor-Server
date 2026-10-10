@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { BranchRefs } from "./branches.mts";
 import { COPILOT_REVIEWER, PR_MARKER } from "./config.mts";
-import type { ClosedPullRequest, PullRequestIdentity, TimelineLabelEvent } from "./github.mts";
+import type { ClosedPullRequest, IssueEvent, PullRequestIdentity, TimelineLabelEvent } from "./github.mts";
 import {
   closedPrHandBackComment,
   closedWithoutMerging,
@@ -446,17 +446,22 @@ function stubGithub({
   issues = [{ number: 42, labels: [] }],
   host = HOST,
   timelines = {},
+  isOwner = () => true,
+  pullRequestEvents = () => [],
 }: {
   prs?: SweepPullRequest[];
   closed?: ClosedPullRequest[];
   issues?: { number: number; labels: string[] }[];
   host?: string;
   timelines?: Record<number, TimelineLabelEvent[]>;
+  isOwner?: (login: string | null) => boolean | undefined;
+  pullRequestEvents?: (number: number) => IssueEvent[];
 } = {}) {
   const requestedReviews: string[] = [];
   const updatedBranches: { number: number; expectedHeadSha: string }[] = [];
   const handBacks: { issueNumber: number; reason: string; body: string }[] = [];
   const closedCalls: string[] = [];
+  const addedPrLabels: { number: number; label: string }[] = [];
   const github: FollowUpGitHub = {
     hostLogin: () => host,
     openPullRequests: () => prs,
@@ -469,8 +474,11 @@ function stubGithub({
     requestCopilotReview: (pullRequestId) => void requestedReviews.push(pullRequestId),
     updateBranch: (number, expectedHeadSha) => void updatedBranches.push({ number, expectedHeadSha }),
     handBack: (issueNumber, reason, body) => void handBacks.push({ issueNumber, reason, body }),
+    isOwner,
+    pullRequestEvents,
+    addPullRequestLabel: (number, label) => void addedPrLabels.push({ number, label }),
   };
-  return { github, requestedReviews, updatedBranches, handBacks, closedCalls };
+  return { github, requestedReviews, updatedBranches, handBacks, closedCalls, addedPrLabels };
 }
 
 describe("sweepPullRequests", () => {
@@ -632,6 +640,9 @@ describe("sweepPullRequests", () => {
       },
       updateBranch: () => {},
       handBack: () => {},
+      isOwner: () => true,
+      pullRequestEvents: () => [],
+      addPullRequestLabel: () => {},
     };
 
     sweepPullRequests(github, () => {}, NOW);
@@ -683,6 +694,9 @@ describe("sweepPullRequests", () => {
         updated.push({ number, expectedHeadSha });
       },
       handBack: () => {},
+      isOwner: () => true,
+      pullRequestEvents: () => [],
+      addPullRequestLabel: () => {},
     };
     const lines: string[] = [];
 
@@ -765,6 +779,26 @@ describe("sweepPullRequests", () => {
     sweepPullRequests(github, () => {}, NOW);
 
     assert.deepEqual(closedCalls, []);
+  });
+
+  // Label origin applies to PR-level hand-backs too, not just issues (#146,
+  // "Label origin"): a stranger removing sandcastle:needs-human from a PR
+  // mustn't let the sweep touch it as if a human had re-queued it.
+  it("re-adds needs-human to a PR whose removal wasn't the owner's, taking no other action on it", () => {
+    const strangerRemoved: IssueEvent[] = [
+      { event: "unlabeled", actor: "stranger", label: "sandcastle:needs-human", createdAt: "2026-10-10T09:00:00Z" },
+    ];
+    const { updatedBranches, requestedReviews, addedPrLabels, github } = stubGithub({
+      prs: [pr({ mergeStateStatus: "BEHIND" })],
+      isOwner: (login) => login !== "stranger",
+      pullRequestEvents: () => strangerRemoved,
+    });
+
+    sweepPullRequests(github, () => {}, NOW);
+
+    assert.deepEqual(addedPrLabels, [{ number: 101, label: "sandcastle:needs-human" }]);
+    assert.deepEqual(updatedBranches, []);
+    assert.deepEqual(requestedReviews, []);
   });
 });
 

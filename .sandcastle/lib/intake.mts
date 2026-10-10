@@ -17,7 +17,15 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, INTAKE_REFUSED_BATCHES_LIMIT, UMBRELLA_MARKER } from "./config.mts";
+import {
+  BUILDING_LABEL,
+  hooks,
+  INTAKE_BATCH_SIZE,
+  INTAKE_FAILED_RUNS_LIMIT,
+  INTAKE_REFUSED_BATCHES_LIMIT,
+  queueLabelOf,
+  UMBRELLA_MARKER,
+} from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { bodyBlockers, openPrReason } from "./gate.mts";
 import {
@@ -36,6 +44,7 @@ import {
   type SandcastleIssue,
 } from "./github.mts";
 import { intakePromptArgs } from "./prompts.mts";
+import { activeQueueScope } from "./queue.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
@@ -82,6 +91,10 @@ export type SplitGitHub = {
   // child once the split has finished (see applySplit).
   markSplitting(issue: number): void;
   unmarkSplitting(issue: number): void;
+  // The label this run's queue scope approves issues with (lib/config.mts),
+  // so a split under a non-default scope (SANDCASTLE_LABEL) queues its
+  // children in that scope rather than GitHub Actions' (#146).
+  queueLabel(): string;
 };
 
 export const liveSplitGitHub: SplitGitHub = {
@@ -93,6 +106,7 @@ export const liveSplitGitHub: SplitGitHub = {
   comment: commentOnIssue,
   markSplitting: (issue) => addIssueLabel(issue, "sandcastle:needs-human"),
   unmarkSplitting: (issue) => removeIssueLabel(issue, "sandcastle:needs-human"),
+  queueLabel: () => queueLabelOf(activeQueueScope()),
 };
 
 // The labels that mean intake has judged the issue, or a person has to act

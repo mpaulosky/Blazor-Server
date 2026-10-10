@@ -100,6 +100,54 @@ export const PUBLISH_RETRY_ATTEMPTS = 4;
 // have it yet (see docs/plans/sandcastle-workflow.md, "Labels").
 export type SandcastleLabel = { name: string; color: string; description: string };
 
+// The label that queues an issue in GitHub Actions, and the approval label
+// for an issue-scoped local run (see queueLabelOf). A human's to add, like
+// every other label SANDCASTLE_LABELS doesn't manage (#146).
+export const QUEUE_LABEL = "Sandcastle";
+
+// What a run builds from, resolved once at startup (see queueScopeFrom):
+// every open issue carrying `label` (GitHub Actions always uses QUEUE_LABEL),
+// or just one `number` and its pull request, for a local run that mustn't
+// compete with GitHub Actions over the whole queue (#146).
+export type QueueScope = { kind: "label"; label: string } | { kind: "issue"; number: number };
+
+// Thrown by queueScopeFrom when the environment names no valid scope. Its
+// message carries QUEUE_SCOPE_USAGE plus the specific problem, so main.mts
+// can print it and exit without a stack trace.
+export class QueueScopeError extends Error {}
+
+// Printed, with the specific problem, when queueScopeFrom throws.
+export const QUEUE_SCOPE_USAGE = `Usage: SANDCASTLE_ISSUE=<n> pnpm run sandcastle      (only issue #n and its PR)
+   or: SANDCASTLE_LABEL=<label> pnpm run sandcastle  (issues carrying <label>, e.g. Sandcastle:dev)
+Set it on the command line, not in .sandcastle/.env. In GitHub Actions the queue is always the Sandcastle label.`;
+
+// The run's queue scope from the environment (see "Labels" in
+// docs/plans/sandcastle-workflow.md): in GitHub Actions (GITHUB_ACTIONS ===
+// "true"), always every issue labelled QUEUE_LABEL, and SANDCASTLE_ISSUE or
+// SANDCASTLE_LABEL set there is refused rather than silently ignored.
+// Otherwise exactly one of SANDCASTLE_ISSUE (a local run building one issue
+// and its PR) or SANDCASTLE_LABEL (a local run working a label of the
+// owner's choosing, so it doesn't compete with Actions over the whole
+// queue) must be set. Throws QueueScopeError for anything else, including a
+// SANDCASTLE_LABEL naming a label the host manages (SANDCASTLE_LABELS or
+// bug), compared case-insensitively.
+export function queueScopeFrom(env: Record<string, string | undefined>): QueueScope {
+  throw new Error("Not implemented");
+}
+
+// The label that approves an issue in `scope`, and that intake puts on split
+// children and removes from the original (lib/intake.mts#applySplit): the
+// scope's own label, or QUEUE_LABEL in issue scope.
+export function queueLabelOf(scope: QueueScope): string {
+  throw new Error("Not implemented");
+}
+
+// A one-line description of `scope` for the run's log, such as "issues
+// labelled Sandcastle:dev" or "issue #146 and its PR".
+export function describeQueueScope(scope: QueueScope): string {
+  throw new Error("Not implemented");
+}
+
 // Marks an issue while a sandbox is building it (see lib/build.mts#buildIssue
 // and lib/gate.mts), so a second Sandcastle run doesn't start building the
 // same issue too (#150, a near-miss on #71).

@@ -16,21 +16,26 @@
 import { discardClosedWork, isIssueBranch, type BranchRefs } from "./branches.mts";
 import { COPILOT_REREQUEST_AFTER_MS, PR_MARKER } from "./config.mts";
 import {
+  addPullRequestLabel as addPrLabel,
   closedPullRequests,
   handBack,
   hasLabel,
   isCopilot,
+  issueEvents,
   labelTimeline,
   listSandcastleIssues,
   openPullRequestsForSweep,
+  pushAccess,
   requestCopilotReview,
   signedInHostLogin,
   timestamp,
   updatePullRequestBranch,
   type ClosedPullRequest,
+  type IssueEvent,
   type PullRequestIdentity,
   type TimelineLabelEvent,
 } from "./github.mts";
+import type { IsOwner } from "./queue.mts";
 
 // One check run or status on a PR's head commit, normalised from either
 // GraphQL shape (CheckRun or StatusContext) by lib/github.mts#openPullRequestsForSweep.
@@ -222,6 +227,12 @@ export type FollowUpGitHub = {
   updateBranch(number: number, expectedHeadSha: string): void;
   // live: handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body).
   handBack(issueNumber: number, reason: string, body: string): void;
+  // Tri-state owner check for a PR's label origin (lib/queue.mts#labelOriginFixes). live: pushAccess(login).
+  isOwner: IsOwner;
+  // The PR's labeled/unlabeled/renamed events, for labelOriginFixes. live:
+  // issueEvents(number) (PRs share the issue events endpoint).
+  pullRequestEvents(number: number): IssueEvent[];
+  addPullRequestLabel(number: number, label: string): void;
 };
 
 export const liveFollowUpGitHub: FollowUpGitHub = {
@@ -233,6 +244,9 @@ export const liveFollowUpGitHub: FollowUpGitHub = {
   requestCopilotReview: (pullRequestId) => requestCopilotReview(pullRequestId),
   updateBranch: (number, expectedHeadSha) => updatePullRequestBranch(number, expectedHeadSha),
   handBack: (issueNumber, reason, body) => handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body),
+  isOwner: (login) => pushAccess(login),
+  pullRequestEvents: (number) => issueEvents(number),
+  addPullRequestLabel: (number, label) => addPrLabel(number, label),
 };
 
 // Reads the host's login, the in-scope issues and the open PRs once, then

@@ -109,6 +109,25 @@ function hasWriteAccess(
   }
 }
 
+// Tri-state: whether `login` has admin, maintain or write permission on
+// `repo` (see hasWriteAccess) — who counts as "the repository owner"
+// throughout the queue's approval and label-origin checks (lib/queue.mts),
+// and the same check ownerApproved uses for a comment's author. A `null`
+// login (a deleted account) is a definite no, with no gh call. `canPush` and
+// `failed` share one cache and one round's failures with whichever caller
+// passes them in, so a login asked about from two places, such as a comment
+// and a label event, is looked up once (#146).
+export function pushAccess(
+  login: string | null,
+  canPush: Map<string, boolean> = new Map(),
+  failed: Set<string> = new Set(),
+  repo: string = repoName(),
+  run: typeof execFileSync = execFileSync,
+  warn: (message: string) => void = console.error,
+): boolean | undefined {
+  throw new Error("Not implemented");
+}
+
 // Each comment author's answer from ownerApproved, kept for the whole run so
 // no author is looked up twice, however many issues or rounds they comment on.
 // The trade-off: write access revoked partway through a run isn't seen until
@@ -651,6 +670,19 @@ export function removeIssueLabel(
   ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, "--remove-label", label]);
 }
 
+// Adds `label` to the pull request `number`: gh issue edit refuses a PR
+// number, so restoring a PR-level hand-back label someone other than the
+// repository owner removed (lib/follow-up.mts#sweepPullRequests, #146) needs
+// its own gh pr edit call.
+export function addPullRequestLabel(
+  number: number,
+  label: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  throw new Error("Not implemented");
+}
+
 // The names of the labels the issue `number` carries now, read fresh rather
 // than from the round's listSandcastleIssues snapshot.
 export function issueLabels(
@@ -702,6 +734,42 @@ export function labelTimeline(
       "--jq", '.[] | select(.event == "labeled" or .event == "unlabeled") | {event, label: .label.name, createdAt: .created_at} | @json',
     ]),
   ) as TimelineLabelEvent[];
+}
+
+// One "labeled", "unlabeled" or "renamed" event from an issue's or PR's REST
+// events list (PRs share it). Unlike labelTimeline, this names who made it:
+// lib/queue.mts#approval and #labelOriginFixes need that to tell the
+// repository owner's own labelling from anyone else's (#146). `actor` is
+// null for a deleted account; `label` is null on a renamed event, which
+// carries no label.
+export type IssueEvent = { event: "labeled" | "unlabeled" | "renamed"; actor: string | null; label: string | null; createdAt: string };
+
+// Every labeled, unlabeled and renamed event on the issue or PR `number`,
+// oldest first (GET repos/{owner}/{repo}/issues/{n}/events, --paginate).
+export function issueEvents(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): IssueEvent[] {
+  throw new Error("Not implemented");
+}
+
+// One edit to an issue's or PR's body, from GraphQL issue.userContentEdits.
+// `editor` is null for a deleted account. The oldest entry is the body's
+// creation, dated before any label, so lib/queue.mts#approval's ">="
+// comparison never mistakes it for an edit made after the owner queued the
+// issue.
+export type ContentEdit = { editor: string | null; editedAt: string };
+
+// Every edit to the issue or PR `number`'s body, oldest first, every page
+// (GraphQL issue.userContentEdits, --paginate with $endCursor). Throws when
+// the answer names no such issue.
+export function bodyEdits(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): ContentEdit[] {
+  throw new Error("Not implemented");
 }
 
 // One comment, with when it was posted, so markerCommentsSince can tell
