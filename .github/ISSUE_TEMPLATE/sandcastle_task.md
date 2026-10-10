@@ -10,7 +10,8 @@ Sandcastle builds an issue only once the repository owner adds the `Sandcastle` 
 The Definition of Ready is in docs/plans/sandcastle-workflow.md: a Summary, at least one objectively checkable
 acceptance criterion, and no open question that needs a human decision. Settle every decision here, not in the build.
 The title follows the commit format, and a bug also needs the `bug` label, which puts its branch under fix/.
-Replace #N on the "Blocked by" line with each issue that has to land first, or delete the line.
+Replace #N on the "Blocked by" line with each issue that has to land first, or delete the line. Sandcastle's blocker check
+reads this line as well as the issue's native "blocked by" links, so either one holds the issue back.
 -->
 
 ## Summary

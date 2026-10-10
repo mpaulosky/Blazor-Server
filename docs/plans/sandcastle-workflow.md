@@ -406,4 +406,4 @@ Issues #149 and #150 were filed after the plan, from problems seen in runs. The 
 | [Create the secrets Sandcastle needs to run from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/83) | none |
 | [Retry a publish that fails on a GitHub server error](https://github.com/mpaulosky/Blazor-Server/issues/149) | none |
 | [Mark an issue while Sandcastle builds it](https://github.com/mpaulosky/Blazor-Server/issues/150) | #73 |
-| [Trigger Sandcastle automatically from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/82) | #70, #72, #75, #76, #79, #81, #83, #146, #147 |
+| [Trigger Sandcastle automatically from GitHub Actions (manual, not `Sandcastle`)](https://github.com/mpaulosky/Blazor-Server/issues/82) | #70, #72, #75, #76, #79, #81, #83, #146, #147, #150 |
