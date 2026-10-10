@@ -36,6 +36,7 @@ import {
   type TimelineLabelEvent,
 } from "./github.mts";
 import { labelOriginFixes, loadQueue, ownerCheck, type IsOwner } from "./queue.mts";
+import { outcomeReport, waitingPrReport, type OutcomeReport, type WaitingPrReport } from "./report.mts";
 
 // One check run or status on a PR's head commit, normalised from either
 // GraphQL shape (CheckRun or StatusContext) by lib/github.mts#openPullRequestsForSweep.
@@ -276,6 +277,8 @@ export function sweepPullRequests(
   github: FollowUpGitHub = liveFollowUpGitHub,
   log: (line: string) => void = console.log,
   now: number = Date.now(),
+  outcomes: OutcomeReport = outcomeReport,
+  waiting: WaitingPrReport = waitingPrReport,
 ): SweepResult {
   const host = github.hostLogin();
   const issues = github.inScopeIssues();

@@ -80,6 +80,15 @@ export async function runRoleInSandbox(
   return result;
 }
 
+// Whether a role run's error is its own timeout: ROLE_AGENTS' timeoutMinutes
+// (AbortSignal.timeout's TimeoutError, which Sandcastle dies with, possibly
+// wrapped in an Effect FiberFailure) or Sandcastle's AgentIdleTimeoutError.
+// Reads name, _tag and message along the cause chain, MAX_CAUSE_DEPTH deep, as
+// lib/limits.mts#usageLimitLine does for a usage-limit line.
+export function isRoleTimeout(_error: unknown): boolean {
+  throw new Error("Not implemented");
+}
+
 // Runs one role through `start`, refusing to start once `limits` say stop. A
 // run that fails on Claude's usage limit (lib/limits.mts#usageLimitLine)
 // records the stop, so no later role starts or publishes, and rejects with an

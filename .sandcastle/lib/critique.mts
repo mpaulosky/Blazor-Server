@@ -24,6 +24,7 @@ import {
   type SandcastleIssue,
 } from "./github.mts";
 import { critiquePromptArgs, type CritiquePromptArgs } from "./prompts.mts";
+import { outcomeReport, type OutcomeReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
 const critiqueSchema = z.object({
@@ -121,6 +122,7 @@ export function applyVerdicts(
   verdicts: CritiqueVerdict[],
   github: CritiqueGitHub = liveGitHub,
   log: (line: string) => void = console.log,
+  report: OutcomeReport = outcomeReport,
 ): SandcastleIssue[] {
   const picked = new Set(picks.map((issue) => String(issue.number)));
   const judged = new Set<string>();
@@ -224,6 +226,7 @@ export async function critiqueRound(
   run: CritiqueRun = runCritique,
   github: CritiqueGitHub = liveGitHub,
   log: (line: string) => void = console.log,
+  report: OutcomeReport = outcomeReport,
 ): Promise<SandcastleIssue[]> {
   const [firstPick] = picks;
   if (!firstPick) return picks;
@@ -249,5 +252,5 @@ export async function critiqueRound(
     return [firstPick];
   }
 
-  return applyVerdicts(picks, verdicts, github, log);
+  return applyVerdicts(picks, verdicts, github, log, report);
 }

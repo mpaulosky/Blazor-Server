@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
-import { roleOptions, runRoleInSandbox, runWithinLimits, withSharedRules } from "./agents.mts";
+import { isRoleTimeout, roleOptions, runRoleInSandbox, runWithinLimits, withSharedRules } from "./agents.mts";
 import { UncountedStopError } from "./errors.mts";
 import { RunLimits } from "./limits.mts";
 import { usageReport } from "./report.mts";
@@ -123,6 +123,44 @@ describe("runWithinLimits", () => {
       (error: unknown) => error === original,
     );
     assert.equal(limits.usageLimitReason(), undefined);
+  });
+});
+
+describe("isRoleTimeout", () => {
+  it("is true for AbortSignal.timeout's DOMException", () => {
+    const error = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+
+    assert.equal(isRoleTimeout(error), true);
+  });
+
+  it("is true for an error tagged AgentIdleTimeoutError", () => {
+    const error = Object.assign(new Error("Agent idle for 10 minutes"), { _tag: "AgentIdleTimeoutError" });
+
+    assert.equal(isRoleTimeout(error), true);
+  });
+
+  it("is true for an Effect FiberFailure wrapping a TimeoutError", () => {
+    const error = new Error("fiber failed");
+    error.name = "(FiberFailure) TimeoutError";
+
+    assert.equal(isRoleTimeout(error), true);
+  });
+
+  it("is true when the timeout is wrapped as a cause", () => {
+    const timeout = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    const error = new Error("the backend run failed", { cause: timeout });
+
+    assert.equal(isRoleTimeout(error), true);
+  });
+
+  it("is true for a message saying the agent was idle", () => {
+    const error = new Error("Agent idle for 600000ms, stopping");
+
+    assert.equal(isRoleTimeout(error), true);
+  });
+
+  it("is false for an ordinary error", () => {
+    assert.equal(isRoleTimeout(new Error("the backend failed: a real bug")), false);
   });
 });
 

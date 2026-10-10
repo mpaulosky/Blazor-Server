@@ -28,6 +28,7 @@ import { handBackWorkflowChange, recordFailedAttempt, type WorkflowChange } from
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
 import { runLimits, type RunLimits } from "./limits.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
+import type { Outcome } from "./report.mts";
 import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
@@ -401,7 +402,10 @@ export async function buildIssue(
   }
 }
 
-type BuildResult = { commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean };
+// `outcome` and `detail` are for the run report (lib/report.mts, #81); they
+// stay optional until every return statement below sets them, so this type
+// can widen ahead of that.
+type BuildResult = { commits: { sha: string }[]; prUrl: string | undefined; publishFailed: boolean; outcome?: Outcome; detail?: string };
 
 // buildIssue's work once the issue is marked: everything from creating the
 // sandbox to closing it.

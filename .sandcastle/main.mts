@@ -382,8 +382,8 @@ try {
   const handBacks = handBackReport.items();
   if (handBacks.length > 0) {
     console.log("\nHanded back to a human:");
-    for (const { target, label, reason } of handBacks) {
-      console.log(`  ${target}: ${label} (${reason})`);
+    for (const { kind, number, label, reason } of handBacks) {
+      console.log(`  ${kind} #${number}: ${label} (${reason})`);
     }
   }
 

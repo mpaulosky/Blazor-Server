@@ -444,6 +444,62 @@ describe("buildIssue", () => {
   });
 });
 
+// AC: buildIssue's outcome and detail reach the run report (lib/report.mts).
+describe("buildIssue's outcome and detail", () => {
+  it("is published, with the PR's URL as its detail", async () => {
+    const { buildHost } = host([0, 0]);
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.outcome, "published");
+    assert.equal(result.detail, "https://github.com/o/r/pull/1");
+  });
+
+  it("is role failed, naming the role, when a developer role fails", async () => {
+    const { buildHost } = host([], { failing: ["tester"] });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.outcome, "role failed");
+    assert.match(result.detail ?? "", /the tester failed/);
+  });
+
+  it("is timed out when a developer role's own timeout aborts it", async () => {
+    const timeout = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    const { buildHost } = host([], { failing: ["tester"], failWith: { tester: timeout } });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.outcome, "timed out");
+  });
+
+  it("is gate failed, naming the checkpoint, when a checkpoint stays red past the gate-fixer's attempts", async () => {
+    const { buildHost } = host([1, 1, 1]);
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.outcome, "gate failed");
+    assert.match(result.detail ?? "", /checkpoint 1/);
+  });
+
+  it("is not published, naming the secret, when a commit holds one of the sandbox's secrets", async () => {
+    const { buildHost } = host([0, 0], { leaksSecret: true });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.outcome, "not published");
+    assert.match(result.detail ?? "", /secret/);
+  });
+
+  it("is not published when the branch holds nothing main doesn't", async () => {
+    const { buildHost } = host([], { ahead: 0 });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(result.outcome, "not published");
+  });
+});
+
 describe("buildIssue publishing", () => {
   it("counts the branch's commits by ref from the pinned base, not in the worktree", async () => {
     const { aheadBranches, aheadBases, buildHost } = host([0, 0]);

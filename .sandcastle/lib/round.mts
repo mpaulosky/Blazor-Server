@@ -1,9 +1,13 @@
 // The run summary for one round, logged once every issue's build has settled.
 
 import { UncountedStopError } from "./errors.mts";
+import type { OutcomeEntry } from "./report.mts";
 
-// What the summary needs from each build's result; see buildIssue.
-type BuildResult = { prUrl: string | undefined; publishFailed: boolean };
+// What the summary needs from each build's result; see buildIssue. `outcome`
+// and `detail` are set once lib/build.mts#BuildResult carries them (#81); they
+// stay optional here so a build that hasn't been updated yet still satisfies
+// this type.
+type BuildResult = { prUrl: string | undefined; publishFailed: boolean; outcome?: OutcomeEntry["outcome"]; detail?: string };
 
 // The summary's lines: each pull request the round opened, then each branch
 // that passed both checkpoints but couldn't be pushed or get a PR. That work is
@@ -57,4 +61,16 @@ export function roundSummary(
       ? "Publishing failed for every gated branch this round. Stopping."
       : "No pull requests opened this round. Stopping.";
   return { lines, stop };
+}
+
+// This round's outcomes, for the run report (lib/report.mts): a fulfilled
+// build's own outcome and detail, a build that rejected with
+// UncountedStopError (the time budget or Claude's usage limit, #147) as
+// "stopped" with its message, and any other rejection as "not published",
+// since the build threw rather than return a result.
+export function roundOutcomes(
+  _work: readonly { issue: { number: number }; branch: string }[],
+  _settled: readonly PromiseSettledResult<BuildResult>[],
+): OutcomeEntry[] {
+  throw new Error("Not implemented");
 }

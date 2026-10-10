@@ -17,6 +17,7 @@ import {
   type FollowUpGitHub,
   type SweepPullRequest,
 } from "./follow-up.mts";
+import { OutcomeReport, WaitingPrReport } from "./report.mts";
 
 const HOST = "sandcastle-bot";
 const BRANCH = "feature/42-add-search";
@@ -833,6 +834,80 @@ describe("sweepPullRequests", () => {
     assert.deepEqual(addedPrLabels, []);
     assert.deepEqual(updatedBranches, []);
     assert.ok(lines.some((line) => line.includes("#101") && line.includes("couldn't check")), lines.join("\n"));
+  });
+
+  // AC: an updated PR reaches the run report (lib/report.mts) as "updated".
+  it("records 'updated' for a settled PR that's only behind main, once updateBranch has returned", () => {
+    const { github } = stubGithub({ prs: [pr({ mergeStateStatus: "BEHIND" })] });
+    const outcomes = new OutcomeReport();
+
+    sweepPullRequests(github, () => {}, NOW, outcomes);
+
+    assert.deepEqual(outcomes.items(), [{ kind: "pr", number: 101, outcome: "updated", detail: "was only behind main" }]);
+  });
+
+  it("doesn't record anything when updateBranch fails", () => {
+    const failing: FollowUpGitHub = {
+      hostLogin: () => HOST,
+      openPullRequests: () => [pr({ mergeStateStatus: "BEHIND" })],
+      closedPullRequests: () => [],
+      inScopeIssues: () => [{ number: 42, labels: [] }],
+      labelTimeline: () => [],
+      requestCopilotReview: () => {},
+      updateBranch: () => {
+        throw new Error("gh api failed: HTTP 422");
+      },
+      handBack: () => {},
+      isOwner: () => true,
+      pullRequestEvents: () => [],
+      addPullRequestLabel: () => {},
+    };
+    const outcomes = new OutcomeReport();
+
+    sweepPullRequests(failing, () => {}, NOW, outcomes);
+
+    assert.deepEqual(outcomes.items(), []);
+  });
+
+  // AC: "open Sandcastle PRs left waiting on unresolved human review threads,
+  // with links" — the waiting list the run report renders (lib/report.mts).
+  it("adds a PR to the waiting list, counting only its unresolved, non-bot threads", () => {
+    const { github } = stubGithub({
+      prs: [
+        pr({
+          threads: [
+            { resolved: false, byBot: false },
+            { resolved: true, byBot: false },
+            { resolved: false, byBot: true },
+          ],
+        }),
+      ],
+    });
+    const waiting = new WaitingPrReport();
+
+    sweepPullRequests(github, () => {}, NOW, undefined, waiting);
+
+    assert.deepEqual(waiting.items(), [{ pr: 101, threads: 1 }]);
+  });
+
+  it("excludes a skipped PR from the waiting list", () => {
+    const { github } = stubGithub({ prs: [pr({ isDraft: true, threads: [{ resolved: false, byBot: false }] })] });
+    const waiting = new WaitingPrReport();
+
+    sweepPullRequests(github, () => {}, NOW, undefined, waiting);
+
+    assert.deepEqual(waiting.items(), []);
+  });
+
+  it("replaces the waiting list each sweep, rather than accumulating across sweeps", () => {
+    const waiting = new WaitingPrReport();
+    const { github: first } = stubGithub({ prs: [pr({ threads: [{ resolved: false, byBot: false }] })] });
+    const { github: second } = stubGithub({ prs: [pr({ threads: [] })] });
+
+    sweepPullRequests(first, () => {}, NOW, undefined, waiting);
+    sweepPullRequests(second, () => {}, NOW, undefined, waiting);
+
+    assert.deepEqual(waiting.items(), []);
   });
 });
 

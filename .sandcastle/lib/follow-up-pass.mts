@@ -53,7 +53,7 @@ import { plainText, withoutReferences } from "./intake.mts";
 import { runLimits, type RunLimits } from "./limits.mts";
 import { followUpPromptArgs, gateFixerPromptArgs } from "./prompts.mts";
 import { ownerCheck, type IsOwner } from "./queue.mts";
-import { humanThreadReport, type HumanThreadEntry } from "./report.mts";
+import { humanThreadReport, outcomeReport, type HumanThreadEntry, type OutcomeEntry, type OutcomeReport } from "./report.mts";
 import { containsSandboxSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
@@ -390,6 +390,13 @@ export type PassOutcome =
   | { kind: "passed"; pushed: string | undefined }
   | { kind: "push-failed"; error: string }
   | { kind: "gave-up"; reason: string };
+
+// `target`'s entry for the run report (lib/report.mts), or undefined for a
+// pass that was skipped or gave up: a gave-up pass's hand-back already makes
+// a row (the hand-back's own), and a skipped PR touched nothing this round.
+export function passOutcomeEntry(_target: PassTarget, _outcome: PassOutcome): OutcomeEntry | undefined {
+  throw new Error("Not implemented");
+}
 
 // What runPass needs from outside the pass itself; tests pass a stub. The
 // live wiring sits at the bottom of this module.
@@ -909,6 +916,7 @@ export async function followUpPassPhase(
   issues: readonly SandcastleIssue[],
   base: string,
   host: PassHost = livePassHost,
+  report: OutcomeReport = outcomeReport,
 ): Promise<PassOutcome[]> {
   const byNumber = new Map(issues.map((issue) => [issue.number, issue]));
   const outcomes: PassOutcome[] = targets.map(() => ({ kind: "skipped", reason: "not started" }));
