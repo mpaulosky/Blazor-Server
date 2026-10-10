@@ -146,6 +146,12 @@ export const BUILD_FAILED_MARKER = "<!-- sandcastle:build-failed -->";
 // (see "Giving up and telling the human" in docs/plans/sandcastle-workflow.md).
 export const BUILD_FAILURE_CAP = 2;
 
+// The HTML comment marking an issue a split verdict turned into an umbrella
+// (see lib/intake.mts#applyVerdicts and lib/umbrella.mts). The issue loses
+// Sandcastle at the same time, so this marker, not a label, is how a later
+// round finds it again to check whether every child has finished.
+export const UMBRELLA_MARKER = "<!-- sandcastle:umbrella -->";
+
 // Hooks run inside the sandbox before the agent starts each iteration.
 // pnpm install ensures the sandbox always has fresh dependencies. The copied
 // node_modules records the host's pnpm store, so pnpm may rebuild it against

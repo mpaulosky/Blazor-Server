@@ -24,7 +24,13 @@ Judge each issue on its own against the **Definition of Ready**. An issue is rea
 Read the comments as part of the issue: a comment from the author can answer a question the body leaves open.
 
 Never invent any of the three yourself. They are the author's intent, so a missing Summary, criterion or decision is a question for the author, not a gap for you to fill.
-You don't edit the issue, and you don't judge whether it's worth doing, how big it is, or how it relates to other issues.
+You don't edit the issue, and you don't judge whether it's worth doing or how it relates to other issues.
+
+**Splitting.** An issue that meets all three requirements but is too big for one pull request can be **split** into child issues, built one after another in the order you list them.
+Split only when the acceptance criteria clearly fall into separate, independently shippable parts; when in doubt, mark the issue ready.
+Each child's body has a `## Summary` saying what that child changes and why, and an `## Acceptance criteria` section holding its share of the original's criteria.
+Redistribute the original's criteria among the children, word for word where you can: every criterion goes to exactly one child, and you never add a new one.
+Each child must be buildable once the children before it have landed.
 
 Also decide whether each issue is a **bug**: it fixes behaviour that's wrong today, rather than adding or changing behaviour on purpose. A bug's branch is `fix/`.
 
@@ -38,14 +44,24 @@ Give one verdict per issue, as a JSON object wrapped in `<intake>` tags:
    "reason": "The Summary says the Theme toggle moves to the menu, and two criteria name what the menu shows."},
   {"id": "43", "verdict": "needs-info", "bug": false,
    "questions": ["Should the Palette dropdown list the gray-family scales too?", "What should a visitor with no Palette cookie see?"],
-   "reason": "The issue has no checkable acceptance criterion, and leaves open which scales the dropdown lists."}
+   "reason": "The issue has no checkable acceptance criterion, and leaves open which scales the dropdown lists."},
+  {"id": "44", "verdict": "split", "bug": false,
+   "children": [
+     {"title": "Persist the Palette in a cookie",
+      "body": "## Summary\n\nKeeps the Palette across reloads.\n\n## Acceptance criteria\n\n- [ ] A chosen Palette is still applied after a reload."},
+     {"title": "Add the Palette dropdown to the menu",
+      "body": "## Summary\n\nLets the visitor pick a Palette.\n\n## Acceptance criteria\n\n- [ ] The menu's dropdown lists every Palette."}
+   ],
+   "reason": "The issue meets the Definition of Ready, but its storage and UI criteria are separate pieces of work that each fit one pull request."}
 ]}
 </intake>
 
 - `id` is the issue's `number`, as a string.
-- `verdict` is `ready` when the issue meets all three requirements, and `needs-info` otherwise.
-- `questions` is required for `needs-info` and left out for `ready`. Ask one question per unmet requirement or open decision, each one the author can answer by editing the issue.
+- `verdict` is `ready` when the issue meets all three requirements, `split` when it meets them but is too big for one pull request, and `needs-info` otherwise.
+- `questions` is required for `needs-info` and left out otherwise. Ask one question per unmet requirement or open decision, each one the author can answer by editing the issue.
   Don't number them: the host does.
+- `children` is required for `split` and left out otherwise: the child issues in build order, each a `title` and a Markdown `body` as described under **Splitting**.
+  The host creates them, links each as blocked by the one before it, and closes the original once they're all done.
 - `bug` is `true` when the issue fixes wrong behaviour, and `false` otherwise.
 - `reason` is one or two sentences saying which requirements the issue meets or misses. The host posts it on the issue, so write it for the person who reads it there.
 

@@ -224,6 +224,120 @@ export function addBlockedBy(issue: number, blocker: number): void {
   );
 }
 
+// The numbers of `issue`'s native "blocked by" links to issues in this
+// repository. GitHub allows a link to another repository's issue, whose
+// number means nothing here, so those are left out. Used to hand a split
+// issue's blockers to its first child (see lib/intake.mts#applySplit).
+export function sameRepoBlockers(
+  issue: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): number[] {
+  const blockers = jsonLines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${issue}/dependencies/blocked_by`,
+      "--jq", ".[] | {number, repository_url} | @json",
+    ]),
+  ) as { number: number; repository_url: string }[];
+  return blockers.filter((blocker) => blocker.repository_url.endsWith(`/repos/${repo}`)).map((blocker) => blocker.number);
+}
+
+// Creates an issue with `labels` already applied, for the child issues a
+// split verdict drafts (see lib/intake.mts#applyVerdicts). Returns its
+// number.
+export function createIssue(
+  title: string,
+  body: string,
+  labels: readonly string[],
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): number {
+  // The REST API takes the body as JSON on stdin and answers the number
+  // directly, where gh issue create prints a URL to parse.
+  const number = Number(
+    ghWithStderr(
+      run,
+      ["api", "--method", "POST", `repos/${repo}/issues`, "--input", "-", "--jq", ".number"],
+      JSON.stringify({ title, body, labels }),
+    ).trim(),
+  );
+  if (!Number.isInteger(number) || number <= 0) throw new Error(`gh api didn't answer the new issue's number for "${title}"`);
+  return number;
+}
+
+// Adds the native "parent has sub-issue child" relationship GitHub shows as a
+// task list on the parent. Used to add each split child as a sub-issue of the
+// original issue it was drafted from (see lib/intake.mts#applyVerdicts).
+export function addSubIssue(
+  parent: number,
+  child: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  // As with addBlockedBy, the API names the sub-issue by its id, not its
+  // number.
+  const id = ghWithStderr(run, ["api", `repos/${repo}/issues/${child}`, "--jq", ".id"]).trim();
+  ghWithStderr(run, ["api", "--method", "POST", `repos/${repo}/issues/${parent}/sub_issues`, "-F", `sub_issue_id=${id}`]);
+}
+
+// The state of one of an issue's native sub-issues (see addSubIssue): enough
+// to tell whether it closed as completed (see lib/umbrella.mts).
+export type SubIssue = { number: number; state: string; state_reason: string | null };
+
+// The parent issue's sub-issues, in the order GitHub lists them.
+export function subIssuesOf(
+  parent: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): SubIssue[] {
+  return jsonLines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${parent}/sub_issues`,
+      "--jq", ".[] | {number, state, state_reason} | @json",
+    ]),
+  ) as SubIssue[];
+}
+
+// Closes an issue as completed: an umbrella whose children have all finished
+// (see lib/umbrella.mts#closeFinishedUmbrellas).
+export function closeIssueAsCompleted(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  ghWithStderr(run, ["issue", "close", String(number), "--repo", repo, "--reason", "completed"]);
+}
+
+// The open issues whose comments contain `marker`, found through GitHub's
+// search index rather than reading every open issue's comments by hand. An
+// umbrella loses Sandcastle, so this, not listSandcastleIssues, is how a
+// later round finds it again (see lib/umbrella.mts). Search ignores the
+// marker's punctuation, so each match's comments are read to keep only the
+// issues where `poster`, the host (see hostLogin), posted the marker itself:
+// anyone can comment on a public issue, and a pasted marker mustn't get an
+// issue closed. Search lags new comments, so an umbrella can be missed for a
+// round or two.
+export function openIssuesWithComment(
+  marker: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  poster: string = (signedInLogin ??= hostLogin(run)),
+): number[] {
+  const words = marker.replace(/<!--|-->/g, "").trim();
+  const matches = JSON.parse(
+    ghWithStderr(run, [
+      "issue", "list", "--repo", repo, "--state", "open", "--search", `"${words}" in:comments`, "--limit", "1000",
+      "--json", "number", "--jq", "[.[].number]",
+    ]),
+  ) as number[];
+  return matches.filter((number) => {
+    const comments = jsonLines(
+      ghWithStderr(run, ["api", "--paginate", `repos/${repo}/issues/${number}/comments`, "--jq", ".[] | {body, author: .user.login} | @json"]),
+    ) as { body: string; author: string }[];
+    return comments.some((comment) => comment.author === poster && comment.body.includes(marker));
+  });
+}
+
 export function commentOnIssue(
   issue: number,
   body: string,
