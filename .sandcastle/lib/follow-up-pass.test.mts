@@ -1159,14 +1159,14 @@ describe("passOutcomeEntry", () => {
     });
   });
 
-  it("says the PR's head moved for a push-failed outcome", () => {
+  it("gives a neutral detail for a push-failed outcome, since the error isn't always a moved head", () => {
     const outcome: PassOutcome = { kind: "push-failed", error: "non-fast-forward" };
 
     assert.deepEqual(passOutcomeEntry(passTarget(), outcome), {
       kind: "pr",
       number: PR_NUMBER,
       outcome: "follow-up pass",
-      detail: "its head moved before the push; swept again next round",
+      detail: "its push failed; see the run log; swept again next round",
     });
   });
 

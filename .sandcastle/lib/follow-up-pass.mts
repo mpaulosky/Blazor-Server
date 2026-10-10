@@ -400,7 +400,7 @@ export function passOutcomeEntry(target: PassTarget, outcome: PassOutcome): Outc
     case "passed":
       return { ...pr, detail: outcome.pushed === undefined ? "nothing needed pushing" : `pushed ${outcome.pushed.slice(0, 7)}` };
     case "push-failed":
-      return { ...pr, detail: "its head moved before the push; swept again next round" };
+      return { ...pr, detail: "its push failed; see the run log; swept again next round" };
     case "gave-up":
     case "skipped":
       return undefined;
