@@ -125,11 +125,40 @@ function developerFailureComment(failure: string, branch: string): string {
 // design comment's own lines around the note.
 const DESIGN_NOTE_LIMIT = 60_000;
 
-// The design note cut to fit in an issue comment, saying where the whole of it
-// is when it's cut.
-function truncateDesignNote(note: string, path: string): string {
-  if (note.length <= DESIGN_NOTE_LIMIT) return note;
-  return `${note.slice(0, DESIGN_NOTE_LIMIT)}\n\n(Cut short to fit in a comment. The whole note is in the sandbox's \`${path}\`.)`;
+// What stands in for <!-- in a posted design note. Every host marker starts
+// with <!--, and markerComments finds the host's comments by substring, so a
+// note quoting one (as a design for a change to Sandcastle itself would)
+// would otherwise pass for that host comment: a design comment counted as a
+// failed build attempt, for one (#228).
+const BROKEN_COMMENT_OPEN = "<!\u200B--";
+
+// The issue comment that carries the architect's design note `note` (already
+// made safe to post, see publicErrorText) for `branch`. The note sits in a
+// code fence longer than any backtick run in it, so it renders as written and
+// can't mention anyone or cross-reference another issue, and its <!-- are
+// broken (see BROKEN_COMMENT_OPEN). A note too long for a comment is cut,
+// saying where the whole of it is (`path`, in the sandbox). designNoteIn
+// reads the note back.
+export function designComment(note: string, branch: string, path: string): string {
+  const cut = note.length > DESIGN_NOTE_LIMIT;
+  const kept = (cut ? note.slice(0, DESIGN_NOTE_LIMIT) : note).replaceAll("<!--", BROKEN_COMMENT_OPEN);
+  const longestRun = Math.max(0, ...(kept.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return [
+    `${DESIGN_MARKER}\nSandcastle's architect wrote this design note for \`${branch}\`. The tester and developers build from it, and ` +
+      "the reviewer checks it was followed.",
+    `${fence}markdown\n${kept}\n${fence}`,
+    ...(cut ? [`(Cut short to fit in a comment. The whole note is in the sandbox's \`${path}\`.)`] : []),
+  ].join("\n\n");
+}
+
+// The architect's design note in a comment designComment wrote, as the
+// architect wrote it, for a re-run's prompt. A comment with no fence gives
+// its body without the marker.
+export function designNoteIn(body: string): string {
+  const fenced = /^(`{3,})markdown\n([\s\S]*?)\n\1$/m.exec(body);
+  if (!fenced) return body.replace(DESIGN_MARKER, "").trim();
+  return fenced[2]!.replaceAll(BROKEN_COMMENT_OPEN, "<!--");
 }
 
 // An issue with the optional roles the planner picked for it (see
@@ -222,8 +251,10 @@ const liveHost: BuildHost = {
   // Scoped like the failed-attempt count: a person who re-queues a handed-back
   // issue may have rewritten it, so the architect starts that issue afresh
   // rather than build on a design that went with the failed attempts.
-  latestDesignNote: (issueNumber) =>
-    markerComments(issueNumber, "sandcastle:needs-human", DESIGN_MARKER).at(-1)?.body.replace(DESIGN_MARKER, "").trim(),
+  latestDesignNote: (issueNumber) => {
+    const latest = markerComments(issueNumber, "sandcastle:needs-human", DESIGN_MARKER).at(-1);
+    return latest && designNoteIn(latest.body);
+  },
   markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
   unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
@@ -389,10 +420,7 @@ async function buildMarkedIssue(
       console.error(`  ⚠ #${issue.number}: the architect wrote no design note at ${path}, so none is posted.`);
       return;
     }
-    const body =
-      `${DESIGN_MARKER}\n` +
-      `Sandcastle's architect wrote this design note for \`${branch}\`. The tester and developers build from it, and ` +
-      `the reviewer checks it was followed.\n\n${truncateDesignNote(host.publicError(note), path)}`;
+    const body = designComment(host.publicError(note), branch, path);
     try {
       host.commentOnIssue(issue.number, body);
     } catch (error) {

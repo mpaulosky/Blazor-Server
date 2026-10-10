@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
-import { buildIssue, isGitHubServerError, publicErrorText, publish, UncountedStopError, type BuildHost } from "./build.mts";
-import { BUILD_ROLES, GATE_FIXER_ATTEMPTS, PUBLISH_RETRY_ATTEMPTS, type OptionalRole } from "./config.mts";
+import {
+  buildIssue,
+  designComment,
+  designNoteIn,
+  isGitHubServerError,
+  publicErrorText,
+  publish,
+  UncountedStopError,
+  type BuildHost,
+} from "./build.mts";
+import { BUILD_FAILED_MARKER, BUILD_ROLES, DESIGN_MARKER, GATE_FIXER_ATTEMPTS, PUBLISH_RETRY_ATTEMPTS, type OptionalRole } from "./config.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [], roles: [] as OptionalRole[] };
 
@@ -641,6 +650,43 @@ describe("buildIssue optional roles", () => {
     assert.match(designComment.body, /Use a Result<T> for the new endpoint\./);
   });
 
+  // The note is agent-written sandbox text going onto a public issue, so it's
+  // made safe the way a failed publish's error is.
+  it("withholds a design note that looks like it holds a secret", async () => {
+    const { comments, buildHost } = host([0, 0], { designFile: "## Design\n\nUse the token ghp_abc." });
+    buildHost.publicError = (text) => publicErrorText(String(text), (cleaned) => cleaned.includes("ghp_"));
+
+    await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    const designPosted = comments.find((comment) => comment.body.includes(DESIGN_MARKER));
+    assert.ok(designPosted, "expected a design comment");
+    assert.doesNotMatch(designPosted.body, /ghp_/);
+    assert.match(designPosted.body, /looked like it held a secret/);
+  });
+
+  it("posts no design comment, and still publishes, when the architect wrote no design note", async () => {
+    const { comments, steps, buildHost } = host([0, 0], { designFile: "" });
+
+    const result = await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    assert.ok(!comments.some((comment) => comment.body.includes(DESIGN_MARKER)));
+    assert.ok(steps.includes("publish"), steps.join(", "));
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+  });
+
+  it("still publishes when posting the design note fails", async () => {
+    const { steps, recordBuildFailureCalls, buildHost } = host([0, 0], { designFile: "## Design" });
+    buildHost.commentOnIssue = () => {
+      throw new Error("gh issue comment failed: HTTP 502");
+    };
+
+    const result = await buildIssue(withRoles(["architect"]), branch, base, buildHost);
+
+    assert.ok(steps.includes("publish"), steps.join(", "));
+    assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
+    assert.deepEqual(recordBuildFailureCalls, []);
+  });
+
   it("doesn't stop the build and publishes the PR with a note that the documentation step failed when the scribe fails", async () => {
     const { steps, comments, recordBuildFailureCalls, publishCalls, buildHost } = host([0, 0], { failing: ["scribe"] });
 
@@ -962,5 +1008,46 @@ describe("publicErrorText", () => {
 
   it("withholds an error that holds a secret", () => {
     assert.match(publicErrorText("token abcdefgh12345 rejected", (text) => text.includes("abcdefgh12345")), /isn't shown/);
+  });
+});
+
+// The architect's design note as the host posts it and reads it back
+// (lib/build.mts). The host finds its own comments by marker substring
+// (markerComments), so a note quoting a marker, as one for a change to
+// Sandcastle itself would, mustn't pass for a host comment (#228).
+describe("designComment", () => {
+  const note = `## Design\n\nOn failure, post ${BUILD_FAILED_MARKER} and keep ${DESIGN_MARKER} last.\n\n\`\`\`\`ts\nconst x = 1;\n\`\`\`\`\n\ncc @someone, see #12`;
+
+  it("carries the design marker once, and no other host marker", () => {
+    const body = designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.equal(body.split(DESIGN_MARKER).length, 2, body);
+    assert.ok(body.startsWith(DESIGN_MARKER), body);
+    assert.ok(!body.includes(BUILD_FAILED_MARKER), body);
+  });
+
+  it("puts the note in a code fence longer than any backtick run in it, so it can't mention or cross-reference", () => {
+    const body = designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.match(body, /^`````markdown\n[\s\S]*\n`````$/m);
+  });
+
+  it("cuts a note too long for a GitHub comment, and says where the whole of it is", () => {
+    const body = designComment("x".repeat(70_000), "feature/3-add-a-thing", ".sandcastle/work/3/design.md");
+
+    assert.ok(body.length < 65_536, String(body.length));
+    assert.match(body, /Cut short to fit in a comment\. The whole note is in the sandbox's `\.sandcastle\/work\/3\/design\.md`/);
+  });
+});
+
+describe("designNoteIn", () => {
+  it("gives the architect back the note it wrote, markers included", () => {
+    const note = `## Design\n\nPost ${BUILD_FAILED_MARKER}.\n\n\`\`\`ts\nconst x = 1;\n\`\`\``;
+
+    assert.equal(designNoteIn(designComment(note, "feature/3-add-a-thing", ".sandcastle/work/3/design.md")), note);
+  });
+
+  it("gives back the body without the marker for a comment with no fence", () => {
+    assert.equal(designNoteIn(`${DESIGN_MARKER}\nSome note.`), "Some note.");
   });
 });
