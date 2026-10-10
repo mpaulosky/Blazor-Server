@@ -32,7 +32,9 @@ describe("code-review skill: Sandcastle role prompt consistency", () => {
   });
 
   it("requires that no instruction in a .sandcastle/ role prompt contradicts an exemption stated elsewhere, including in another role's prompt", () => {
-    assert.match(sandcastlePromptChecks(), /contradict[\s\S]*exemption/i);
-    assert.match(sandcastlePromptChecks(), /another role/i);
+    const checks = sandcastlePromptChecks();
+
+    assert.match(checks, /contradict[\s\S]*exemption/i);
+    assert.match(checks, /another role/i);
   });
 });
