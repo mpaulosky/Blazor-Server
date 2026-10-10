@@ -50,14 +50,17 @@ describe("roundSummary", () => {
     assert.equal(summary.stop, `Stopping the run: ${stop.message}.`);
   });
 
-  it("adds a line naming the stopped build and that its branch keeps its commits", () => {
+  // The stop comes before publish, so this attempt's commits were never
+  // pushed: an ephemeral Actions runner drops them with its checkout.
+  it("adds a line naming the stopped build, saying its unpushed commits are dropped and the next run rebuilds it", () => {
     const stop = new UncountedStopError("Claude's usage limit was hit during the backend run");
     const summary = roundSummary(work, [built(undefined), { status: "rejected", reason: stop }]);
 
-    assert.ok(
-      summary.lines.some((line) => line.includes("⏹") && line.includes("#72") && line.includes(stop.message) && line.includes("next run")),
-      summary.lines.join("\n"),
-    );
+    const line = summary.lines.find((candidate) => candidate.includes("⏹"));
+    assert.ok(line !== undefined && line.includes("#72") && line.includes(stop.message), summary.lines.join("\n"));
+    assert.match(line, /weren't pushed/);
+    assert.match(line, /next run rebuilds/);
+    assert.doesNotMatch(line, /keeps its commits/);
   });
 
   it("keeps today's behaviour for a plain Error rejection, not treating it as a clean stop", () => {

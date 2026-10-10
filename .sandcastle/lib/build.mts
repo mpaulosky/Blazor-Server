@@ -276,6 +276,14 @@ export function publicErrorText(text: string, holdsSecret: (text: string) => boo
   return holdsSecret(cleaned) ? "(This text isn't shown: it looked like it held a secret. See the run log.)" : cleaned;
 }
 
+// The git arguments listing the .github/workflows/ files the commits from
+// `from` to `to` change. A merge-base (three-dot) diff, so a `from` newer than
+// the branch's fork point (origin/main after fetchMain) doesn't list workflow
+// files main changed, which the hand-back would ask a person to redo.
+export function workflowDiffArgs(from: string, to: string): string[] {
+  return ["diff", "--name-only", `${from}...${to}`, "--", ".github/workflows/"];
+}
+
 // Whether a failed push was GitHub refusing a change to a workflow file
 // because the token lacks the Workflows permission. Like isGitHubServerError,
 // it reads only the output after "failed:\n". Matches "a Personal Access
@@ -327,7 +335,7 @@ const liveHost: BuildHost = {
   worktreeProblems,
   log: console.log,
   limits: runLimits,
-  workflowFiles: (from, to) => git("diff", "--name-only", from, to, "--", ".github/workflows/").split("\n").filter(Boolean),
+  workflowFiles: (from, to) => git(...workflowDiffArgs(from, to)).split("\n").filter(Boolean),
   handBackWorkflowChange: (issueNumber, branch, detail, change) => handBackWorkflowChange(issueNumber, branch, detail, change),
 };
 

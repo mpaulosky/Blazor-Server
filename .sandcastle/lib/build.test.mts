@@ -13,6 +13,7 @@ import {
   publish,
   UncountedStopError,
   type BuildHost,
+  workflowDiffArgs,
 } from "./build.mts";
 import {
   BUILD_FAILED_MARKER,
@@ -1335,5 +1336,13 @@ describe("latestDesignNote", () => {
     const run = gh([{ body: designComment("A stranger's note.", "feature/3-a", "p"), author: "stranger", createdAt: "2026-01-03T00:00:00Z" }]);
 
     assert.equal(latestDesignNote(3, "o/r", run, "host"), undefined);
+  });
+});
+
+// A two-dot diff compares trees, so a base newer than the branch's fork
+// point would list workflow files main changed, not the branch.
+describe("workflowDiffArgs", () => {
+  it("lists only the branch side's workflow changes, through a merge-base (three-dot) diff", () => {
+    assert.deepEqual(workflowDiffArgs("origin/main", "abc123"), ["diff", "--name-only", "origin/main...abc123", "--", ".github/workflows/"]);
   });
 });

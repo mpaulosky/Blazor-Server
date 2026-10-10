@@ -80,9 +80,11 @@
 // The run also stops cleanly, exiting 0, once it can't finish more work
 // (lib/limits.mts, #147): no new round or role run starts after
 // SANDCASTLE_BUDGET_MINUTES (default 240) have passed since it started, and
-// once a role run hits Claude's usage or rate limit nothing more starts or
-// publishes. Neither counts as a failed build attempt; the branches keep
-// their commits for the next run.
+// once a role run hits Claude's usage or rate limit no role starts; a build
+// whose roles all finished still publishes, since that costs no usage.
+// Neither stop counts as a failed build attempt. A stopped build's commits
+// weren't pushed, so an ephemeral runner drops them, and the next run
+// rebuilds the issue from what GitHub has.
 //
 // Every role's model, effort, iteration cap and timeout comes from ROLE_AGENTS
 // in lib/config.mts. The sandbox gets no GitHub token: the host reads GitHub

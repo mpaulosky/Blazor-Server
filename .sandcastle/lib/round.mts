@@ -44,7 +44,8 @@ export function roundSummary(
   lines.push(
     ...stopped.map(
       ({ issue, branch, message }) =>
-        `  ⏹ #${issue.number} (${branch}) stopped: ${message}. Its branch keeps its commits for the next run.`,
+        `  ⏹ #${issue.number} (${branch}) stopped: ${message}. This attempt's commits weren't pushed, so an ephemeral ` +
+          "runner drops them with its checkout; the next run rebuilds the issue from what GitHub has.",
     ),
   );
   const [firstStop] = stopped;
