@@ -10,8 +10,9 @@
 // open too: its own work isn't finished either way.
 // ---------------------------------------------------------------------------
 
-import { UMBRELLA_MARKER } from "./config.mts";
+import { QUEUE_LABEL, queueLabelOf, UMBRELLA_MARKER, type QueueScope } from "./config.mts";
 import { closeIssueAsCompleted, issueLabels, openIssuesWithComment, subIssuesOf, type SubIssue } from "./github.mts";
+import { activeQueueScope } from "./queue.mts";
 
 // The GitHub reads and writes closing an umbrella needs; tests pass a stub.
 export type UmbrellaGitHub = {
@@ -35,21 +36,28 @@ export const liveUmbrellaGitHub: UmbrellaGitHub = {
 // Closes as completed any open umbrella whose children have all closed as
 // completed. Leaves one open while it has no children yet, any child is
 // still open, or a child closed as not planned: that child's work never
-// landed, so the umbrella's own job isn't done either. Returns the numbers
-// of the umbrellas this round closed.
+// landed, so the umbrella's own job isn't done either. `scope` is this run's
+// queue scope (#146): in issue scope, only its one issue is considered among
+// openUmbrellas(), and the "held" check also matches the scope's own queue
+// label, case-insensitively, not just the literal "Sandcastle". Returns the
+// numbers of the umbrellas this round closed.
 export function closeFinishedUmbrellas(
   github: UmbrellaGitHub = liveUmbrellaGitHub,
   log: (line: string) => void = console.log,
+  scope: QueueScope = activeQueueScope(),
 ): number[] {
   const closed: number[] = [];
-  for (const umbrella of github.openUmbrellas()) {
+  // A split that failed after its umbrella comment landed is handed back
+  // with sandcastle:needs-human, and a person may re-queue it with
+  // Sandcastle or the scope's own queue label: either way it isn't an
+  // umbrella to close (#234).
+  const holding = [QUEUE_LABEL, queueLabelOf(scope), "sandcastle:needs-human"].map((label) => label.toLowerCase());
+  const umbrellas = github.openUmbrellas().filter((umbrella) => scope.kind === "label" || umbrella === scope.number);
+  for (const umbrella of umbrellas) {
     // One umbrella whose children can't be read, or that won't close, waits
     // for the next round without holding up the others.
     try {
-      // A split that failed after its umbrella comment landed is handed back
-      // with sandcastle:needs-human, and a person may re-queue it with
-      // Sandcastle: either way it isn't an umbrella to close (#234).
-      const held = github.labels(umbrella).find((label) => label === "Sandcastle" || label === "sandcastle:needs-human");
+      const held = github.labels(umbrella).find((label) => holding.includes(label.toLowerCase()));
       if (held) {
         log(`  ☂ #${umbrella} stays open: it carries ${held}.`);
         continue;

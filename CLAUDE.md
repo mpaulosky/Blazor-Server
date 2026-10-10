@@ -39,7 +39,8 @@ scripts/gate.sh                                       # the full check; needs a 
 dotnet build Blazor-Server.slnx                       # quick build while iterating
 dotnet test --project tests/<Project>/<Project>.csproj  # one test project while iterating
 pnpm run check:sandcastle                             # type-check and test .sandcastle/
-pnpm run sandcastle                                   # start a Sandcastle run
+SANDCASTLE_ISSUE=<n> pnpm run sandcastle              # build one issue (and its PR) locally
+SANDCASTLE_LABEL=<label> pnpm run sandcastle          # work the issues labelled <label>, e.g. Sandcastle:dev
 ```
 
 `scripts/gate.sh` is the definition of "ready to push": lint of the changed YAML, Markdown, workflows and shell

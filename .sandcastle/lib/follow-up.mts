@@ -16,21 +16,25 @@
 import { discardClosedWork, isIssueBranch, type BranchRefs } from "./branches.mts";
 import { COPILOT_REREQUEST_AFTER_MS, PR_MARKER } from "./config.mts";
 import {
+  addPullRequestLabel,
   closedPullRequests,
   handBack,
   hasLabel,
   isCopilot,
+  issueEvents,
   labelTimeline,
-  listSandcastleIssues,
   openPullRequestsForSweep,
+  pushAccess,
   requestCopilotReview,
   signedInHostLogin,
   timestamp,
   updatePullRequestBranch,
   type ClosedPullRequest,
+  type IssueEvent,
   type PullRequestIdentity,
   type TimelineLabelEvent,
 } from "./github.mts";
+import { labelOriginFixes, loadQueue, ownerCheck, type IsOwner } from "./queue.mts";
 
 // One check run or status on a PR's head commit, normalised from either
 // GraphQL shape (CheckRun or StatusContext) by lib/github.mts#openPullRequestsForSweep.
@@ -62,6 +66,11 @@ export type SweepPullRequest = PullRequestIdentity & {
 export { isCopilot };
 
 const NEEDS_HUMAN = "sandcastle:needs-human";
+
+// The PR-level counterpart of lib/queue.mts#ISSUE_LABEL_RULES: a PR's
+// needs-human removal counts as a re-queue only when the repository owner
+// made it (#146). Nothing on a PR is trusted as an add.
+const PR_LABEL_RULES = { trustAdds: [], trustRemovals: [NEEDS_HUMAN] } as const;
 
 // The issue number a PR's head branch names, read from
 // feature/{n}-..., fix/{n}-... or hotfix/{n}-..., but only when it's a branch
@@ -215,33 +224,46 @@ export type FollowUpGitHub = {
   hostLogin(): string;
   openPullRequests(): SweepPullRequest[];
   closedPullRequests(author: string): ClosedPullRequest[];
-  // live: listSandcastleIssues().
+  // live: lib/queue.mts#loadQueue(), so the sweep sees only this run's
+  // scope, approved by the owner (#146).
   inScopeIssues(): { number: number; labels: string[] }[];
   labelTimeline(issueNumber: number): TimelineLabelEvent[];
   requestCopilotReview(pullRequestId: string): void;
   updateBranch(number: number, expectedHeadSha: string): void;
   // live: handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body).
   handBack(issueNumber: number, reason: string, body: string): void;
+  // Tri-state owner check for a PR's label origin (lib/queue.mts#labelOriginFixes). live: pushAccess(login).
+  isOwner: IsOwner;
+  // The PR's labeled/unlabeled/renamed events, for labelOriginFixes. live:
+  // issueEvents(number) (PRs share the issue events endpoint).
+  pullRequestEvents(number: number): IssueEvent[];
+  // Puts back a PR's hand-back label someone else removed. live: gh pr edit.
+  addPullRequestLabel(number: number, label: string): void;
 };
 
 export const liveFollowUpGitHub: FollowUpGitHub = {
   hostLogin: () => signedInHostLogin(),
   openPullRequests: () => openPullRequestsForSweep(),
   closedPullRequests: (author) => closedPullRequests(author),
-  inScopeIssues: () => listSandcastleIssues().map((issue) => ({ number: issue.number, labels: issue.labels })),
+  inScopeIssues: () => loadQueue().map((issue) => ({ number: issue.number, labels: issue.labels })),
   labelTimeline: (issueNumber) => labelTimeline(issueNumber),
   requestCopilotReview: (pullRequestId) => requestCopilotReview(pullRequestId),
   updateBranch: (number, expectedHeadSha) => updatePullRequestBranch(number, expectedHeadSha),
   handBack: (issueNumber, reason, body) => handBack({ kind: "issue", number: issueNumber }, NEEDS_HUMAN, reason, body),
+  isOwner: ownerCheck(() => signedInHostLogin(), (login) => pushAccess(login)),
+  pullRequestEvents: (number) => issueEvents(number),
+  addPullRequestLabel: (number, label) => addPullRequestLabel(number, label),
 };
 
 // Reads the host's login, the in-scope issues and the open PRs once, then
 // for each PR either skips it (sweepSkipReason) or applies `decide`, logging
-// what happened. Each PR runs in its own try/catch, so one failure doesn't
-// stop the rest. Once that's done, hands back any in-scope issue, not
-// labelled sandcastle:needs-human and with no open PR, whose latest
-// Sandcastle PR closed without merging (closedWithoutMerging), each in its
-// own try/catch too.
+// what happened. A PR whose sandcastle:needs-human someone other than the
+// repository owner removed gets it back instead, and is left alone (#146).
+// Each PR runs in its own try/catch, so one failure doesn't stop the rest.
+// Once that's done, hands back any in-scope issue, not labelled
+// sandcastle:needs-human and with no open PR, whose latest Sandcastle PR
+// closed without merging (closedWithoutMerging), each in its own try/catch
+// too.
 export function sweepPullRequests(
   github: FollowUpGitHub = liveFollowUpGitHub,
   log: (line: string) => void = console.log,
@@ -257,6 +279,19 @@ export function sweepPullRequests(
       const skip = sweepSkipReason(pr, inScope, host);
       if (skip !== undefined) {
         log(`  · PR #${pr.number} isn't swept: ${skip}.`);
+        continue;
+      }
+      // A stranger's removal of the PR's hand-back label isn't a re-queue
+      // (#146): put the label back and leave the PR alone this round.
+      const origin = labelOriginFixes(pr.labels, github.pullRequestEvents(pr.number), github.isOwner, PR_LABEL_RULES);
+      if (origin.unknown.length > 0) {
+        log(`  · PR #${pr.number} isn't swept: couldn't check whether the repository owner removed ${NEEDS_HUMAN}.`);
+        continue;
+      }
+      const restore = origin.fixes.find((fix) => fix.action === "restore");
+      if (restore !== undefined) {
+        github.addPullRequestLabel(pr.number, restore.label);
+        log(`  ✋ PR #${pr.number}: ${restore.reason}, so it isn't swept.`);
         continue;
       }
       followUp(pr, decide(pr, now), github, log);

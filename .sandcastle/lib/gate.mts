@@ -10,12 +10,15 @@
 // code it needs never reached main. The gate also holds back an issue intake
 // hasn't cleared (no sandcastle:ready) or that's handed back to a human
 // (sandcastle:needs-info or sandcastle:needs-human), so the planner never
-// sees one (#74).
+// sees one (#74). The gate reads the queue through lib/queue.mts#loadQueue,
+// so an issue outside the run's queue scope, or one the repository owner
+// didn't approve, never reaches it (#146).
 // ---------------------------------------------------------------------------
 
 import { isIssueBranch } from "./branches.mts";
 import { BUILDING_LABEL } from "./config.mts";
-import { hasLabel, listSandcastleIssues, openPullRequests, repoName, type OpenPullRequest, type SandcastleIssue } from "./github.mts";
+import { hasLabel, openPullRequests, repoName, type OpenPullRequest, type SandcastleIssue } from "./github.mts";
+import { loadQueue } from "./queue.mts";
 import { sh } from "./shell.mts";
 
 export type Blocker = {
@@ -40,7 +43,7 @@ export type GateGitHub = {
 };
 
 export const liveGitHub: GateGitHub = {
-  sandcastleIssues: listSandcastleIssues,
+  sandcastleIssues: () => loadQueue(),
   openPullRequests,
   nativeBlockers: (issueNumber) =>
     sh(

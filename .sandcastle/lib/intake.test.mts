@@ -72,8 +72,9 @@ const splitVerdict = (id: number, children: { title: string; body: string }[] = 
 });
 
 // A SplitGitHub stub recording every call, and handing out sequential
-// numbers (starting at 101) for each child it creates.
-function recordingSplitGithub(firstChildNumber: number = 101) {
+// numbers (starting at 101) for each child it creates. `queueLabel` is
+// "Sandcastle" by default, as it is in GitHub Actions and in issue scope.
+function recordingSplitGithub(firstChildNumber: number = 101, queueLabel: string = "Sandcastle") {
   const calls: { fn: string; args: unknown[] }[] = [];
   let next = firstChildNumber;
   const github: SplitGitHub = {
@@ -101,6 +102,7 @@ function recordingSplitGithub(firstChildNumber: number = 101) {
       calls.push({ fn: "unmarkSplitting", args: [issueNumber] });
     },
     blockersOf: () => [],
+    queueLabel: () => queueLabel,
   };
   return { calls, github };
 }
@@ -297,6 +299,21 @@ describe("applyVerdicts for a well-formed split verdict", () => {
     assert.match(body, /#101/);
     assert.match(body, /#102/);
     assert.match(body, /#103/);
+  });
+
+  // A local run with SANDCASTLE_LABEL=Sandcastle:dev mustn't put its split
+  // children in GitHub Actions' queue (#146).
+  it("creates each child with the split github's queue label, not the literal Sandcastle, in a non-default queue scope", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub(101, "Sandcastle:dev");
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.equal(created.length, 3, JSON.stringify(split.calls));
+    for (const call of created) {
+      assert.deepEqual(call.args[2], ["Sandcastle:dev", "sandcastle:needs-human"]);
+    }
   });
 });
 

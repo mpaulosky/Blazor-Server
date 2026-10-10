@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
@@ -36,15 +38,106 @@ describe("package.json scripts", () => {
   });
 });
 
+// #146: a local run needs SANDCASTLE_ISSUE or SANDCASTLE_LABEL, so the
+// bare "pnpm run sandcastle" line is no longer a usable example on its own.
 describe("CLAUDE.md Commands block", () => {
-  it("lists pnpm run sandcastle alongside the other commands", () => {
-    assert.match(commandsBlock(), /^pnpm run sandcastle(?=\s|$)/m);
+  it("shows both local queue-scope forms of pnpm run sandcastle", () => {
+    assert.match(commandsBlock(), /^SANDCASTLE_ISSUE=<n> pnpm run sandcastle(?=\s|$)/m);
+    assert.match(commandsBlock(), /^SANDCASTLE_LABEL=<label> pnpm run sandcastle(?=\s|$)/m);
   });
 });
 
 describe("main.mts header", () => {
-  it("points the usage note at pnpm run sandcastle", () => {
-    assert.match(usageNote(), /pnpm run sandcastle/);
+  it("points the usage note at both local queue-scope forms", () => {
+    assert.match(usageNote(), /SANDCASTLE_ISSUE=<n> pnpm run sandcastle/);
+    assert.match(usageNote(), /SANDCASTLE_LABEL=<label> pnpm run sandcastle/);
+  });
+});
+
+// #146, "Document SANDCASTLE_ISSUE and SANDCASTLE_LABEL in
+// .sandcastle/.env.example": Sandcastle passes every key the file defines
+// into the sandbox, so both variables must stay commented out there and be
+// set on the command line instead.
+describe(".sandcastle/.env.example", () => {
+  it("mentions both SANDCASTLE_ISSUE and SANDCASTLE_LABEL, commented out", () => {
+    const envExample = read(".sandcastle/.env.example");
+
+    assert.match(envExample, /SANDCASTLE_ISSUE/);
+    assert.match(envExample, /SANDCASTLE_LABEL/);
+    for (const line of envExample.split("\n")) {
+      if (/SANDCASTLE_ISSUE|SANDCASTLE_LABEL/.test(line)) {
+        assert.match(line.trim(), /^#/, `expected "${line}" to be commented out`);
+      }
+    }
+  });
+});
+
+// #146: the queue scope must be resolved, and the run must exit on a bad
+// one, before anything touches git, gh or a sandbox.
+describe("main.mts's queue-scope wiring", () => {
+  it("resolves the queue scope before protectHostGit() and ensureLabels()", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const scopeCall = mainMts.indexOf("queueScopeFrom(");
+    const protectCall = mainMts.indexOf("protectHostGit()");
+    const ensureLabelsCall = mainMts.indexOf("ensureLabels()");
+
+    assert.notEqual(scopeCall, -1, "main.mts doesn't call queueScopeFrom(");
+    assert.ok(scopeCall < protectCall, "main.mts doesn't resolve the queue scope before protectHostGit()");
+    assert.ok(scopeCall < ensureLabelsCall, "main.mts doesn't resolve the queue scope before ensureLabels()");
+  });
+});
+
+describe("main.mts's queue round", () => {
+  it("starts a fresh queue round at the top of each round, before the follow-up sweep", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+    const startRound = mainMts.indexOf("startQueueRound()", loop);
+    const sweep = mainMts.indexOf("followUpPhase()", loop);
+
+    assert.notEqual(startRound, -1, "main.mts's round loop doesn't call startQueueRound()");
+    assert.ok(startRound < sweep, "main.mts doesn't start the queue round before the follow-up sweep");
+  });
+});
+
+// #146's first acceptance criterion: a local run without SANDCASTLE_ISSUE or
+// SANDCASTLE_LABEL must exit non-zero with a usage message and touch
+// nothing, not even shell out to gh, git or docker to check whether it
+// could.
+describe("main.mts entry point", () => {
+  it("exits non-zero with a usage message and touches nothing when no queue scope is set", () => {
+    const binDir = realpathSync(mkdtempSync(join(tmpdir(), "sandcastle-usage-bin-")));
+    const stubLog = join(binDir, "stub-calls.log");
+    try {
+      for (const name of ["gh", "git", "docker"]) {
+        const path = join(binDir, name);
+        writeFileSync(path, `#!/bin/sh\necho "$0 $*" >> "${stubLog}"\nexit 1\n`);
+        chmodSync(path, 0o755);
+      }
+      // Only PATH and HOME: no GITHUB_ACTIONS (set in CI), no GH_TOKEN, and
+      // no SANDCASTLE_ISSUE or SANDCASTLE_LABEL from this process's own env.
+      const env = { PATH: `${binDir}:${process.env.PATH ?? ""}`, HOME: process.env.HOME ?? "" };
+      let status: number | null = null;
+      let stderr = "";
+
+      try {
+        execFileSync("node", ["--import", "tsx", ".sandcastle/main.mts"], {
+          cwd: repoRoot,
+          env,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch (error) {
+        status = (error as { status: number | null }).status;
+        stderr = String((error as { stderr?: unknown }).stderr ?? "");
+      }
+
+      assert.notEqual(status, 0, `expected main.mts to exit non-zero; stderr:\n${stderr}`);
+      assert.match(stderr, /SANDCASTLE_ISSUE/);
+      assert.match(stderr, /SANDCASTLE_LABEL/);
+      assert.equal(existsSync(stubLog), false, "main.mts shelled out to gh, git or docker before exiting");
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
   });
 });
 

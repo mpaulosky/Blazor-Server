@@ -4,19 +4,24 @@ import type { execFileSync } from "node:child_process";
 import { COPILOT_REVIEWER, SANDCASTLE_LABELS } from "./config.mts";
 import {
   addIssueLabel,
+  addPullRequestLabel,
   addSubIssue,
+  bodyEdits,
   cacheHostLogin,
   type ClosedPullRequest,
   closedPullRequests,
   closeIssueAsCompleted,
   commentOnIssue,
+  type ContentEdit,
   createIssue,
   ensureLabels,
   type GhIssue,
   handBack,
   hasLabel,
   hostLogin,
+  issueEvents,
   issueLabels,
+  type IssueEvent,
   issuesWithLabel,
   labelTimeline,
   listSandcastleIssues,
@@ -26,6 +31,7 @@ import {
   openPullRequest,
   openPullRequestsForSweep,
   ownerApproved,
+  pushAccess,
   removeIssueLabel,
   requestCopilotReview,
   sameRepoBlockers,
@@ -422,6 +428,71 @@ describe("listSandcastleIssues", () => {
     assert.deepEqual(first[0]!.comments, []);
     assert.deepEqual(second[0]!.comments, ["Guidance on #3."]);
     assert.equal(lookups(), 2);
+  });
+
+  // The run's queue scope (#146) decides what gh is asked for.
+  it("lists the scope's own label in a label scope", () => {
+    const { calls, run } = recordingGh(["[]"]);
+
+    listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "label", label: "Sandcastle:dev" });
+
+    assert.deepEqual(calls[0]!.args.slice(0, 9), ["issue", "list", "--repo", "o/r", "--state", "open", "--label", "Sandcastle:dev", "--limit"]);
+  });
+
+  // loadQueue's round cache keys on it: a label removed and added back
+  // leaves the label set as it was, but moves updatedAt.
+  it("reads each issue's updatedAt in a label scope", () => {
+    const calls: string[][] = [];
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push([...args]);
+      return JSON.stringify([{ ...issueBy(3, "maintainer"), comments: [], updatedAt: "2026-10-10T08:00:00Z" }]);
+    }) as unknown as typeof execFileSync;
+
+    const [issue] = listSandcastleIssues(run, "o/r", new Map(), quiet);
+
+    assert.ok(calls[0]!.includes("number,title,body,labels,comments,updatedAt"), calls[0]!.join(" "));
+    assert.ok(calls[0]!.at(-1)!.includes("updatedAt"), `the --jq shape drops updatedAt: ${calls[0]!.at(-1)}`);
+    assert.equal(issue!.updatedAt, "2026-10-10T08:00:00Z");
+  });
+
+  it("reads the issue's updatedAt in an issue scope", () => {
+    const calls: string[][] = [];
+    const viewed = { ...issueBy(146, "maintainer"), comments: [], state: "OPEN", url: "https://github.com/o/r/issues/146", updatedAt: "2026-10-10T08:00:00Z" };
+    const run = ((_cmd: string, args: readonly string[]) => {
+      calls.push([...args]);
+      return JSON.stringify(viewed);
+    }) as unknown as typeof execFileSync;
+
+    const [issue] = listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 });
+
+    assert.ok(calls[0]!.includes("number,title,body,labels,comments,state,url,updatedAt"), calls[0]!.join(" "));
+    assert.equal(issue!.updatedAt, "2026-10-10T08:00:00Z");
+  });
+
+  it("views the scope's one issue in an issue scope, keeping only its owner-approved comments", () => {
+    const viewed = { ...issueBy(146, "stranger"), state: "OPEN", url: "https://github.com/o/r/issues/146" };
+    const run = ((_cmd: string, args: readonly string[]) => {
+      if (args[0] === "issue" && args[1] === "view" && args[2] === "146") return JSON.stringify(viewed);
+      return JSON.stringify({ permission: "read", role_name: "read" });
+    }) as unknown as typeof execFileSync;
+
+    const issues = listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 });
+
+    assert.deepEqual(issues, [{ number: 146, title: "Add a thing", body: "## Summary", labels: ["Sandcastle"], comments: [] }]);
+  });
+
+  it("answers nothing for a closed issue in an issue scope", () => {
+    const viewed = { ...issueBy(146, "maintainer"), state: "CLOSED", url: "https://github.com/o/r/issues/146" };
+    const { run } = recordingGh([JSON.stringify(viewed)]);
+
+    assert.deepEqual(listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 }), []);
+  });
+
+  it("throws when an issue scope's number is a pull request", () => {
+    const viewed = { ...issueBy(146, "maintainer"), state: "OPEN", url: "https://github.com/o/r/pull/146" };
+    const { run } = recordingGh([JSON.stringify(viewed)]);
+
+    assert.throws(() => listSandcastleIssues(run, "o/r", new Map(), quiet, { kind: "issue", number: 146 }), /pull request/);
   });
 });
 
@@ -1003,4 +1074,95 @@ describe("openPullRequestsForSweep", () => {
       assert.equal(pr!.truncated, true);
     });
   }
+});
+
+// Who counts as "the repository owner" for the queue's approval and
+// label-origin checks (lib/queue.mts, #146): the same admin/maintain/write
+// permission ownerApproved already trusts a comment's author with.
+describe("pushAccess", () => {
+  it("is false for a null (deleted) actor, with no gh call", () => {
+    const calls: unknown[] = [];
+    const run = ((..._args: unknown[]) => {
+      calls.push(_args);
+      throw new Error("pushAccess shouldn't call gh for a null login");
+    }) as unknown as typeof execFileSync;
+
+    assert.equal(pushAccess(null, new Map(), new Set(), "o/r", run, () => {}), false);
+    assert.deepEqual(calls, []);
+  });
+
+  it("is true for a login with write permission", () => {
+    const run = (() => JSON.stringify({ permission: "write", role_name: "write" })) as unknown as typeof execFileSync;
+
+    assert.equal(pushAccess("maintainer", new Map(), new Set(), "o/r", run, () => {}), true);
+  });
+
+  it("is false for a login with only read permission", () => {
+    const run = (() => JSON.stringify({ permission: "read", role_name: "read" })) as unknown as typeof execFileSync;
+
+    assert.equal(pushAccess("reader", new Map(), new Set(), "o/r", run, () => {}), false);
+  });
+
+  it("is undefined, and warns, when the lookup fails", () => {
+    const run = (() => {
+      throw Object.assign(new Error("Command failed"), { stderr: "gh: Bad Gateway (HTTP 502)\n" });
+    }) as unknown as typeof execFileSync;
+    const warnings: string[] = [];
+
+    assert.equal(pushAccess("ghost", new Map(), new Set(), "o/r", run, (message) => warnings.push(message)), undefined);
+    assert.equal(warnings.length, 1);
+  });
+
+  it("looks a login up once across two calls that share a cache", () => {
+    let lookups = 0;
+    const run = (() => {
+      lookups++;
+      return JSON.stringify({ permission: "write", role_name: "write" });
+    }) as unknown as typeof execFileSync;
+    const canPush = new Map<string, boolean>();
+
+    pushAccess("maintainer", canPush, new Set(), "o/r", run, () => {});
+    pushAccess("maintainer", canPush, new Set(), "o/r", run, () => {});
+
+    assert.equal(lookups, 1);
+  });
+});
+
+describe("issueEvents", () => {
+  it("reads the issue's labeled, unlabeled and renamed events, oldest first, from its paginated events list", () => {
+    const labeled = { event: "labeled", actor: "owner", label: "Sandcastle", createdAt: "2026-10-01T00:00:00Z" };
+    const renamed = { event: "renamed", actor: null, label: null, createdAt: "2026-10-02T00:00:00Z" };
+    const { calls, run } = recordingGh([`${JSON.stringify(labeled)}\n${JSON.stringify(renamed)}\n`]);
+
+    const events = issueEvents(146, run, "o/r");
+
+    assert.deepEqual(events, [labeled, renamed]);
+    assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/issues/146/events"]);
+  });
+});
+
+describe("bodyEdits", () => {
+  it("reads every page of the issue's body edits", () => {
+    const first = { editor: "stranger", editedAt: "2026-10-01T00:00:00Z" };
+    const second = { editor: null, editedAt: "2026-10-02T00:00:00Z" };
+    const { run } = recordingGh([`${JSON.stringify(first)}\n${JSON.stringify(second)}\n`]);
+
+    assert.deepEqual(bodyEdits(146, run, "o/r"), [first, second]);
+  });
+
+  it("throws when the answer names no such issue", () => {
+    const run = (() => JSON.stringify({ data: { repository: { issue: null } } })) as unknown as typeof execFileSync;
+
+    assert.throws(() => bodyEdits(146, run, "o/r"), /no such issue|issue 146/i);
+  });
+});
+
+describe("addPullRequestLabel", () => {
+  it("adds the label to the pull request with gh pr edit, not gh issue edit", () => {
+    const { calls, run } = recordingGh();
+
+    addPullRequestLabel(42, "sandcastle:needs-human", run, "o/r");
+
+    assert.deepEqual(calls[0]!.args, ["pr", "edit", "42", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
+  });
 });

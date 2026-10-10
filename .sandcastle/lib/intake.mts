@@ -17,7 +17,15 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
 import { runRole } from "./agents.mts";
-import { BUILDING_LABEL, hooks, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, INTAKE_REFUSED_BATCHES_LIMIT, UMBRELLA_MARKER } from "./config.mts";
+import {
+  BUILDING_LABEL,
+  hooks,
+  INTAKE_BATCH_SIZE,
+  INTAKE_FAILED_RUNS_LIMIT,
+  INTAKE_REFUSED_BATCHES_LIMIT,
+  queueLabelOf,
+  UMBRELLA_MARKER,
+} from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { bodyBlockers, openPrReason } from "./gate.mts";
 import {
@@ -36,6 +44,7 @@ import {
   type SandcastleIssue,
 } from "./github.mts";
 import { intakePromptArgs } from "./prompts.mts";
+import { activeQueueScope } from "./queue.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
@@ -73,7 +82,8 @@ export type SplitGitHub = {
   addBlockedBy(child: number, blocker: number): void;
   // The original issue's native "blocked by" links in this repository.
   blockersOf(issue: number): number[];
-  // Removes Sandcastle from the original issue, which has become an umbrella.
+  // Removes the queue label (see queueLabel) from the original issue, which
+  // has become an umbrella.
   removeSandcastle(issue: number): void;
   comment(issue: number, body: string): void;
   // Adds and removes the mark (sandcastle:needs-human) that keeps the issue
@@ -82,6 +92,10 @@ export type SplitGitHub = {
   // child once the split has finished (see applySplit).
   markSplitting(issue: number): void;
   unmarkSplitting(issue: number): void;
+  // The label this run's queue scope approves issues with (lib/config.mts),
+  // so a split under a non-default scope (SANDCASTLE_LABEL) queues its
+  // children in that scope rather than GitHub Actions' (#146).
+  queueLabel(): string;
 };
 
 export const liveSplitGitHub: SplitGitHub = {
@@ -89,10 +103,13 @@ export const liveSplitGitHub: SplitGitHub = {
   addSubIssue,
   addBlockedBy,
   blockersOf: (issue) => sameRepoBlockers(issue),
-  removeSandcastle: (issue) => removeIssueLabel(issue, "Sandcastle"),
+  // The scope's own queue label (see queueLabel), which a split moves from
+  // the original to its children.
+  removeSandcastle: (issue) => removeIssueLabel(issue, queueLabelOf(activeQueueScope())),
   comment: commentOnIssue,
   markSplitting: (issue) => addIssueLabel(issue, "sandcastle:needs-human"),
   unmarkSplitting: (issue) => removeIssueLabel(issue, "sandcastle:needs-human"),
+  queueLabel: () => queueLabelOf(activeQueueScope()),
 };
 
 // The labels that mean intake has judged the issue, or a person has to act
@@ -324,7 +341,8 @@ function applySplit(
     }
     throw error;
   }
-  const labels = [...(verdict.bug ? ["Sandcastle", "bug"] : ["Sandcastle"]), "sandcastle:needs-human"];
+  const queueLabel = splitGithub.queueLabel();
+  const labels = [queueLabel, ...(verdict.bug ? ["bug"] : []), "sandcastle:needs-human"];
   const children: SplitChild[] = [];
   let sandcastleRemoved = false;
   // The title of the child being created, while its create call runs.

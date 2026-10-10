@@ -5,7 +5,7 @@
 // working it out from the git remote of wherever it runs.
 
 import { execFileSync } from "node:child_process";
-import { COPILOT_REVIEWER, SANDCASTLE_LABELS, type SandcastleLabel } from "./config.mts";
+import { COPILOT_REVIEWER, QUEUE_LABEL, SANDCASTLE_LABELS, type QueueScope, type SandcastleLabel } from "./config.mts";
 import type { CheckState, SweepPullRequest } from "./follow-up.mts";
 import { handBackReport, type HandBackReport } from "./report.mts";
 import { sh } from "./shell.mts";
@@ -26,6 +26,10 @@ export type GhIssue = {
   body: string;
   labels: string[];
   comments: { author: string; body: string }[];
+  // When GitHub last changed the issue, a label add or removal included;
+  // lib/queue.mts#loadQueue's round cache keys on it. Absent from a stub
+  // that doesn't need it.
+  updatedAt?: string;
 };
 
 export type SandcastleIssue = Omit<GhIssue, "comments"> & {
@@ -60,21 +64,14 @@ export function ownerApproved(
   warn: (message: string) => void = console.error,
   failed: Set<string> = new Set(),
 ): SandcastleIssue {
-  const trusted = (author: string): boolean => {
-    const cached = canPush.get(author);
-    if (cached !== undefined) return cached;
-    if (failed.has(author)) return false;
-    const allowed = hasWriteAccess(author, repo, run, warn);
-    if (allowed === undefined) failed.add(author);
-    else canPush.set(author, allowed);
-    return allowed ?? false;
-  };
+  const trusted = (author: string): boolean => pushAccess(author, canPush, failed, repo, run, warn) ?? false;
   return {
     number: issue.number,
     title: issue.title,
     body: issue.body,
     labels: issue.labels,
     comments: issue.comments.filter((comment) => trusted(comment.author)).map((comment) => comment.body),
+    ...(issue.updatedAt === undefined ? {} : { updatedAt: issue.updatedAt }),
   };
 }
 
@@ -104,35 +101,82 @@ function hasWriteAccess(
     return PUSH_PERMISSIONS.has(answer.permission) || PUSH_PERMISSIONS.has(answer.role_name);
   } catch (error) {
     if (/is not a user \(HTTP 404\)/.test(String(error))) return false;
-    warn(`  ⚠ Couldn't read ${login}'s permission on ${repo}, so their comments are left out this time: ${error}`);
+    warn(`  ⚠ Couldn't read ${login}'s permission on ${repo}, so they aren't trusted this time: ${error}`);
     return undefined;
   }
 }
 
-// Each comment author's answer from ownerApproved, kept for the whole run so
-// no author is looked up twice, however many issues or rounds they comment on.
-// The trade-off: write access revoked partway through a run isn't seen until
-// the next run, so stop the run to cut someone off at once.
-const commenterCanPush = new Map<string, boolean>();
+// Each login's answer from pushAccess, kept for the whole run so no comment
+// author or label actor is looked up twice, however many issues or rounds
+// they show up on. The trade-off: write access revoked partway through a run
+// isn't seen until the next run, so stop the run to cut someone off at once.
+const writeAccessByLogin = new Map<string, boolean>();
 
-// The open Sandcastle issues, with every comment dropped but those from
-// authors with write access. The gate calls this once per round: `canPush`
-// carries authors' answers across the run, and each call starts a fresh set
-// of failed lookups, so a failure is retried next round.
+// Tri-state: whether `login` has admin, maintain or write permission on
+// `repo` (see hasWriteAccess) — who counts as "the repository owner"
+// throughout the queue's approval and label-origin checks (lib/queue.mts),
+// and the same check ownerApproved uses for a comment's author. A `null`
+// login (a deleted account) is a definite no, with no gh call. `canPush` and
+// `failed` share one cache and one round's failures with whichever caller
+// passes them in, so a login asked about from two places, such as a comment
+// and a label event, is looked up once (#146).
+export function pushAccess(
+  login: string | null,
+  canPush: Map<string, boolean> = writeAccessByLogin,
+  failed: Set<string> = new Set(),
+  repo: string = repoName(),
+  run: typeof execFileSync = execFileSync,
+  warn: (message: string) => void = console.error,
+): boolean | undefined {
+  if (login === null) return false;
+  const cached = canPush.get(login);
+  if (cached !== undefined) return cached;
+  if (failed.has(login)) return undefined;
+  const allowed = hasWriteAccess(login, repo, run, warn);
+  if (allowed === undefined) failed.add(login);
+  else canPush.set(login, allowed);
+  return allowed;
+}
+
+// The open issues in `scope` (lib/config.mts#QueueScope), with every comment
+// dropped but those from authors with write access: every open issue
+// carrying the scope's label, or the scope's one issue while it's open.
+// Callers read the queue through lib/queue.mts#loadQueue, which also checks
+// who queued each issue. `canPush` carries authors' answers across the run;
+// `failed` holds one round's failed lookups, so a failure is retried next
+// round, and loadQueue shares it with its own owner checks.
 export function listSandcastleIssues(
   run: typeof execFileSync = execFileSync,
   repo: string = repoName(),
-  canPush: Map<string, boolean> = commenterCanPush,
+  canPush: Map<string, boolean> = writeAccessByLogin,
   warn: (message: string) => void = console.error,
+  scope: QueueScope = { kind: "label", label: QUEUE_LABEL },
+  failed: Set<string> = new Set(),
 ): SandcastleIssue[] {
-  const issues = JSON.parse(
-    ghWithStderr(run, [
-      "issue", "list", "--repo", repo, "--state", "open", "--label", "Sandcastle", "--limit", "1000",
-      "--json", "number,title,body,labels,comments",
-      "--jq", "[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}]}]",
-    ]),
-  ) as GhIssue[];
-  const failed = new Set<string>();
+  const shape = "{number, title, body, labels: [.labels[].name], comments: [.comments[] | {author: .author.login, body}], updatedAt}";
+  let issues: GhIssue[];
+  if (scope.kind === "label") {
+    issues = JSON.parse(
+      ghWithStderr(run, [
+        "issue", "list", "--repo", repo, "--state", "open", "--label", scope.label, "--limit", "1000",
+        "--json", "number,title,body,labels,comments,updatedAt",
+        "--jq", `[.[] | ${shape}]`,
+      ]),
+    ) as GhIssue[];
+  } else {
+    const viewed = JSON.parse(
+      ghWithStderr(run, [
+        "issue", "view", String(scope.number), "--repo", repo,
+        "--json", "number,title,body,labels,comments,state,url,updatedAt",
+        "--jq", `${shape} + {state, url}`,
+      ]),
+    ) as GhIssue & { state: string; url?: string };
+    const { state, url, ...issue } = viewed;
+    // SANDCASTLE_ISSUE names an issue to build, never a PR: fail rather than
+    // treat a PR as a queued issue, if gh ever answers for one.
+    if (url?.includes("/pull/")) throw new Error(`#${scope.number} is a pull request, not an issue.`);
+    issues = state === "OPEN" ? [issue] : [];
+  }
   return issues.map((issue) => ownerApproved(issue, repo, run, canPush, warn, failed));
 }
 
@@ -651,6 +695,19 @@ export function removeIssueLabel(
   ghWithStderr(run, ["issue", "edit", String(number), "--repo", repo, "--remove-label", label]);
 }
 
+// Adds `label` to the pull request `number`: gh issue edit refuses a PR
+// number, so restoring a PR-level hand-back label someone other than the
+// repository owner removed (lib/follow-up.mts#sweepPullRequests, #146) needs
+// its own gh pr edit call.
+export function addPullRequestLabel(
+  number: number,
+  label: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): void {
+  ghWithStderr(run, ["pr", "edit", String(number), "--repo", repo, "--add-label", label]);
+}
+
 // The names of the labels the issue `number` carries now, read fresh rather
 // than from the round's listSandcastleIssues snapshot.
 export function issueLabels(
@@ -702,6 +759,100 @@ export function labelTimeline(
       "--jq", '.[] | select(.event == "labeled" or .event == "unlabeled") | {event, label: .label.name, createdAt: .created_at} | @json',
     ]),
   ) as TimelineLabelEvent[];
+}
+
+// One "labeled", "unlabeled" or "renamed" event from an issue's or PR's REST
+// events list (PRs share it). Unlike labelTimeline, this names who made it:
+// lib/queue.mts#approval and #labelOriginFixes need that to tell the
+// repository owner's own labelling from anyone else's (#146). `actor` is
+// null for a deleted account; `label` is null on a renamed event, which
+// carries no label.
+export type IssueEvent = { event: "labeled" | "unlabeled" | "renamed"; actor: string | null; label: string | null; createdAt: string };
+
+// Every labeled, unlabeled and renamed event on the issue or PR `number`,
+// oldest first (GET repos/{owner}/{repo}/issues/{n}/events, --paginate).
+export function issueEvents(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): IssueEvent[] {
+  return jsonLines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${number}/events`,
+      "--jq",
+      '.[] | select(.event == "labeled" or .event == "unlabeled" or .event == "renamed")' +
+        " | {event, actor: .actor.login, label: .label.name, createdAt: .created_at} | @json",
+    ]),
+  ).map((event) => {
+    if (!isIssueEvent(event)) throw new Error(`unexpected event on #${number}: ${JSON.stringify(event)}`);
+    return event;
+  });
+}
+
+// An event approval and labelOriginFixes can trust the shape of: one that
+// doesn't fit is thrown on rather than read as nobody's.
+function isIssueEvent(value: unknown): value is IssueEvent {
+  const event = value as Partial<Record<keyof IssueEvent, unknown>> | null;
+  return (
+    typeof event === "object" && event !== null &&
+    (event.event === "labeled" || event.event === "unlabeled" || event.event === "renamed") &&
+    (typeof event.actor === "string" || event.actor === null) &&
+    (typeof event.label === "string" || event.label === null) &&
+    typeof event.createdAt === "string"
+  );
+}
+
+// One edit to an issue's or PR's body, from GraphQL issue.userContentEdits.
+// `editor` is null for a deleted account. The oldest entry is the body's
+// creation, dated before any label, so lib/queue.mts#approval's ">="
+// comparison never mistakes it for an edit made after the owner queued the
+// issue.
+export type ContentEdit = { editor: string | null; editedAt: string };
+
+// Every edit to the issue `number`'s body, every page (GraphQL
+// issue.userContentEdits, --paginate with $endCursor), in GitHub's order:
+// lib/queue.mts#approval compares each edit's time, not its position. Throws
+// when the answer names no such issue, or any edit doesn't fit ContentEdit.
+export function bodyEdits(
+  number: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): ContentEdit[] {
+  const [owner, name] = repo.split("/") as [string, string];
+  return jsonLines(
+    ghWithStderr(run, [
+      "api", "graphql", "--paginate", "-f", `query=${BODY_EDITS_QUERY}`, "-f", `owner=${owner}`, "-f", `name=${name}`,
+      "-F", `number=${number}`,
+      // A missing issue prints null, which the check below throws on, rather
+      // than nothing, which would read as an issue nobody has edited.
+      "--jq",
+      ".data.repository.issue | if . == null then null | @json" +
+        " else .userContentEdits.nodes[] | {editor: .editor.login, editedAt} | @json end",
+    ]),
+  ).map((edit) => {
+    if (!isContentEdit(edit)) throw new Error(`GitHub's answer names no issue ${number}'s body edits: ${JSON.stringify(edit)}`);
+    return edit;
+  });
+}
+
+const BODY_EDITS_QUERY = `query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      userContentEdits(first: 100, after: $endCursor) {
+        nodes { editedAt editor { login } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}`;
+
+function isContentEdit(value: unknown): value is ContentEdit {
+  const edit = value as Partial<Record<keyof ContentEdit, unknown>> | null;
+  return (
+    typeof edit === "object" && edit !== null &&
+    (typeof edit.editor === "string" || edit.editor === null) &&
+    typeof edit.editedAt === "string"
+  );
 }
 
 // One comment, with when it was posted, so markerCommentsSince can tell
