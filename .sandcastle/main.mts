@@ -60,7 +60,7 @@ import { critiqueRound } from "./lib/critique.mts";
 import { gateIssues } from "./lib/gate.mts";
 import { cacheHostLogin, ensureLabels } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
-import { planRound } from "./lib/plan.mts";
+import { planRound, resolveRoles } from "./lib/plan.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
@@ -140,18 +140,28 @@ try {
     }
 
     // planRound keeps only ids from the ready list, so the lookup can't miss.
+    // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
+    // planner's raw roles field, resolved to a safe list by resolveRoles
+    // (lib/plan.mts), which falls back to every optional role when it's
+    // missing or invalid.
     const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
-    const picks = planned.map((issue) => readyById.get(issue.id)!);
+    const picks = planned.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
 
     // -----------------------------------------------------------------------
     // Phase 1b: Critique
     // -----------------------------------------------------------------------
+    // critiqueRound only filters the picks, so its SandcastleIssue[] return
+    // type is narrower than what it's given; put each kept pick's roles back
+    // by issue number rather than widen the critique's own types for a field
+    // it never reads.
+    const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
     const pickedNumbers = new Set(picks.map((issue) => issue.number));
-    const issues = await critiqueRound({
+    const critiqued = await critiqueRound({
       picks,
       inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
       unpicked: ready.filter((issue) => !pickedNumbers.has(issue.number)),
     });
+    const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
 
     if (issues.length === 0) {
       // Each deferral added a "blocked by" link, so the next round's gate

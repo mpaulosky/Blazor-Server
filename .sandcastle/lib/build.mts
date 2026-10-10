@@ -8,7 +8,15 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
-import { BASE_BRANCH, BUILD_FAILED_MARKER, BUILDING_LABEL, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import {
+  BASE_BRANCH,
+  BUILD_FAILED_MARKER,
+  BUILDING_LABEL,
+  copyToWorktree,
+  hooks,
+  PUBLISH_RETRY_ATTEMPTS,
+  type OptionalRole,
+} from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import { claimBuildingLabel, releaseBuildingLabel } from "./building.mts";
 import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
@@ -39,11 +47,18 @@ export { UncountedStopError };
 // PUBLISH_RETRY_ATTEMPTS times in all, with backoff, before giving up. Any
 // other failure, such as a push that doesn't fast-forward, isn't retried: a
 // person needs to look at it regardless.
+//
+// `docsFailed` is true when the planner picked the scribe for this issue and
+// its run failed. Unlike an architect, tester, backend or UI failure, that
+// doesn't stop the pipeline (see "When a role fails" in
+// docs/plans/sandcastle-workflow.md): the PR still publishes, with a note
+// that the documentation step failed.
 export async function publish(
   issue: SandcastleIssue,
   branch: string,
   commit: string,
   reviewed: boolean,
+  docsFailed: boolean,
   push: (branch: string, commit: string) => void = (pushBranch, pushCommit) =>
     void git("push", "--quiet", "origin", `${pushCommit}:refs/heads/${pushBranch}`),
   createPullRequest: (branch: string, title: string, body: string) => string = openPullRequest,
@@ -101,6 +116,13 @@ function developerFailureComment(failure: string, branch: string): string {
 }
 
 
+// An issue with the optional roles the planner picked for it (see
+// resolveRoles in lib/plan.mts): architect, UI developer and/or scribe, each
+// run only when listed, alongside the tester, backend developer and
+// reviewer, which always run (see "Phase 6: Build" in
+// docs/plans/sandcastle-workflow.md).
+export type RoledIssue = SandcastleIssue & { roles: readonly OptionalRole[] };
+
 // What buildIssue needs from outside the pipeline; tests pass stubs.
 export type BuildHost = {
   createSandbox(branch: string): Promise<sandcastle.Sandbox>;
@@ -126,6 +148,12 @@ export type BuildHost = {
   // red-gated or thrown-out build doesn't leave the issue held back forever,
   // and a build that stood aside never removes another run's label.
   unmarkBuilding(issueNumber: number): void;
+  // The body of the architect's latest design note comment on this issue
+  // (see DESIGN_MARKER in lib/config.mts), so a re-run's architect builds on
+  // its own earlier decisions instead of starting blind. .sandcastle/work/ is
+  // gitignored, so a fresh sandbox may not have the earlier run's file.
+  // Undefined when the architect hasn't posted one yet.
+  latestDesignNote(issueNumber: number): string | undefined;
   // Whether what the commits from `base` to `commit` publish (see
   // lib/scan.mts) holds one of the sandbox's secrets or a token-shaped string.
   leaksSecret(base: string, commit: string): boolean;
@@ -170,6 +198,9 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
+  latestDesignNote: () => {
+    throw new Error("Not implemented");
+  },
   markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
   unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
   leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
@@ -199,7 +230,7 @@ const liveHost: BuildHost = {
 // closes a sandbox on the worktree that run is using (worktreePathFor names
 // it after the branch alone).
 export async function buildIssue(
-  issue: SandcastleIssue,
+  issue: RoledIssue,
   branch: string,
   base: string,
   host: BuildHost = liveHost,
@@ -233,7 +264,7 @@ type BuildResult = { commits: { sha: string }[]; prUrl: string | undefined; publ
 // buildIssue's work once the issue is marked: everything from creating the
 // sandbox to closing it.
 async function buildMarkedIssue(
-  issue: SandcastleIssue,
+  issue: RoledIssue,
   branch: string,
   base: string,
   host: BuildHost,
@@ -365,7 +396,7 @@ async function buildMarkedIssue(
     // pushed) or any other git or gh failure. Whatever still fails needs a
     // person, so the issue gets git's or gh's error rather than only the run log.
     try {
-      const prUrl = await host.publish(issue, branch, gated, reviewed);
+      const prUrl = await host.publish(issue, branch, gated, reviewed, false);
       return { commits, prUrl, publishFailed: false };
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);

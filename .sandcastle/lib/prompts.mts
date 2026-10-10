@@ -3,6 +3,7 @@
 // lost every comment but those from authors with write access (see
 // ownerApproved).
 
+import type { PromptArgs } from "@ai-hero/sandcastle";
 import type { Checkpoint } from "./checkpoint.mts";
 import { BASE_BRANCH } from "./config.mts";
 import type { SandcastleIssue } from "./github.mts";
@@ -25,6 +26,13 @@ export function issuePromptArgs(issue: SandcastleIssue, branch: string) {
 // implementation, plus the red gate's output and which checkpoint it's at.
 export function gateFixerPromptArgs(issue: SandcastleIssue, branch: string, checkpoint: Checkpoint, gateOutput: string) {
   return { ...issuePromptArgs(issue, branch), CHECKPOINT: String(checkpoint), GATE_OUTPUT: gateOutput };
+}
+
+// The architect also gets the body of its own latest design note comment
+// (see DESIGN_MARKER in lib/config.mts), so a re-run builds on its earlier
+// decisions instead of starting blind.
+export function architectPromptArgs(issue: SandcastleIssue, branch: string, designNote: string | undefined): PromptArgs {
+  throw new Error("Not implemented");
 }
 
 // The host names branches and has already dropped issues with an open PR, so

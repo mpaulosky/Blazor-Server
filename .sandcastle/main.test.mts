@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 // Extracts the fenced ```bash ... ``` Commands block from CLAUDE.md.
 const commandsBlock = () => {
@@ -42,5 +45,19 @@ describe("CLAUDE.md Commands block", () => {
 describe("main.mts header", () => {
   it("points the usage note at pnpm run sandcastle", () => {
     assert.match(usageNote(), /pnpm run sandcastle/);
+  });
+});
+
+// Covers "`.sandcastle/work/` is gitignored" from issue #72: the architect's
+// design note and other inter-role notes live there (lib/build.mts), and
+// must never reach a commit. Checked with git itself, rather than by
+// pattern-matching .sandcastle/.gitignore's text, since git's own matching
+// rules (trailing slashes, anchoring) are what actually decide this.
+describe(".sandcastle/.gitignore", () => {
+  it("ignores .sandcastle/work/, the folder architect design notes and other inter-role files live in", () => {
+    assert.doesNotThrow(
+      () => execFileSync("git", ["check-ignore", "--quiet", ".sandcastle/work/72/design.md"], { cwd: repoRoot }),
+      "expected git to ignore .sandcastle/work/72/design.md",
+    );
   });
 });

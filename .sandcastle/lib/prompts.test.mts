@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { withSharedRules } from "./agents.mts";
 import type { SandcastleIssue } from "./github.mts";
-import { critiquePromptArgs, gateFixerPromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
+import { architectPromptArgs, critiquePromptArgs, gateFixerPromptArgs, issuePromptArgs, plannerPromptArgs } from "./prompts.mts";
 
 // What ownerApproved (see github.test.mts) leaves of an issue: only the
 // comments of authors with write access.
@@ -69,6 +69,26 @@ describe("gateFixerPromptArgs", () => {
     assert.equal(args.BRANCH, "feature/3-add-a-thing");
     assert.equal(args.CHECKPOINT, "2");
     assert.equal(args.GATE_OUTPUT, gateOutput);
+  });
+});
+
+// Covers "After an architect run, the issue has a comment with the design
+// note..." (issue #72): on a re-run the architect needs that earlier note
+// back, since .sandcastle/work/ is gitignored and may not have survived into
+// a fresh sandbox (see lib/build.mts and DESIGN_MARKER in lib/config.mts).
+describe("architectPromptArgs", () => {
+  it("preserves issue context alongside the design note", () => {
+    const args = architectPromptArgs(issue, "feature/3-add-a-thing", "## Design\n\nUse a Result<T>.");
+
+    assert.equal(args.TASK_ID, "3");
+    assert.equal(args.BRANCH, "feature/3-add-a-thing");
+    assert.equal(args.DESIGN_NOTE, "## Design\n\nUse a Result<T>.");
+  });
+
+  it("tells the architect it has no earlier design note on a first run", () => {
+    const args = architectPromptArgs(issue, "feature/3-add-a-thing", undefined);
+
+    assert.equal(args.DESIGN_NOTE, "(no earlier design note)");
   });
 });
 
