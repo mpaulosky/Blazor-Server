@@ -647,7 +647,7 @@ describe("buildIssue optional roles", () => {
     const result = await buildIssue(withRoles(["scribe"]), branch, base, buildHost);
 
     assert.deepEqual(steps.filter((step) => !step.startsWith("gate:")), [
-      "tester", "backend", "scribe", "reviewer", "publish docs-failed",
+      "tester", "backend", "scribe", "reviewer", "publish docs-failed", "close",
     ]);
     assert.equal(result.prUrl, "https://github.com/o/r/pull/1");
     assert.deepEqual(recordBuildFailureCalls, []);
