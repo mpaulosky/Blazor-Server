@@ -680,6 +680,10 @@ function sandboxFake(
       if (ancestry !== null) {
         return { stdout: "", stderr: "", exitCode: history.get(ancestry[2]!)?.has(ancestry[1]!) === true ? 0 : 1 };
       }
+      if (command === "git merge --abort") {
+        mergeConflicted = false;
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
       if (command.startsWith("git merge ")) {
         if ((options.mergeConflictFiles?.length ?? 0) > 0) {
           mergeConflicted = true;
@@ -1629,6 +1633,32 @@ describe("runPass's red CI decisions", () => {
     assert.ok(mergeIndex !== -1, "the branch was merged with main");
     assert.ok(gateIndex !== -1, "the gate ran");
     assert.ok(mergeIndex < gateIndex, "the merge happened before the gate decided red CI");
+    assert.equal(outcome.kind, "passed");
+    assert.equal(calls.push.length, 1);
+  });
+
+  // #259's follow-up review: GitHub's conflicted flag can be stale by the
+  // time this pass fetches main, so `mergeFirst`'s merge can conflict even
+  // though the PR isn't flagged as conflicted. Gating the half-merged tree
+  // that leaves behind would judge conflict markers, not the branch, so the
+  // pass must abort back to the bare head and gate that instead.
+  it("aborts a merge that conflicts despite GitHub's conflicted flag, and gates the bare head instead", async () => {
+    const sandbox = sandboxFake({ gateExitCodes: [0, 0], followUpJson: "[]", mergeConflictFiles: ["src/A.cs"] });
+    const { passHost, calls } = passHostFake({
+      threads: [],
+      containsBase: false,
+      sandbox,
+      checks: [redCheck({ name: "Build Solution" })],
+    });
+
+    const outcome = await runPass(passTarget({ conflicted: false, reasons: ["check Build Solution is red"] }), issue, BASE, passHost);
+
+    const firstMergeIndex = sandbox.steps.findIndex((step) => step.startsWith("git merge "));
+    const abortIndex = sandbox.steps.findIndex((step) => step === "git merge --abort");
+    const gateIndex = sandbox.steps.findIndex((step) => step === "scripts/gate.sh 2>&1");
+    assert.ok(firstMergeIndex !== -1 && abortIndex !== -1 && gateIndex !== -1, sandbox.steps.join("\n"));
+    assert.ok(firstMergeIndex < abortIndex, "the conflicted merge was aborted");
+    assert.ok(abortIndex < gateIndex, "the gate ran on the bare head, after the abort, not on the half-merged tree");
     assert.equal(outcome.kind, "passed");
     assert.equal(calls.push.length, 1);
   });

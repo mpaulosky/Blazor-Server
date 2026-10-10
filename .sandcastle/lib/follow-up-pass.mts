@@ -905,11 +905,23 @@ async function passOnMarkedIssue(
     // to be clean; `tryMerge` falls back to the conflict path if it isn't. A
     // conflicted PR can't be merged without the role, so its gate still runs
     // on the bare head, as it always has, and the merge happens after.
-    const mergeFirst = needsMerge && !target.conflicted;
+    let mergeFirst = needsMerge && !target.conflicted;
     if (mergeFirst) {
       const attempt = await tryMerge();
       if (attempt.failure !== undefined) return stop("merging main into the branch failed", attempt.failure);
-      ({ merged, hostMerge, mergeNote } = attempt);
+      if (attempt.merged === "conflicts") {
+        // GitHub's mergeability can be stale by the time this pass fetches
+        // main: the conflict is real, but the worktree it leaves behind is
+        // mid-merge, with conflict markers and no commit at all. Gating that
+        // tree would judge nonsense (#259), so abort back to the bare head
+        // and fall through to the conflicted-PR order below: gate the head,
+        // then merge after, leaving the conflict for the follow-up role.
+        const abort = await sandbox.exec("git merge --abort");
+        if (abort.exitCode !== 0) return stop("aborting the conflicted merge failed", `${abort.stdout}\n${abort.stderr}`);
+        mergeFirst = false;
+      } else {
+        ({ merged, hostMerge, mergeNote } = attempt);
+      }
     }
 
     // Red CI is decided by the gate (see planRedCi), run on the commit CI
