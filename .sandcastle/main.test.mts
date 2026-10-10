@@ -12,6 +12,7 @@ const commandsBlock = () => {
   const fenceStart = claudeMd.indexOf("```bash", start);
   assert.notEqual(fenceStart, -1, "Commands section has no ```bash block");
   const fenceEnd = claudeMd.indexOf("```", fenceStart + "```bash".length);
+  assert.notEqual(fenceEnd, -1, "Commands ```bash block is not closed");
   return claudeMd.slice(fenceStart, fenceEnd);
 };
 
@@ -34,7 +35,7 @@ describe("package.json scripts", () => {
 
 describe("CLAUDE.md Commands block", () => {
   it("lists pnpm run sandcastle alongside the other commands", () => {
-    assert.match(commandsBlock(), /^pnpm run sandcastle\b/m);
+    assert.match(commandsBlock(), /^pnpm run sandcastle(?=\s|$)/m);
   });
 });
 
