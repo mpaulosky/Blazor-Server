@@ -120,8 +120,9 @@ that human resolves them. That is deliberate: a human who comments has joined th
    line and in the pass summary, not on the thread. A `declined` verdict with `"invalid": true` resolves as `INVALID`, any other as `WONT_FIX`.
 
 Only a conflict with `main` (`DIRTY`), an unresolved bot thread or a red check starts a pass; an owner thread is answered only alongside one of them. A pass merges `main` in
-only for a conflict: a PR that's merely behind is updated by the sweep once it's settled. When `main` merges in cleanly and nothing is left for the role, the follow-up role
-doesn't run: the host gates and pushes the merge itself.
+for a conflict, and also for a PR that's merely behind main when it has a settled red check (see **Red CI** below, which the gate needs the merge for); a behind PR with no
+red check is left to the sweep's update-branch once it's settled. When `main` merges in cleanly and nothing is left for the role, the follow-up role doesn't run: the host
+gates and pushes the merge itself.
 
 **Thread rules.** Follow-up acts on bot threads (Copilot, CodeQL) and the repository owner's threads, but resolves only bot threads. Threads anyone else opens never reach the role; they
 stay open for the owner, and the job summary lists them. The owner resolves their own threads, because that's their sign-off. It may decline a
