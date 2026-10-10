@@ -1,7 +1,7 @@
-// Hand-back helpers shared by the build pipeline, intake and PR follow-up:
-// the comment text for a failed build attempt, and giving up on an issue
-// after BUILD_FAILURE_CAP of them. See "Giving up and telling the human" in
-// docs/plans/sandcastle-workflow.md.
+// The build pipeline's failed attempts: the comment each one posts, and
+// giving up on an issue after BUILD_FAILURE_CAP of them through the hand-back
+// that intake and PR follow-up share (lib/github.mts#handBack). See "Giving up
+// and telling the human" in docs/plans/sandcastle-workflow.md.
 
 import { execFileSync } from "node:child_process";
 import { BUILD_FAILED_MARKER, BUILD_FAILURE_CAP } from "./config.mts";
@@ -48,14 +48,12 @@ function quote(text: string): string {
     .join("\n");
 }
 
-// Records this failed build attempt on the issue `issueNumber`: posts
-// `buildFailedComment` when it's under the cap, or on the
-// BUILD_FAILURE_CAPth attempt since `sandcastle:needs-human` was last
-// removed, hands the issue back instead (see lib/github.mts#handBack) with
-// `needsHumanComment` quoting every failure. `priorFailures` are this
-// issue's already-posted qualifying marker comments (see
-// lib/github.mts#markerCommentsSince), oldest first; this attempt is
-// `priorFailures.length + 1`.
+// Records a failed build attempt on the issue `issueNumber`. `priorFailures`
+// are the bodies of the attempts already counted since `sandcastle:needs-human`
+// was last removed (see lib/github.mts#markerCommentsSince), oldest first.
+// Under the cap it posts `buildFailedComment`; the attempt that reaches
+// BUILD_FAILURE_CAP hands the issue back instead, with `needsHumanComment`
+// quoting every failure.
 export function recordFailedAttempt(
   issueNumber: number,
   branch: string,

@@ -185,13 +185,11 @@ export function ensureLabels(
   }
 }
 
-// One "labeled" or "unlabeled" event from an issue's or PR's timeline, the
-// GraphQL/REST events gh api exposes under .../timeline or .../events.
+// One "labeled" or "unlabeled" event from an issue's or PR's REST timeline.
 export type TimelineLabelEvent = { event: "labeled" | "unlabeled"; label: string; createdAt: string };
 
-// One comment, with when it was posted. Unlike SandcastleIssue's comments
-// (owner-only, see ownerApproved), this keeps every comment: a marker comment
-// is the host's own, not a role's or a stranger's.
+// One comment, with when it was posted, so markerCommentsSince can tell
+// which side of a label's removal it falls on.
 export type TimestampedComment = { body: string; createdAt: string };
 
 // The comments in `comments` that carry `marker`, posted after `label` was

@@ -98,9 +98,10 @@ function developerFailureComment(failure: string, branch: string): string {
 // Thrown by a role run that stopped because of the Claude usage limit or the
 // run's time budget, not because the role itself failed. buildIssue rethrows
 // it from any role, the reviewer's included, rather than treating it as a
-// failed build attempt or publishing work a role didn't get to finish (see "Giving up and telling the human" in
-// docs/plans/sandcastle-workflow.md): a round that runs out of usage or time
-// must not spend one of the issue's two attempts for it.
+// failed build attempt or publishing work a role didn't get to finish: a round
+// that runs out of usage or time must not spend one of the issue's
+// BUILD_FAILURE_CAP attempts (see "Giving up and telling the human" in
+// docs/plans/sandcastle-workflow.md).
 export class UncountedStopError extends Error {}
 
 // What buildIssue needs from outside the pipeline; tests pass stubs.
@@ -155,8 +156,6 @@ const liveHost: BuildHost = {
   },
   commitsAhead,
   commentOnIssue,
-  leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
-  publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   recordBuildFailure: (issueNumber, branch, detail) =>
     recordFailedAttempt(
       issueNumber,
@@ -164,6 +163,8 @@ const liveHost: BuildHost = {
       detail,
       markerComments(issueNumber, "sandcastle:needs-human", BUILD_FAILED_MARKER).map((comment) => comment.body),
     ),
+  leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
+  publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
   worktreeProblems,
   log: console.log,
