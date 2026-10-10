@@ -265,6 +265,41 @@ describe("decide", () => {
     assert.deepEqual(result, { action: "needs-pass", reasons: ["it has merge conflicts"] });
   });
 
+  // GitHub runs no pull_request workflows on a PR it can't merge, so a head
+  // pushed while the PR conflicts gets no checks at all.
+  it("flags a dirty PR with no checks reported as needing a follow-up pass, rather than waiting on checks", () => {
+    const result = decide(pr({ mergeStateStatus: "DIRTY", checks: [] }), NOW);
+
+    assert.deepEqual(result, { action: "needs-pass", reasons: ["it has merge conflicts"] });
+  });
+
+  it("flags a dirty PR whose checks are still running as needing a follow-up pass", () => {
+    const result = decide(
+      pr({ mergeStateStatus: "DIRTY", checks: [{ name: "build", completed: false, green: false, completedAt: null }] }),
+      NOW,
+    );
+
+    assert.deepEqual(result, { action: "needs-pass", reasons: ["it has merge conflicts"] });
+  });
+
+  // Every update-branch makes a new head, so Copilot's threads usually sit on
+  // an earlier commit; they still need a pass whatever Copilot does next.
+  it("flags an unresolved bot thread from a review of an earlier commit, without waiting on Copilot", () => {
+    const completedAt = new Date(NOW - 61 * 60 * 1000).toISOString();
+    const requestedAt = new Date(NOW - 30 * 60 * 1000).toISOString();
+    const result = decide(
+      pr({
+        reviews: [{ author: COPILOT_REVIEWER, commitOid: "0".repeat(40) }],
+        threads: [{ resolved: false, byBot: true }],
+        checks: [{ name: "build", completed: true, green: true, completedAt }],
+        copilotRequestedAt: [requestedAt],
+      }),
+      NOW,
+    );
+
+    assert.deepEqual(result, { action: "needs-pass", reasons: ["1 unresolved bot thread(s)"] });
+  });
+
   it("flags a red check as needing a follow-up pass while Copilot's review is still pending", () => {
     const result = decide(
       pr({

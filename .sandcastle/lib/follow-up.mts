@@ -116,24 +116,29 @@ export type SweepDecision =
   | { action: "leave"; reason: string };
 
 // What the sweep does about a PR that isn't skipped (see sweepSkipReason):
-// wait while CI is still running, flag one with conflicts or a red check for
-// a later pass, wait while Copilot's review is in flight, ask Copilot again
-// once CI has been done for a while with no review or pending request,
-// update a settled PR that's only behind main, flag one with an unresolved
-// bot thread, or leave a clean or merge-blocked one alone.
+// flag one with conflicts for a later pass at once, wait while CI is still
+// running, flag one with a red check or an unresolved bot thread, wait while
+// Copilot's review is in flight, ask Copilot again once CI has been done for
+// a while with no review or pending request, update a settled PR that's only
+// behind main, or leave a clean or merge-blocked one alone.
 export function decide(pr: SweepPullRequest, now: number): SweepDecision {
+  // GitHub runs no pull_request workflows on a PR it can't merge, so a head
+  // pushed while it conflicts gets no checks: waiting on them would hide the
+  // conflict for good.
+  if (pr.mergeStateStatus === "DIRTY") {
+    const red = pr.checks.filter((check) => check.completed && !check.green).map((check) => `check ${check.name} is red`);
+    return { action: "needs-pass", reasons: ["it has merge conflicts", ...red] };
+  }
   if (pr.checks.length === 0) return { action: "wait", reason: "no checks have reported" };
   if (pr.checks.some((check) => !check.completed)) return { action: "wait", reason: "checks are still running" };
 
-  // Conflicts and red checks don't depend on Copilot's review, so they're
-  // flagged before waiting on it: GitHub can drop the one re-request
-  // (Copilot's review budget, ADR 0004), and a PR waiting on a review that
-  // never comes would otherwise hide them for good.
-  const reasons: string[] = [];
-  if (pr.mergeStateStatus === "DIRTY") reasons.push("it has merge conflicts");
-  for (const check of pr.checks) {
-    if (!check.green) reasons.push(`check ${check.name} is red`);
-  }
+  // Red checks and bot threads don't depend on Copilot reviewing this head,
+  // so they're flagged before waiting on it: GitHub can drop the one
+  // re-request (Copilot's review budget, ADR 0004), and every update-branch
+  // makes a head Copilot hasn't seen, so waiting would hide them for good.
+  const reasons = pr.checks.filter((check) => !check.green).map((check) => `check ${check.name} is red`);
+  const botThreads = pr.threads.filter((thread) => !thread.resolved && thread.byBot).length;
+  if (botThreads > 0) reasons.push(`${botThreads} unresolved bot thread(s)`);
   if (reasons.length > 0) return { action: "needs-pass", reasons };
 
   // A completed check with no time can't say when CI finished, so it leaves
@@ -153,9 +158,6 @@ export function decide(pr: SweepPullRequest, now: number): SweepDecision {
     if (now - ciDoneAt > COPILOT_REREQUEST_AFTER_MS) return { action: "request-review" };
     return { action: "wait", reason: "Copilot hasn't reviewed the head yet" };
   }
-
-  const botThreads = pr.threads.filter((thread) => !thread.resolved && thread.byBot).length;
-  if (botThreads > 0) return { action: "needs-pass", reasons: [`${botThreads} unresolved bot thread(s)`] };
 
   if (pr.mergeStateStatus === "BEHIND") return { action: "update-branch" };
   return { action: "leave", reason: `it's settled and ${pr.mergeStateStatus}` };
