@@ -54,7 +54,7 @@ import { fetchMain, prepareBranches } from "./lib/branches.mts";
 import { MAX_ITERATIONS } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
 import { gateIssues } from "./lib/gate.mts";
-import { ensureLabels } from "./lib/github.mts";
+import { cacheHostLogin, ensureLabels } from "./lib/github.mts";
 import { protectHostGit } from "./lib/host-safety.mts";
 import { planRound } from "./lib/plan.mts";
 import { handBackReport, usageReport } from "./lib/report.mts";
@@ -80,8 +80,10 @@ protectHostGit();
 forgetGatedHead();
 
 // The hand-backs and intake add sandcastle:* labels, which gh can't add until
-// the repository has them.
+// the repository has them. The host's login, which the failed-attempt count
+// filters by, is read now so a token that can't read it fails before any work.
 ensureLabels();
+cacheHostLogin();
 
 try {
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {

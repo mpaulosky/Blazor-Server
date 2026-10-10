@@ -181,7 +181,14 @@ export function ensureLabels(
   );
   for (const label of labels) {
     if (existing.has(label.name.toLowerCase())) continue;
-    ghWithStderr(run, ["label", "create", label.name, "--repo", repo, "--color", label.color, "--description", label.description]);
+    try {
+      ghWithStderr(run, ["label", "create", label.name, "--repo", repo, "--color", label.color, "--description", label.description]);
+    } catch (error) {
+      // Another run starting at the same time created it first. --force would
+      // also cover this, but would overwrite a colour or description a person
+      // changed.
+      if (!String(error).includes("already exists")) throw error;
+    }
   }
 }
 
@@ -232,6 +239,14 @@ export function hostLogin(run: typeof execFileSync = execFileSync): string {
 }
 
 let signedInLogin: string | undefined;
+
+// Reads the host's login (see hostLogin) and keeps it for markerComments.
+// Called once at startup, so a token that can't read /user fails the run
+// before any role runs, rather than when the first failed attempt is recorded.
+export function cacheHostLogin(run: typeof execFileSync = execFileSync): string {
+  signedInLogin = hostLogin(run);
+  return signedInLogin;
+}
 
 // The comments on the issue or PR `number` that carry `marker` and were posted
 // since `label` was last removed (see markerCommentsSince). Only the host's own

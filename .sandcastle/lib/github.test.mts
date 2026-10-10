@@ -5,6 +5,7 @@ import { SANDCASTLE_LABELS } from "./config.mts";
 import {
   commentOnIssue,
   ensureLabels,
+  cacheHostLogin,
   hostLogin,
   handBack,
   markerComments,
@@ -133,6 +134,28 @@ describe("ensureLabels", () => {
     }
   });
 
+  // Two runs starting together can both see a label missing; the second
+  // create then fails, and that mustn't stop the run.
+  it("treats a label another run created in the meantime as created", () => {
+    const run = ((_cmd: string, args: readonly string[]) => {
+      if (args[1] === "create") {
+        throw Object.assign(new Error("gh failed"), { stderr: "label with name \"sandcastle:ready\" already exists; use `--force` to update its color and description" });
+      }
+      return "[]";
+    }) as unknown as typeof execFileSync;
+
+    assert.doesNotThrow(() => ensureLabels(SANDCASTLE_LABELS, run, "o/r"));
+  });
+
+  it("still throws when creating a label fails for another reason", () => {
+    const run = ((_cmd: string, args: readonly string[]) => {
+      if (args[1] === "create") throw Object.assign(new Error("gh failed"), { stderr: "HTTP 403: Resource not accessible" });
+      return "[]";
+    }) as unknown as typeof execFileSync;
+
+    assert.throws(() => ensureLabels(SANDCASTLE_LABELS, run, "o/r"), /403/);
+  });
+
   it("doesn't recreate a label the repository already has", () => {
     const { calls, run } = recordingGh([JSON.stringify(["sandcastle:ready"])]);
 
@@ -154,6 +177,20 @@ describe("hostLogin", () => {
 
     assert.equal(hostLogin(run), "sandcastle-bot");
     assert.deepEqual(calls[0]!.args, ["api", "user", "--jq", ".login"]);
+  });
+});
+
+describe("cacheHostLogin", () => {
+  // Read once at startup, so a token that can't read /user fails before any
+  // role runs, rather than when the first failed attempt is recorded.
+  it("reads the login once, and markerComments uses it without asking gh again", () => {
+    const login = recordingGh(["host\n"]);
+    assert.equal(cacheHostLogin(login.run), "host");
+
+    const { calls, run } = recordingGh(["", "", "2025-12-01T00:00:00Z"]);
+    markerComments(69, "sandcastle:needs-human", "<!-- m -->", "o/r", run);
+
+    assert.equal(calls.some((call) => call.args[1] === "user"), false);
   });
 });
 
@@ -191,7 +228,7 @@ describe("markerComments", () => {
 
 describe("markerCommentsSince", () => {
   const marker = "<!-- sandcastle:build-failed -->";
-  const comment = (body: string, createdAt: string, author = "owner"): TimestampedComment => ({ body, createdAt, author });
+  const comment = (body: string, createdAt: string, author = "host"): TimestampedComment => ({ body, createdAt, author });
   const unlabeled = (label: string, createdAt: string): TimelineLabelEvent => ({ event: "unlabeled", label, createdAt });
 
   it("drops a marker comment posted before the label was last removed", () => {
@@ -201,7 +238,7 @@ describe("markerCommentsSince", () => {
     ];
     const timeline = [unlabeled("sandcastle:needs-human", "2026-01-02T00:00:00Z")];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "host");
 
     assert.deepEqual(kept, [comments[1]]);
   });
@@ -210,13 +247,13 @@ describe("markerCommentsSince", () => {
     const comments = [comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z")];
     const timeline: TimelineLabelEvent[] = [];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "host");
 
     assert.deepEqual(kept, comments);
   });
 
-  // The host posts as the repository owner, and anyone can comment on a public
-  // issue, so a stranger pasting the marker in mustn't hand the issue back.
+  // The host posts as the login gh is signed in as, and anyone can comment on
+  // a public issue, so a stranger pasting the marker in mustn't hand it back.
   it("drops a marker comment that anyone but the host's own login posted", () => {
     const comments = [
       comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z", "stranger"),
@@ -224,7 +261,7 @@ describe("markerCommentsSince", () => {
     ];
     const timeline: TimelineLabelEvent[] = [];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "host");
 
     assert.deepEqual(kept, [comments[1]]);
   });
@@ -233,7 +270,7 @@ describe("markerCommentsSince", () => {
     const comments = [comment("A plain comment.", "2026-01-05T00:00:00Z")];
     const timeline: TimelineLabelEvent[] = [];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "host");
 
     assert.deepEqual(kept, []);
   });
@@ -248,7 +285,7 @@ describe("markerCommentsSince", () => {
       unlabeled("sandcastle:needs-human", "2026-01-03T00:00:00Z"),
     ];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "host");
 
     assert.deepEqual(kept, [comments[1]]);
   });
@@ -257,7 +294,7 @@ describe("markerCommentsSince", () => {
     const comments = [comment(`${marker} attempt 1`, "2026-01-01T00:00:00Z")];
     const timeline = [unlabeled("sandcastle:needs-info", "2026-01-02T00:00:00Z")];
 
-    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "owner");
+    const kept = markerCommentsSince(comments, timeline, "sandcastle:needs-human", marker, "2025-12-01T00:00:00Z", "host");
 
     assert.deepEqual(kept, comments);
   });
