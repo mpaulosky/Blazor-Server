@@ -31,7 +31,7 @@ public class SliceDependencyRuleTests
 	}
 
 	[Fact]
-	public void FindCrossSliceDependencies_BetaReferencesAlpha_ReturnsBetaComponent()
+	public void FindCrossSliceDependencies_BetaReferencesAlpha_ReturnsOnlyBetaComponent()
 	{
 		// Arrange
 		Assembly fixturesAssembly = typeof(BetaComponent).Assembly;
@@ -40,6 +40,6 @@ public class SliceDependencyRuleTests
 		IReadOnlyList<string> failingTypeNames = SliceDependencyRule.FindCrossSliceDependencies(fixturesAssembly, FixturesFeaturesNamespace);
 
 		// Assert
-		failingTypeNames.Should().Contain(typeof(BetaComponent).FullName);
+		failingTypeNames.Should().Equal(typeof(BetaComponent).FullName);
 	}
 }
