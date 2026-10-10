@@ -773,6 +773,9 @@ describe("startFromMain", () => {
         calls.push(`contains ${commit} ${ancestor}`);
         return true;
       },
+      hasCommit: () => true,
+      fetchPullHead: (number) => void calls.push(`fetchPullHead ${number}`),
+      mergeBase: (commit) => commit,
       deleteLocalBranch: (b) => void calls.push(`deleteLocalBranch ${b}`),
       deleteRef: (ref) => void calls.push(`deleteRef ${ref}`),
       deleteRemote: (b, sha) => void calls.push(`deleteRemote ${b} ${sha}`),

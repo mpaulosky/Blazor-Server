@@ -325,5 +325,5 @@ export function startFromMain(
   const host = github.hostLogin();
   const pr = closedWithoutMerging(github.closedPullRequests(host), issueNumber, host);
   if (pr === undefined || pr.headRefName !== branch) return undefined;
-  return { pr: pr.number, deleted: discardClosedWork(branch, pr.headRefOid, base, refs) };
+  return { pr: pr.number, deleted: discardClosedWork(branch, pr, base, refs) };
 }

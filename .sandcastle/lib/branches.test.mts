@@ -214,6 +214,18 @@ function stubRefs(
       if (commit === remoteCommit) return remoteContainsClosedHead;
       return false;
     },
+    hasCommit: () => true,
+    fetchPullHead: (number) => void calls.push(`fetchPullHead ${number}`),
+    // Each flag stands for a ref that contains the closed head, so their
+    // merge base is the closed head itself; a ref without it is unrelated.
+    mergeBase: (commit, other) => {
+      calls.push(`mergeBase ${commit} ${other}`);
+      if (other !== closedHead) return undefined;
+      if (commit === localCommit) return localContainsClosedHead ? closedHead : undefined;
+      if (commit === trackingCommit) return trackingContainsClosedHead ? closedHead : undefined;
+      if (commit === remoteCommit) return remoteContainsClosedHead ? closedHead : undefined;
+      return undefined;
+    },
     deleteLocalBranch: (b) => {
       calls.push(`deleteLocalBranch ${b}`);
       if (failDeleteLocalBranch) throw failDeleteLocalBranch;
@@ -232,7 +244,7 @@ describe("discardClosedWork", () => {
   it("deletes the local branch, the tracking ref and origin's branch (with the lease SHA), in that order, when each contains the closed head", () => {
     const { refs, calls } = stubRefs(branch, closedHead, base);
 
-    const deleted = discardClosedWork(branch, closedHead, base, refs);
+    const deleted = discardClosedWork(branch, { number: 10, headRefOid: closedHead }, base, refs);
 
     assert.deepEqual(calls.filter((call) => call.startsWith("delete")), [
       `deleteLocalBranch ${branch}`,
@@ -245,7 +257,7 @@ describe("discardClosedWork", () => {
   it("keeps a local branch that doesn't contain the closed head, because a fresh attempt's commits start from main", () => {
     const { refs, calls } = stubRefs(branch, closedHead, base, { localContainsClosedHead: false });
 
-    const deleted = discardClosedWork(branch, closedHead, base, refs);
+    const deleted = discardClosedWork(branch, { number: 10, headRefOid: closedHead }, base, refs);
 
     assert.ok(!calls.some((call) => call.startsWith("deleteLocalBranch")));
     assert.ok(!deleted.includes(`refs/heads/${branch}`));
@@ -254,7 +266,7 @@ describe("discardClosedWork", () => {
   it("does nothing when base already contains the closed head", () => {
     const { refs, calls } = stubRefs(branch, closedHead, base, { baseContainsClosedHead: true });
 
-    const deleted = discardClosedWork(branch, closedHead, base, refs);
+    const deleted = discardClosedWork(branch, { number: 10, headRefOid: closedHead }, base, refs);
 
     assert.deepEqual(deleted, []);
     assert.ok(!calls.some((call) => call.startsWith("delete")));
@@ -264,27 +276,43 @@ describe("discardClosedWork", () => {
     const failure = new Error("git branch -D failed: worktree in use");
     const { refs, calls } = stubRefs(branch, closedHead, base, { failDeleteLocalBranch: failure });
 
-    assert.throws(() => discardClosedWork(branch, closedHead, base, refs), /worktree in use/);
+    assert.throws(() => discardClosedWork(branch, { number: 10, headRefOid: closedHead }, base, refs), /worktree in use/);
     assert.ok(!calls.some((call) => call.startsWith("deleteRemote")));
   });
 });
 
 // BranchRefs over a small commit graph: `parents` maps each commit to its
-// parents, and contains() walks it, so a test states the history rather than
-// each answer. Every ref exists; deletes are recorded.
-function graphRefs(parents: Record<string, string[]>, heads: { local: string; tracking: string; remote: string }) {
+// parents, and contains() and mergeBase() walk it, so a test states the
+// history rather than each answer. Every ref exists; deletes are recorded.
+// A commit in `missing` isn't in the repository until fetchPullHead fetches
+// it, and only when `fetchable` says GitHub still has it.
+function graphRefs(
+  parents: Record<string, string[]>,
+  heads: { local: string; tracking: string; remote: string },
+  { missing = [], fetchable = true }: { missing?: string[]; fetchable?: boolean } = {},
+) {
   const deletes: string[] = [];
-  const reaches = (commit: string, ancestor: string): boolean =>
-    commit === ancestor || (parents[commit] ?? []).some((parent) => reaches(parent, ancestor));
+  const fetches: number[] = [];
+  const absent = new Set(missing);
+  const ancestors = (commit: string): string[] => [commit, ...(parents[commit] ?? []).flatMap(ancestors)];
   const refs: BranchRefs = {
     remoteHead: () => heads.remote,
     localHead: (ref) => (ref.startsWith("refs/heads/") ? heads.local : heads.tracking),
-    contains: (commit, ancestor) => reaches(commit, ancestor),
+    contains: (commit, ancestor) => !absent.has(ancestor) && ancestors(commit).includes(ancestor),
+    hasCommit: (commit) => !absent.has(commit),
+    fetchPullHead: (number) => {
+      fetches.push(number);
+      if (fetchable) absent.clear();
+    },
+    mergeBase: (commit, other) => {
+      const theirs = new Set(ancestors(other));
+      return ancestors(commit).find((ancestor) => theirs.has(ancestor));
+    },
     deleteLocalBranch: (branch) => void deletes.push(`refs/heads/${branch}`),
     deleteRef: (ref) => void deletes.push(ref),
     deleteRemote: (branch) => void deletes.push(`origin/${branch}`),
   };
-  return { refs, deletes };
+  return { refs, deletes, fetches };
 }
 
 describe("discardClosedWork over a commit history", () => {
@@ -294,11 +322,12 @@ describe("discardClosedWork over a commit history", () => {
   // update-branch then merged main's newer M2 into the PR on GitHub, giving
   // the closed head U, which the local branch never got.
   const history = { B: ["M"], M2: ["M"], U: ["B", "M2"] };
+  const closed = { number: 10, headRefOid: "U" };
 
   it("deletes a local branch that lags the closed head, so the rebuild doesn't continue the closed PR's work", () => {
     const { refs, deletes } = graphRefs(history, { local: "B", tracking: "U", remote: "U" });
 
-    const deleted = discardClosedWork(branch, "U", "M2", refs);
+    const deleted = discardClosedWork(branch, closed, "M2", refs);
 
     assert.deepEqual(deleted, [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`, `origin/${branch}`]);
     assert.deepEqual(deletes, deleted);
@@ -307,15 +336,43 @@ describe("discardClosedWork over a commit history", () => {
   it("keeps a local branch at a commit main already has, since it holds none of the closed PR's work", () => {
     const { refs } = graphRefs(history, { local: "M", tracking: "U", remote: "U" });
 
-    const deleted = discardClosedWork(branch, "U", "M2", refs);
+    const deleted = discardClosedWork(branch, closed, "M2", refs);
 
     assert.ok(!deleted.includes(`refs/heads/${branch}`));
+  });
+
+  // C was committed on top of the pushed B, but its push failed, while the
+  // PR moved on to U on GitHub: neither contains the other.
+  it("deletes a local branch that has diverged from the closed head", () => {
+    const { refs } = graphRefs({ ...history, C: ["B"] }, { local: "C", tracking: "U", remote: "U" });
+
+    const deleted = discardClosedWork(branch, closed, "M2", refs);
+
+    assert.ok(deleted.includes(`refs/heads/${branch}`));
+  });
+
+  // The branch was deleted when the PR closed, so the rebuild's fetch found
+  // nothing and this checkout never got U; GitHub keeps refs/pull/<n>/head.
+  it("fetches the closed PR's head when the repository doesn't have it, then deletes the work", () => {
+    const { refs, fetches } = graphRefs(history, { local: "B", tracking: "B", remote: "B" }, { missing: ["U"] });
+
+    const deleted = discardClosedWork(branch, closed, "M2", refs);
+
+    assert.deepEqual(fetches, [10]);
+    assert.ok(deleted.includes(`refs/heads/${branch}`));
+  });
+
+  it("throws, deleting nothing, when the closed PR's head can't be fetched", () => {
+    const { refs, deletes } = graphRefs(history, { local: "B", tracking: "B", remote: "B" }, { missing: ["U"], fetchable: false });
+
+    assert.throws(() => discardClosedWork(branch, closed, "M2", refs), /PR #10's head U/);
+    assert.deepEqual(deletes, []);
   });
 
   it("keeps a fresh attempt's local branch, which starts from main and isn't related to the closed head", () => {
     const { refs } = graphRefs({ ...history, F: ["M2"] }, { local: "F", tracking: "U", remote: "U" });
 
-    const deleted = discardClosedWork(branch, "U", "M2", refs);
+    const deleted = discardClosedWork(branch, closed, "M2", refs);
 
     assert.ok(!deleted.includes(`refs/heads/${branch}`));
   });

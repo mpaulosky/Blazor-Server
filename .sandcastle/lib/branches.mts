@@ -106,6 +106,13 @@ export type BranchRefs = {
   localHead(ref: string): string | undefined;
   // git merge-base --is-ancestor; false on exit 1 or a missing object.
   contains(commit: string, ancestor: string): boolean;
+  // git cat-file -e <commit>^{commit}; whether the repository has the commit.
+  hasCommit(commit: string): boolean;
+  // git fetch origin refs/pull/<n>/head, which GitHub keeps after the PR's
+  // branch is deleted.
+  fetchPullHead(number: number): void;
+  // git merge-base; undefined on exit 1, when the two share no commit.
+  mergeBase(commit: string, other: string): string | undefined;
   // git branch -D; git refuses when a worktree has the branch checked out.
   deleteLocalBranch(branch: string): void;
   // git update-ref -d.
@@ -143,30 +150,62 @@ const originRefs: BranchRefs = {
       throw error;
     }
   },
+  hasCommit: (commit) => {
+    try {
+      git("cat-file", "-e", `${commit}^{commit}`);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  fetchPullHead: (number) => void git("fetch", "--quiet", "origin", `refs/pull/${number}/head`),
+  mergeBase: (commit, other) => {
+    try {
+      return git("merge-base", commit, other);
+    } catch (error) {
+      if (exitStatus(error) === 1) return undefined;
+      throw error;
+    }
+  },
   deleteLocalBranch: (branch) => void git("branch", "-D", branch),
   deleteRef: (ref) => void git("update-ref", "-d", ref),
   deleteRemote: (branch, expectedSha) =>
     void git("push", "--quiet", `--force-with-lease=refs/heads/${branch}:${expectedSha}`, "origin", `:refs/heads/${branch}`),
 };
 
-// Deletes each ref of `branch` that holds the work of `closedHead`, the head
-// of an issue's Sandcastle PR that closed without merging, and returns the
-// refs it deleted: refs/heads/<branch>, refs/remotes/origin/<branch> and
+// Deletes each ref of `branch` that holds the work of `closed`, an issue's
+// Sandcastle PR that closed without merging, and returns the refs it
+// deleted: refs/heads/<branch>, refs/remotes/origin/<branch> and
 // origin/<branch>, in that order (lib/follow-up.mts#startFromMain). Leaves
-// everything alone when `base` already contains closedHead. A ref holds the
-// closed PR's work when it contains closedHead, or when it lags behind it at
-// a commit `base` doesn't have: the local branch sits where the sandbox
-// pushed, and an update-branch or a commit made on GitHub moves the PR past
-// it. Any other ref is left alone, so a fresh attempt's commits, which start
-// from main, survive. All three go because Sandcastle's
-// `git worktree add` checks out a local branch if there is one, else DWIMs
-// from origin/<branch>, and starts fresh from main only when neither exists.
-// Every call goes through `refs` (live: git(), hooks off, main checkout), so a
-// test can stub it.
-export function discardClosedWork(branch: string, closedHead: string, base: string, refs: BranchRefs = originRefs): string[] {
+// everything alone when `base` already contains the closed head. A ref holds
+// the closed PR's work when it shares a commit with the closed head that
+// `base` doesn't have, whether it contains the head, lags behind it (the
+// local branch sits where the sandbox pushed, and an update-branch or a
+// commit made on GitHub moves the PR past it) or has diverged from it. Any
+// other ref is left alone, so a fresh attempt's commits, which start from
+// main, survive. The closed head is fetched first when the repository
+// doesn't have it (its branch was deleted with the PR), and a head that
+// can't be fetched throws: without it, no ref can be told apart. All three
+// go because Sandcastle's `git worktree add` checks out a local branch if
+// there is one, else DWIMs from origin/<branch>, and starts fresh from main
+// only when neither exists. Every call goes through `refs` (live: git(),
+// hooks off, main checkout), so a test can stub it.
+export function discardClosedWork(
+  branch: string,
+  closed: { number: number; headRefOid: string },
+  base: string,
+  refs: BranchRefs = originRefs,
+): string[] {
+  const closedHead = closed.headRefOid;
+  if (!refs.hasCommit(closedHead)) refs.fetchPullHead(closed.number);
+  if (!refs.hasCommit(closedHead)) {
+    throw new Error(`PR #${closed.number}'s head ${closedHead} isn't in the repository and couldn't be fetched, so its work can't be told from a fresh attempt`);
+  }
   if (refs.contains(base, closedHead)) return [];
-  const holdsClosedWork = (commit: string): boolean =>
-    refs.contains(commit, closedHead) || (refs.contains(closedHead, commit) && !refs.contains(base, commit));
+  const holdsClosedWork = (commit: string): boolean => {
+    const shared = refs.mergeBase(commit, closedHead);
+    return shared !== undefined && !refs.contains(base, shared);
+  };
   const deleted: string[] = [];
   // The local branch goes first: it's the one git can refuse to delete (a
   // worktree still has it checked out), and failing there leaves origin's
