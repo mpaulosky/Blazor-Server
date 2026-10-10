@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SubIssue } from "./github.mts";
-import { closeFinishedUmbrellas, type UmbrellaGitHub } from "./umbrella.mts";
+import { closeFinishedUmbrellas, umbrellaPhase, type UmbrellaGitHub } from "./umbrella.mts";
 
 const child = (number: number, state: "open" | "closed", stateReason: string | null = null): SubIssue => ({
   number,
@@ -108,5 +108,21 @@ describe("closeFinishedUmbrellas", () => {
     assert.deepEqual(closed, [30]);
     assert.deepEqual(result, [30]);
     assert.ok(lines.some((line) => line.includes("#10") && line.includes("HTTP 502")), lines.join("\n"));
+  });
+});
+
+describe("umbrellaPhase", () => {
+  it("logs a failed umbrella check instead of ending the run", () => {
+    const warnings: string[] = [];
+
+    umbrellaPhase(
+      () => {
+        throw new Error("search is unavailable");
+      },
+      (message) => warnings.push(message),
+    );
+
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /search is unavailable/);
   });
 });

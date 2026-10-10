@@ -68,3 +68,18 @@ describe("main.mts's intake wiring", () => {
     assert.match(call, /openPullRequests\(\)/);
   });
 });
+
+// Each round closes the umbrellas whose children have all finished (#75).
+// It runs before intake and the gate, so it runs even in a round that ends
+// early with nothing ready.
+describe("main.mts's umbrella wiring", () => {
+  it("checks for finished umbrellas in each round, before intake", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration");
+    const umbrellaCall = mainMts.indexOf("umbrellaPhase(");
+    const intakeCall = mainMts.indexOf("intakePhase(");
+
+    assert.notEqual(umbrellaCall, -1, "main.mts doesn't call umbrellaPhase(");
+    assert.ok(loop < umbrellaCall && umbrellaCall < intakeCall, "main.mts doesn't check umbrellas in each round, before intake");
+  });
+});

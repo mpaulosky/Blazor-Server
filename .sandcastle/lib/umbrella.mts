@@ -75,3 +75,18 @@ function describeUnfinished(child: SubIssue): string {
     ? `#${child.number} closed as ${child.state_reason ?? "an unknown reason"}`
     : `#${child.number} is still open`;
 }
+
+// The umbrella check as main.mts runs it at the start of each round. A
+// failure, such as GitHub's search being unavailable, is logged and the
+// umbrellas are checked again next round: closing one is housekeeping, never
+// a reason to stop building.
+export function umbrellaPhase(
+  close: () => number[] = closeFinishedUmbrellas,
+  warn: (message: string) => void = console.error,
+): void {
+  try {
+    close();
+  } catch (error) {
+    warn(`  ✗ Couldn't look for finished umbrellas, so they're checked again next round: ${error}`);
+  }
+}

@@ -1,13 +1,18 @@
 // Parallel Planner with Review — plan → execute → review → PR loop
 //
 // This template drives a multi-phase workflow:
+//   Phase 0 (Umbrellas):        The host closes as completed every umbrella
+//                               (an issue intake split) whose sub-issues have
+//                               all closed as completed (lib/umbrella.mts).
 //   Phase 0a (Intake):          One run judges every open issue that carries
 //                               none of sandcastle:ready, sandcastle:needs-info
 //                               and sandcastle:needs-human against the
 //                               Definition of Ready (intake-prompt.md). The
 //                               host adds sandcastle:ready, or hands the issue
 //                               back with sandcastle:needs-info and numbered
-//                               questions, and adds bug when the verdict says
+//                               questions, or splits an issue too big for one
+//                               PR into blocked child issues and turns it into
+//                               an umbrella, and adds bug when the verdict says
 //                               so (lib/intake.mts).
 //   Phase 0b (Gate):            The host resolves each open issue's blockers
 //                               (GitHub "blocked by" links and "Blocked by #N"
@@ -77,6 +82,7 @@ import { handBackReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
+import { umbrellaPhase } from "./lib/umbrella.mts";
 
 const envFile = ".sandcastle/.env";
 const leakedTokens = existsSync(envFile) ? githubTokensIn(readFileSync(envFile, "utf8")) : [];
@@ -114,6 +120,12 @@ for (const issueNumber of clearStaleBuildingLabels()) {
 try {
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+
+    // -----------------------------------------------------------------------
+    // Phase 0: Umbrellas
+    // -----------------------------------------------------------------------
+    // A failure is logged, and the umbrellas are checked again next round.
+    umbrellaPhase();
 
     // -----------------------------------------------------------------------
     // Phase 0a: Intake

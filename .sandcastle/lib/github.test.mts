@@ -4,7 +4,10 @@ import type { execFileSync } from "node:child_process";
 import { SANDCASTLE_LABELS } from "./config.mts";
 import {
   addIssueLabel,
+  addSubIssue,
+  closeIssueAsCompleted,
   commentOnIssue,
+  createIssue,
   ensureLabels,
   issueLabels,
   issuesWithLabel,
@@ -16,10 +19,12 @@ import {
   hasLabel,
   markerComments,
   markerCommentsSince,
+  openIssuesWithComment,
   openPullRequest,
   listSandcastleIssues,
   ownerApproved,
   sameRepository,
+  subIssuesOf,
   type GhIssue,
   type TimelineLabelEvent,
   type TimestampedComment,
@@ -565,6 +570,77 @@ describe("issue labels", () => {
 
     assert.deepEqual(numbers, [71, 150]);
     assert.deepEqual(calls[0]!.args.slice(0, 8), ["issue", "list", "--repo", "o/r", "--state", "open", "--label", "sandcastle:building"]);
+  });
+});
+
+describe("split and umbrella issues", () => {
+  it("creates an issue with its labels through the REST API and returns its number", () => {
+    const { calls, run } = recordingGh(["151\n"]);
+
+    const number = createIssue("Part 1", "## Summary\n\nOne.", ["Sandcastle", "bug"], run, "o/r");
+
+    assert.equal(number, 151);
+    assert.deepEqual(calls[0]!.args, ["api", "--method", "POST", "repos/o/r/issues", "--input", "-", "--jq", ".number"]);
+    assert.deepEqual(JSON.parse(calls[0]!.input as string), { title: "Part 1", body: "## Summary\n\nOne.", labels: ["Sandcastle", "bug"] });
+  });
+
+  it("throws when creating an issue doesn't answer a number", () => {
+    const { run } = recordingGh(["\n"]);
+
+    assert.throws(() => createIssue("Part 1", "body", ["Sandcastle"], run, "o/r"), /number/);
+  });
+
+  it("adds a sub-issue by the child's id, not its number", () => {
+    const { calls, run } = recordingGh(["987654\n"]);
+
+    addSubIssue(10, 101, run, "o/r");
+
+    assert.deepEqual(calls.map((call) => call.args), [
+      ["api", "repos/o/r/issues/101", "--jq", ".id"],
+      ["api", "--method", "POST", "repos/o/r/issues/10/sub_issues", "-F", "sub_issue_id=987654"],
+    ]);
+  });
+
+  it("reads an issue's sub-issues from every page", () => {
+    const open = { number: 101, state: "open", state_reason: null };
+    const done = { number: 102, state: "closed", state_reason: "completed" };
+    const { calls, run } = recordingGh([`${JSON.stringify(open)}\n\n${JSON.stringify(done)}\n`]);
+
+    const children = subIssuesOf(10, run, "o/r");
+
+    assert.deepEqual(children, [open, done]);
+    assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/issues/10/sub_issues"]);
+  });
+
+  it("closes an issue as completed", () => {
+    const { calls, run } = recordingGh();
+
+    closeIssueAsCompleted(10, run, "o/r");
+
+    assert.deepEqual(calls[0]!.args, ["issue", "close", "10", "--repo", "o/r", "--reason", "completed"]);
+  });
+
+  it("finds open issues by a marker comment, keeping only those where the host posted it", () => {
+    const marker = "<!-- sandcastle:umbrella -->";
+    const comment = (body: string, author: string) => JSON.stringify({ body, author });
+    const { calls, run } = recordingGh([
+      "[10,20,30]\n",
+      comment(`${marker}\nSplit into #101.`, "host"),
+      comment(`${marker} pasted by a stranger`, "stranger"),
+      comment("mentions sandcastle umbrella in passing", "host"),
+    ]);
+
+    const numbers = openIssuesWithComment(marker, run, "o/r", "host");
+
+    assert.deepEqual(numbers, [10]);
+    assert.deepEqual(calls[0]!.args.slice(0, 8), [
+      "issue", "list", "--repo", "o/r", "--state", "open", "--search", '"sandcastle:umbrella" in:comments',
+    ]);
+    assert.deepEqual(calls.slice(1).map((call) => call.args.slice(0, 3)), [
+      ["api", "--paginate", "repos/o/r/issues/10/comments"],
+      ["api", "--paginate", "repos/o/r/issues/20/comments"],
+      ["api", "--paginate", "repos/o/r/issues/30/comments"],
+    ]);
   });
 });
 

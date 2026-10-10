@@ -317,6 +317,112 @@ describe("applyVerdicts for a malformed split verdict", () => {
   });
 });
 
+describe("applyVerdicts for a split verdict beyond the acceptance criteria", () => {
+  // The umbrella comment is how lib/umbrella.mts finds the issue again, so it
+  // must never go on an issue whose children aren't all linked yet.
+  it("creates and links every child before the original loses Sandcastle and gets the umbrella comment", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const lastLink = split.calls.findLastIndex((call) => call.fn === "addSubIssue" || call.fn === "addBlockedBy");
+    const firstUmbrella = split.calls.findIndex((call) => call.fn === "removeSandcastle" || call.fn === "comment");
+    assert.ok(lastLink < firstUmbrella, JSON.stringify(split.calls));
+  });
+
+  it("lists the children in build order in the umbrella comment", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const body = split.calls.find((call) => call.fn === "comment")!.args[1] as string;
+    assert.ok(body.indexOf("#101") < body.indexOf("#102") && body.indexOf("#102") < body.indexOf("#103"), body);
+  });
+
+  it("leaves the issue unjudged, with nothing handed back, when creating the first child fails", () => {
+    const gh = recordingGh();
+    const report = new HandBackReport();
+    const split = recordingSplitGithub();
+    split.github.createChild = () => {
+      throw new Error("HTTP 502");
+    };
+    const lines: string[] = [];
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", report, (line) => lines.push(line), split.github);
+
+    assert.deepEqual(gh.calls.filter((call) => call.args[1] !== "view"), []);
+    assert.equal(report.items().length, 0);
+    assert.ok(lines.some((line) => line.includes("judged again")), lines.join("\n"));
+  });
+
+  // Judging it again would split it again, creating a second set of children.
+  it("hands the issue back with sandcastle:needs-human, listing the children created, when the split fails partway", () => {
+    const gh = recordingGh();
+    const report = new HandBackReport();
+    const split = recordingSplitGithub();
+    const createChild = split.github.createChild;
+    let created = 0;
+    split.github.createChild = (title, body, labels) => {
+      if (++created === 3) throw new Error("HTTP 502");
+      return createChild(title, body, labels);
+    };
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", report, () => {}, split.github);
+
+    assert.equal(split.calls.filter((call) => call.fn === "removeSandcastle" || call.fn === "comment").length, 0);
+    const edits = gh.calls.filter((call) => call.args[1] === "edit");
+    assert.deepEqual(edits.map((call) => call.args.slice(0, 7)), [["issue", "edit", "10", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]]);
+    const comment = gh.calls.find((call) => call.args[1] === "comment")!.input as string;
+    assert.match(comment, /#101/);
+    assert.match(comment, /#102/);
+    assert.doesNotMatch(comment, /HTTP 502/, "the error belongs in the run log, not on the public issue");
+    assert.deepEqual(report.items().map((item) => item.label), ["sandcastle:needs-human"]);
+  });
+
+  it("adds bug before handing a malformed split back, when it carries bug: true", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(11)], [splitVerdict(11, [], { bug: true })], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    const edits = gh.calls.filter((call) => call.args[1] === "edit");
+    assert.deepEqual(edits.map((call) => call.args.slice(-1)), [["bug"], ["sandcastle:needs-info"]]);
+  });
+
+  it("treats a split whose child has an empty Acceptance criteria section as malformed", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const children = [{ title: "Part 1", body: "## Summary\n\nOne.\n\n## Acceptance criteria\n\n## Notes\n\nNone." }];
+
+    applyVerdicts([issue(12)], [splitVerdict(12, children)], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    assert.equal(split.calls.length, 0);
+    assert.ok(gh.calls.some((call) => call.args.includes("sandcastle:needs-info")));
+  });
+
+  it("treats a split whose child has a blank title as malformed", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+
+    applyVerdicts([issue(12)], [splitVerdict(12, [{ ...wellFormedChildren[0]!, title: " " }])], gh.run, "o/r", new HandBackReport(), () => {}, split.github);
+
+    assert.equal(split.calls.length, 0);
+    assert.ok(gh.calls.some((call) => call.args.includes("sandcastle:needs-info")));
+  });
+
+  it("logs which children a split created", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const lines: string[] = [];
+
+    applyVerdicts([issue(10)], [splitVerdict(10)], gh.run, "o/r", new HandBackReport(), (line) => lines.push(line), split.github);
+
+    assert.ok(lines.some((line) => /#10\b/.test(line) && line.includes("#101, #102, #103")), lines.join("\n"));
+  });
+});
+
 describe("applyVerdicts beyond the acceptance criteria", () => {
   // One edit, so the issue never carries sandcastle:ready without bug, and
   // never ends up on a feature/ branch.
