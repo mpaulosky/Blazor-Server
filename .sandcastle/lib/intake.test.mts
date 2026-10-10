@@ -701,7 +701,7 @@ describe("intakeRunner", () => {
 // so they're posted as plain text (#224).
 describe("intake's comments", () => {
   const hostile =
-    "Use ``` here, cc @someone, see #123 and owner/repo#45, GH-67 and https://github.com/owner/repo/issues/89 <details><summary>ok</summary> <!-- hidden";
+    "Use ``` here, cc @someone, see #123 and owner/repo#45, GH-67 and https://github.com/owner/repo/issues/89 <details><summary>ok</summary> <!-- hidden, &#64;someone &commat;someone &#35;123 github&#46;com";
 
   for (const [name, body] of [
     ["the ready comment's reason", () => readyComment(verdict(1, { reason: hostile }))],
@@ -718,6 +718,9 @@ describe("intake's comments", () => {
       assert.doesNotMatch(text, /GH-67/i);
       assert.doesNotMatch(text, /github\.com/i);
       assert.doesNotMatch(text, /<details|<summary|<!--/);
+      // A character reference would decode into the @, # or . the rules above
+      // break, so every & must be escaped.
+      assert.doesNotMatch(text, /&(?!amp;|lt;)/);
       assert.match(text, /Use \\`\\`\\` here/);
     });
   }

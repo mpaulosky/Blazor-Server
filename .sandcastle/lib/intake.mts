@@ -220,16 +220,19 @@ function questionsOf(verdict: IntakeVerdict): string[] {
 // untrusted issue text, and its words go to the issue's author, so nothing in
 // them may restructure the comment or reach anyone else (#224, #227): it's
 // kept to one line; backslashes and backticks are escaped (no code span or
-// fence to swallow the re-queue instructions), and so is < (no HTML tag, such
-// as an unclosed <details>, or comment to hide them); a zero-width space after
-// @, a # or GH- before digits, and the dot of github.com stops a mention, a
-// cross-reference or a link to another issue or PR; and a leading Markdown
-// marker is escaped so it can't start a list, heading or quote.
+// fence to swallow the re-queue instructions), and so are & (no character
+// reference to decode into an @, # or . the rules below don't see) and < (no
+// HTML tag, such as an unclosed <details>, or comment to hide them); a
+// zero-width space after @, a # or GH- before digits, and the dot of
+// github.com stops a mention, a cross-reference or a link to another issue or
+// PR; and a leading Markdown marker is escaped so it can't start a list,
+// heading or quote.
 export function plainText(text: string): string {
   return text
     .replace(/\s+/g, " ")
     .trim()
     .replace(/[\\`]/g, "\\$&")
+    .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/@(?=[A-Za-z0-9])/g, "@\u200B")
     .replace(/#(?=\d)/g, "#\u200B")
