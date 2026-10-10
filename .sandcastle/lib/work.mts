@@ -32,5 +32,18 @@ export const liveWorkSources: WorkSources = {
 // and stops at the first hit, so the gate's blocker lookups run only when
 // nothing else is pending.
 export function findWork(needsPass: readonly number[], sources: WorkSources = liveWorkSources): string | undefined {
-  throw new Error("Not implemented");
+  if (needsPass.length > 0) {
+    return `${needsPass.length} open PR(s) need a follow-up pass`;
+  }
+  // The same filter intake applies, so an issue intake would skip (being
+  // built, or with a PR already open) doesn't keep the run going.
+  const forIntake = needsIntake(sources.queue(), sources.openPullRequests());
+  if (forIntake.length > 0) {
+    return `${forIntake.length} issue(s) for intake`;
+  }
+  const { ready } = sources.gate();
+  if (ready.length > 0) {
+    return `${ready.length} ready, unblocked issue(s)`;
+  }
+  return undefined;
 }

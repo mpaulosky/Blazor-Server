@@ -278,9 +278,6 @@ export function sweepPullRequests(
   const issues = github.inScopeIssues();
   const inScope = new Set(issues.map((issue) => issue.number));
   const openPrs = github.openPullRequests();
-  // #147's early exit needs to know which PRs still need an agent's pass;
-  // collecting that is for the backend developer's build, not the tester's
-  // stub.
   const needsPass: number[] = [];
 
   for (const pr of openPrs) {
@@ -303,7 +300,9 @@ export function sweepPullRequests(
         log(`  ✋ PR #${pr.number}: ${restore.reason}, so it isn't swept.`);
         continue;
       }
-      followUp(pr, decide(pr, now), github, log);
+      const decision = decide(pr, now);
+      followUp(pr, decision, github, log);
+      if (decision.action === "needs-pass") needsPass.push(pr.number);
     } catch (error) {
       log(`  ⚠ Couldn't follow up PR #${pr.number}, so it's swept again next round: ${error}`);
     }

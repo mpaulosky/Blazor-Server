@@ -1,5 +1,7 @@
 // The run summary for one round, logged once every issue's build has settled.
 
+import { UncountedStopError } from "./errors.mts";
+
 // What the summary needs from each build's result; see buildIssue.
 type BuildResult = { prUrl: string | undefined; publishFailed: boolean };
 
@@ -8,7 +10,9 @@ type BuildResult = { prUrl: string | undefined; publishFailed: boolean };
 // done but stranded, which a person needs to hear apart from a round that
 // built nothing. `stop` is the line to stop the run on when no pull request
 // opened, and undefined when one did. `settled` holds each `work` item's
-// build, in the same order.
+// build, in the same order. A build that stopped with UncountedStopError (the
+// time budget or Claude's usage limit, #147) gets a ⏹ line, and stops the run
+// whatever else the round published: nothing more can start.
 export function roundSummary(
   work: readonly { issue: { number: number }; branch: string }[],
   settled: readonly PromiseSettledResult<BuildResult>[],
@@ -30,6 +34,21 @@ export function roundSummary(
       ...stranded.map(({ issue, branch }) => `  #${issue.number} (${branch}): see the comment on the issue`),
     );
   }
+
+  const stopped = work.flatMap(({ issue, branch }, i) => {
+    const outcome = settled[i];
+    return outcome?.status === "rejected" && outcome.reason instanceof UncountedStopError
+      ? [{ issue, branch, message: outcome.reason.message }]
+      : [];
+  });
+  lines.push(
+    ...stopped.map(
+      ({ issue, branch, message }) =>
+        `  ⏹ #${issue.number} (${branch}) stopped: ${message}. Its branch keeps its commits for the next run.`,
+    ),
+  );
+  const [firstStop] = stopped;
+  if (firstStop !== undefined) return { lines, stop: `Stopping the run: ${firstStop.message}.` };
 
   if (published.length > 0) return { lines, stop: undefined };
   const stop =
