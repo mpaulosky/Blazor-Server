@@ -40,6 +40,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.98](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.98) | 2026-10-10 | docs(sandcastle): Bring the plan's issue table up to date and add a Sandcastle task template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-205-docs-sandcastle-bring-the-plan-s-issue-table-up-to-date-and-add-a-sandcastle-task-template.md) |
 | [v0.0.97](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.97) | 2026-10-10 | docs(claude): Add Sandcastle and Baseline rules for agents | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-207-docs-claude-add-sandcastle-and-baseline-rules-for-agents.md) |
 | [v0.0.96](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.96) | 2026-10-10 | build(sandcastle): Install actionlint, shellcheck and zizmor in the sandbox image | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-201-build-sandcastle-install-actionlint-shellcheck-and-zizmor-in-the-sandbox-image.md) |
 | [v0.0.95](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.95) | 2026-10-10 | docs(review): Check that Sandcastle role prompts can always finish | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-200-docs-review-check-that-sandcastle-role-prompts-can-always-finish.md) |
@@ -49,7 +50,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.91](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.91) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-192-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.90](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.90) | 2026-10-09 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-09-pr-190-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.89](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.89) | 2026-10-09 | fix(sandcastle): Keep agent-written code from running on the host | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-09-pr-188-fix-sandcastle-keep-agent-written-code-from-running-on-the-host.md) |
-| [v0.0.88](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.88) | 2026-10-08 | chore(claude): Remove the shared .claude/settings.json | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-08-pr-184-chore-claude-remove-the-shared-claude-settings-json.md) |
 
 <!-- RELEASES_END -->
 
