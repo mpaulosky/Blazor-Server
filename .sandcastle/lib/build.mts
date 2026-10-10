@@ -105,8 +105,9 @@ const PUBLISH_RETRY_DELAY_MS = 5_000;
 
 // Run a publish step, retrying it with backoff while it fails with a GitHub
 // server error, up to PUBLISH_RETRY_ATTEMPTS attempts in all. Any other
-// failure, or the last attempt's, is rethrown.
-async function retryOnServerError<T>(step: () => T, wait: (ms: number) => Promise<void>): Promise<T> {
+// failure, or the last attempt's, is rethrown. A follow-up pass's push
+// (lib/follow-up-pass.mts) retries the same way.
+export async function retryOnServerError<T>(step: () => T, wait: (ms: number) => Promise<void>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return step();
@@ -311,17 +312,21 @@ function commandOutput(error: unknown): string {
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
 
+// The live sandbox for `branch`, for a build and a follow-up pass
+// (lib/follow-up-pass.mts) alike. Sandcastle reuses a branch's worktree
+// that's still there, running git in it first, so that one is checked before
+// it's handed over.
+export function createCheckedSandbox(branch: string): Promise<sandcastle.Sandbox> {
+  const existing = worktreePathFor(process.cwd(), branch);
+  const problems = existsSync(existing) ? worktreeProblems(existing) : [];
+  if (problems.length > 0) {
+    return Promise.reject(new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`));
+  }
+  return sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree });
+}
+
 const liveHost: BuildHost = {
-  // Sandcastle reuses a branch's worktree that's still there, running git in
-  // it first, so check that one before handing it over.
-  createSandbox: (branch) => {
-    const existing = worktreePathFor(process.cwd(), branch);
-    const problems = existsSync(existing) ? worktreeProblems(existing) : [];
-    if (problems.length > 0) {
-      return Promise.reject(new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`));
-    }
-    return sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree });
-  },
+  createSandbox: createCheckedSandbox,
   commitsAhead,
   commentOnIssue,
   recordBuildFailure: (issueNumber, branch, detail) =>

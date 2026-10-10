@@ -783,3 +783,159 @@ describe("followUpPassPhase", () => {
     assert.deepEqual(calls.fetchBranch, [BRANCH, "feature/51-tidy-widget"]);
   });
 });
+
+// The design note's other give-ups and guards (.sandcastle/work/78/design.md,
+// "Also pin"), each a hand-back with no push unless it says otherwise.
+describe("runPass's other give-ups", () => {
+  const fixedVerdict = JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }]);
+
+  it("gives up when the follow-up role finishes without signalling completion", async () => {
+    const sandbox = sandboxFake({ followUpJson: fixedVerdict, roleUnfinished: ["follow-up"] });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], sandbox });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.deepEqual(calls.push, []);
+    assert.equal(calls.handBack.length, 1);
+  });
+
+  it("gives up when the follow-up role was given threads but wrote no follow-up.json", async () => {
+    const sandbox = sandboxFake();
+    const { passHost, calls } = passHostFake({ threads: [botThread()], sandbox });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /follow-up\.json/);
+    assert.deepEqual(calls.replyToThread, []);
+  });
+
+  it("treats a missing follow-up.json as no verdicts when the role was given no threads", async () => {
+    const sandbox = sandboxFake();
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, sandbox });
+
+    const outcome = await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "passed");
+    assert.equal(calls.commentOnPullRequest.length, 1);
+  });
+
+  it("gives up when follow-up.json isn't a JSON array", async () => {
+    const sandbox = sandboxFake({ followUpJson: JSON.stringify({ threadId: "RT_bot" }) });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], sandbox });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.deepEqual(calls.push, []);
+  });
+
+  it("removes an earlier follow-up.json before the role runs", async () => {
+    const sandbox = sandboxFake({ followUpJson: fixedVerdict });
+    const { passHost } = passHostFake({ threads: [botThread()], sandbox });
+
+    await runPass(passTarget(), issue, BASE, passHost);
+
+    const removeIndex = sandbox.execCalls.findIndex((call) => call === "rm -f .sandcastle/follow-up.json");
+    const readIndex = sandbox.execCalls.findIndex((call) => call.startsWith("cat") && call.includes("follow-up.json"));
+    assert.ok(removeIndex !== -1 && removeIndex < readIndex, sandbox.execCalls.join("\n"));
+    assert.equal(sandbox.runs.length, 1, "the role runs once, between the removal and the read");
+  });
+
+  it("gives up without pushing when the gated commit doesn't contain the PR's head", async () => {
+    // mergeConflictFiles makes every `git merge…` command fail, the
+    // merge-base ancestry check included; no merge is needed here.
+    const sandbox = sandboxFake({ followUpJson: fixedVerdict, mergeConflictFiles: ["src/A.cs"] });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /rewritten/);
+    assert.deepEqual(calls.push, []);
+  });
+
+  it("tells the role which files conflicted when merging main conflicts", async () => {
+    const sandbox = sandboxFake({ followUpJson: "[]", mergeConflictFiles: ["src/A.cs", "src/B.cs"] });
+    const { passHost } = passHostFake({ threads: [], containsBase: false, sandbox });
+
+    await runPass(passTarget({ reasons: ["it has merge conflicts"] }), issue, BASE, passHost);
+
+    const merge = String(sandbox.runs[0]?.promptArgs?.MERGE ?? "");
+    assert.match(merge, /src\/A\.cs, src\/B\.cs/);
+    assert.match(merge, /git commit --no-edit/);
+  });
+
+  it("gives up when GitHub refuses the push for a workflow file", async () => {
+    const rejection = new Error(
+      "git push failed:\n! [remote rejected] (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/ci.yml` without `workflow` scope)",
+    );
+    const sandbox = sandboxFake({ followUpJson: fixedVerdict });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], sandbox, pushError: rejection });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    assert.match(calls.handBack[0]!.reason, /workflow/);
+    assert.deepEqual(calls.replyToThread, []);
+  });
+
+  it("doesn't resolve a bot thread whose reply failed to post", async () => {
+    const sandbox = sandboxFake({ followUpJson: fixedVerdict });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], sandbox });
+    passHost.replyToThread = () => {
+      throw new Error("gh api graphql failed");
+    };
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "passed");
+    assert.deepEqual(calls.resolveThread, []);
+    assert.match(calls.commentOnPullRequest[0]!.body, /reply on thread RT_bot/);
+  });
+
+  it("skips the pass, with no sandbox, when the role's only threads are owner threads already answered and nothing needs merging", async () => {
+    const answered = ownerThread({
+      comments: [...ownerThread().comments, { author: "owner", byBot: false, body: `${FOLLOW_UP_REPLY_MARKER}\nNoted.`, url: "https://github.com/o/r/pull/7#discussion_r8" }],
+    });
+    const { passHost, calls } = passHostFake({ threads: [answered], containsBase: true });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "skipped");
+    assert.deepEqual(calls.createSandbox, []);
+  });
+});
+
+describe("followUpPassPhase's skips", () => {
+  it("neither fetches nor passes on a PR whose issue isn't in this round's queue", async () => {
+    const { passHost, calls } = passHostFake({ threads: [botThread()] });
+
+    const outcomes = await followUpPassPhase([passTarget({ issueNumber: 99, headRefName: "feature/99-gone" })], [issue], BASE, passHost);
+
+    assert.deepEqual(calls.fetchBranch, []);
+    assert.deepEqual(calls.createSandbox, []);
+    assert.equal(outcomes[0]!.kind, "skipped");
+  });
+
+  it("skips a PR whose branch fails to fetch, and still passes on the rest", async () => {
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: true });
+    passHost.fetchBranch = (branch) => {
+      calls.fetchBranch.push(branch);
+      if (branch === BRANCH) throw new Error("git fetch failed");
+    };
+    const other: SandcastleIssue = { number: 51, title: "Tidy up the widget", body: "", labels: ["Sandcastle"], comments: [] };
+
+    const outcomes = await followUpPassPhase(
+      [passTarget(), passTarget({ number: 8, id: "PR_8", headRefName: "feature/51-tidy-widget", issueNumber: 51 })],
+      [issue, other],
+      BASE,
+      passHost,
+    );
+
+    assert.deepEqual(outcomes.map((outcome) => outcome.kind), ["skipped", "skipped"]);
+    assert.match((outcomes[0] as { reason: string }).reason, /fetch/);
+    assert.match((outcomes[1] as { reason: string }).reason, /nothing a follow-up pass handles/);
+  });
+});

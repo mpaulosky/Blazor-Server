@@ -16,6 +16,13 @@
 //                               issue for intake, no ready unblocked issue and
 //                               no PR that needs a follow-up pass, the run
 //                               exits 0 before any sandbox or agent starts.
+//                               Then the follow-up passes
+//                               (lib/follow-up-pass.mts): for each PR the
+//                               sweep logged, one sandbox merges main in when
+//                               needed, the follow-up role resolves conflicts
+//                               and the bot's and owner's review threads, and
+//                               the host gates and pushes the result, then
+//                               replies to and resolves the bot threads.
 //   Phase 0a (Intake):          One run judges every open issue that carries
 //                               none of sandcastle:ready, sandcastle:needs-info
 //                               and sandcastle:needs-human against the
@@ -118,6 +125,7 @@ import {
 } from "./lib/config.mts";
 import { critiqueRound } from "./lib/critique.mts";
 import { UncountedStopError } from "./lib/errors.mts";
+import { followUpPassPhase } from "./lib/follow-up-pass.mts";
 import { followUpPhase } from "./lib/follow-up.mts";
 import { gateIssues } from "./lib/gate.mts";
 import { cacheHostLogin, ensureLabels, openPullRequests } from "./lib/github.mts";
@@ -126,7 +134,7 @@ import { intakePhase } from "./lib/intake.mts";
 import { runLimits } from "./lib/limits.mts";
 import { planRound, resolveRoles } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
-import { handBackReport, usageReport } from "./lib/report.mts";
+import { handBackReport, humanThreadReport, usageReport } from "./lib/report.mts";
 import { roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
@@ -214,7 +222,7 @@ try {
     // Every phase below loads the queue; they share one read of each issue
     // this round.
     startQueueRound();
-    const { needsPass } = followUpPhase();
+    const { needsPass, passes } = followUpPhase();
     umbrellaPhase();
 
     // No build of this run is going between rounds, so any label it still
@@ -237,6 +245,17 @@ try {
       break;
     }
     console.log(`Work found: ${found}`);
+
+    // -----------------------------------------------------------------------
+    // Phase 0 (continued): Follow-up passes
+    // -----------------------------------------------------------------------
+    // See lib/follow-up-pass.mts#followUpPassPhase: each pass runs in its own
+    // sandbox, in parallel, and the build phase starts after them. A failed
+    // pass is logged and the sweep finds its PR again next round.
+    if (passes.length > 0) {
+      const passBase = fetchMain();
+      await followUpPassPhase(passes, loadQueue(), passBase);
+    }
 
     // -----------------------------------------------------------------------
     // Phase 0a: Intake
@@ -365,6 +384,16 @@ try {
     console.log("\nHanded back to a human:");
     for (const { target, label, reason } of handBacks) {
       console.log(`  ${target}: ${label} (${reason})`);
+    }
+  }
+
+  // Threads a follow-up pass kept from the follow-up role because someone
+  // other than the repository owner or a bot opened them (#78).
+  const humanThreads = humanThreadReport.items();
+  if (humanThreads.length > 0) {
+    console.log("\nReview threads waiting on a person:");
+    for (const { pr, author, url } of humanThreads) {
+      console.log(`  PR #${pr}: ${author ?? "a deleted account"} (${url})`);
     }
   }
 }
