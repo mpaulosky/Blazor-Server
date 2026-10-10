@@ -101,6 +101,10 @@ describe("recordFailedAttempt", () => {
     const summary = comments[0]!.input as string;
     assert.match(summary, /the tester failed: Error: timed out/);
     assert.match(summary, /the gate is still red at checkpoint 1/);
+    // The attempt that hands the issue back isn't "still in the queue".
+    const lastAttempt = summary.slice(summary.indexOf(`### Attempt ${BUILD_FAILURE_CAP}`));
+    assert.match(lastAttempt, /Failed build attempt 2 of 2/);
+    assert.doesNotMatch(lastAttempt, /stays in the queue/);
     assert.equal(report.items().length, 1);
     assert.equal(report.items()[0]!.target, "issue #69");
     assert.equal(report.items()[0]!.label, "sandcastle:needs-human");

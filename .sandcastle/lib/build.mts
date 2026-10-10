@@ -9,6 +9,7 @@ import { runRoleInSandbox } from "./agents.mts";
 import { commitsAhead } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
 import { BASE_BRANCH, BUILD_FAILED_MARKER, copyToWorktree, hooks, PUBLISH_RETRY_ATTEMPTS } from "./config.mts";
+import { UncountedStopError } from "./errors.mts";
 import { commentOnIssue, markerComments, openPullRequest, type SandcastleIssue } from "./github.mts";
 import { recordFailedAttempt } from "./handback.mts";
 import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety.mts";
@@ -17,6 +18,9 @@ import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
 import { publishedText } from "./scan.mts";
 import { git } from "./shell.mts";
 import { agentSandbox } from "./skills.mts";
+
+// Re-exported for the callers and tests that already import it from here.
+export { UncountedStopError };
 
 // Push the commit checkpoint 2's gate passed on to the issue branch, and open
 // (or reuse) the PR that closes the issue. Both run in the main checkout, with
@@ -95,14 +99,6 @@ function developerFailureComment(failure: string, branch: string): string {
   return `Sandcastle stopped building this issue: ${failure}, so \`${branch}\` wasn't pushed. The branch keeps its commits.`;
 }
 
-// Thrown by a role run that stopped because of the Claude usage limit or the
-// run's time budget, not because the role itself failed. buildIssue rethrows
-// it from any role, the reviewer's included, rather than treating it as a
-// failed build attempt or publishing work a role didn't get to finish: a round
-// that runs out of usage or time must not spend one of the issue's
-// BUILD_FAILURE_CAP attempts (see "Giving up and telling the human" in
-// docs/plans/sandcastle-workflow.md).
-export class UncountedStopError extends Error {}
 
 // What buildIssue needs from outside the pipeline; tests pass stubs.
 export type BuildHost = {

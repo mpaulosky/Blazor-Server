@@ -98,16 +98,18 @@ export function recordFailedAttempt(
   report: HandBackReport = handBackReport,
 ): void {
   const attempt = priorFailures.length + 1;
-  const comment = buildFailedComment(attempt, branch, detail);
   if (attempt < BUILD_FAILURE_CAP) {
-    commentOnIssue(issueNumber, comment, run, repo);
+    commentOnIssue(issueNumber, buildFailedComment(attempt, branch, detail), run, repo);
     return;
   }
+  // The last attempt is quoted without buildFailedComment's "the issue stays
+  // in the queue": this is the comment that takes it out.
+  const lastAttempt = `**Failed build attempt ${attempt} of ${BUILD_FAILURE_CAP}** on \`${branch}\`.\n\n${detail}`;
   handBack(
     { kind: "issue", number: issueNumber },
     "sandcastle:needs-human",
     `${attempt} failed build attempts on ${branch}`,
-    needsHumanComment(branch, [...priorFailures, comment]),
+    needsHumanComment(branch, [...priorFailures, lastAttempt]),
     run,
     repo,
     report,

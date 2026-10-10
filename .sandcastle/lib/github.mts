@@ -238,29 +238,35 @@ let signedInLogin: string | undefined;
 // comments count (see hostLogin): anyone can comment on a public issue, so a
 // stranger could otherwise paste the marker in to hand the issue back early.
 // PRs share the issues API, so this covers both.
-export function markerComments(number: number, label: string, marker: string, repo: string = repoName()): TimestampedComment[] {
+export function markerComments(
+  number: number,
+  label: string,
+  marker: string,
+  repo: string = repoName(),
+  run: typeof execFileSync = execFileSync,
+  poster: string = (signedInLogin ??= hostLogin(run)),
+): TimestampedComment[] {
   const lines = (output: string) =>
     output
       .split("\n")
       .filter((line) => line.trim() !== "")
       .map((line) => JSON.parse(line) as unknown);
-  signedInLogin ??= hostLogin();
   // Each item is printed as one line of JSON (@json), so the pages
   // --paginate fetches concatenate into lines that parse one at a time.
   const comments = lines(
-    sh(
-      process.cwd(), "gh", "api", "--paginate", `repos/${repo}/issues/${number}/comments`,
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${number}/comments`,
       "--jq", ".[] | {body, createdAt: .created_at, author: .user.login} | @json",
-    ),
+    ]),
   ) as TimestampedComment[];
   const timeline = lines(
-    sh(
-      process.cwd(), "gh", "api", "--paginate", `repos/${repo}/issues/${number}/timeline`,
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/issues/${number}/timeline`,
       "--jq", '.[] | select(.event == "labeled" or .event == "unlabeled") | {event, label: .label.name, createdAt: .created_at} | @json',
-    ),
+    ]),
   ) as TimelineLabelEvent[];
-  const createdAt = sh(process.cwd(), "gh", "api", `repos/${repo}/issues/${number}`, "--jq", ".created_at");
-  return markerCommentsSince(comments, timeline, label, marker, createdAt, signedInLogin);
+  const createdAt = ghWithStderr(run, ["api", `repos/${repo}/issues/${number}`, "--jq", ".created_at"]).trim();
+  return markerCommentsSince(comments, timeline, label, marker, createdAt, poster);
 }
 
 // A label only the host or a human applies to hand work back: the issue's or

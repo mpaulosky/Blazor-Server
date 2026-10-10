@@ -18,7 +18,7 @@ export type CheckpointSteps = {
   fix(checkpoint: Checkpoint, gateOutput: string): Promise<unknown>;
   // Whether a fix's error ends the checkpoint at once, rethrown, rather than
   // using up an attempt: a usage-limit or time-budget stop (see
-  // UncountedStopError in lib/build.mts) would only stop every later fixer
+  // UncountedStopError in lib/errors.mts) would only stop every later fixer
   // run too, after another full gate run each.
   uncounted?(error: unknown): boolean;
 };

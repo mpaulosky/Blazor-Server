@@ -7,6 +7,7 @@ import {
   ensureLabels,
   hostLogin,
   handBack,
+  markerComments,
   markerCommentsSince,
   openPullRequest,
   ownerApproved,
@@ -153,6 +154,38 @@ describe("hostLogin", () => {
 
     assert.equal(hostLogin(run), "sandcastle-bot");
     assert.deepEqual(calls[0]!.args, ["api", "user", "--jq", ".login"]);
+  });
+});
+
+describe("markerComments", () => {
+  // Recorded gh output: two pages of comments, one line of JSON per item, the
+  // timeline's label events, and the issue's created_at with gh's newline.
+  it("reads the comments, the timeline and the creation time from gh, and keeps the host's marker comments since the label's removal", () => {
+    const marker = "<!-- sandcastle:build-failed -->";
+    const comment = (body: string, createdAt: string, author: string) => JSON.stringify({ body, createdAt, author });
+    const { calls, run } = recordingGh([
+      [
+        comment(`${marker} before the removal`, "2026-01-01T00:00:00Z", "host"),
+        comment(`${marker} pasted by a stranger`, "2026-01-04T00:00:00Z", "stranger"),
+        "",
+        comment(`${marker} after the removal`, "2026-01-05T00:00:00Z", "host"),
+        comment("a plain comment", "2026-01-06T00:00:00Z", "host"),
+      ].join("\n"),
+      [
+        JSON.stringify({ event: "labeled", label: "sandcastle:needs-human", createdAt: "2026-01-02T00:00:00Z" }),
+        JSON.stringify({ event: "unlabeled", label: "sandcastle:needs-human", createdAt: "2026-01-03T00:00:00Z" }),
+      ].join("\n"),
+      "2025-12-01T00:00:00Z\n",
+    ]);
+
+    const kept = markerComments(69, "sandcastle:needs-human", marker, "o/r", run, "host");
+
+    assert.deepEqual(kept.map((kept) => kept.body), [`${marker} after the removal`]);
+    assert.deepEqual(calls.map((call) => call.args.slice(0, 4)), [
+      ["api", "--paginate", "repos/o/r/issues/69/comments", "--jq"],
+      ["api", "--paginate", "repos/o/r/issues/69/timeline", "--jq"],
+      ["api", "repos/o/r/issues/69", "--jq", ".created_at"],
+    ]);
   });
 });
 
