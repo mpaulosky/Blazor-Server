@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-11 | [feat(UI): Show the favicon before the app name in the nav bar](2026-10-11-pr-272-feat-ui-show-the-favicon-before-the-app-name-in-the-nav-bar.md) | release,automation |
 | 2026-10-11 | [test(e2e): Add Playwright end-to-end tests run through the AppHost](2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md) | release,automation |
 | 2026-10-10 | [feat(aspire): Add the Aspire AppHost and ServiceDefaults for the UI](2026-10-10-pr-268-feat-aspire-add-the-aspire-apphost-and-servicedefaults-for-the-ui.md) | release,automation |
 | 2026-10-10 | [feat(ui): Add the Blazor Web App with Tailwind CSS and feature slices](2026-10-10-pr-260-feat-ui-add-the-blazor-web-app-with-tailwind-css-and-feature-slices.md) | release,automation |
