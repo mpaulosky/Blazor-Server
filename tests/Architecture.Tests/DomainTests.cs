@@ -15,6 +15,7 @@ public class DomainTests
 {
 	[Theory]
 	[InlineData("UI")]
+	[InlineData("ServiceDefaults")]
 	[InlineData("Microsoft.AspNetCore")]
 	[InlineData("MongoDB")]
 	public void DomainTypes_ForbiddenDependency_HaveNoDependencyOnIt(string forbiddenNamespace)

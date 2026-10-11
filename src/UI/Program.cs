@@ -7,9 +7,13 @@
 // Project Name :  UI
 // =============================================
 
+using ServiceDefaults;
+
 using UI.Components;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
 
 builder.Services.AddRazorComponents()
 	.AddInteractiveServerComponents();
@@ -28,6 +32,7 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
+app.MapDefaultEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();

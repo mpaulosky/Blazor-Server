@@ -15,6 +15,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="../../src/Domain/Domain.csproj" />
+		<ProjectReference Include="../../src/ServiceDefaults/ServiceDefaults.csproj" />
 		<ProjectReference Include="../../src/UI/UI.csproj" />
 	</ItemGroup>
 

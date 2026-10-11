@@ -20,7 +20,7 @@ public class ProjectReferenceRuleTests
 	{
 		// Arrange
 		Assembly architectureTestsAssembly = typeof(ProjectReferenceRuleTests).Assembly;
-		HashSet<string> allowed = new(StringComparer.Ordinal) { "Domain" };
+		HashSet<string> allowed = new(StringComparer.Ordinal) { "Domain", "ServiceDefaults" };
 
 		// Touch a UI type so the compiler keeps the reference to its assembly.
 		_ = typeof(App);

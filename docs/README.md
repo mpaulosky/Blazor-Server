@@ -32,7 +32,8 @@ The Template is intended to give every Generated App:
 
 See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md) for the exact meaning of these terms.
 
-**Status:** early stage. The Template currently contains only the **Shared Kernel** (`src/Domain`) and its tests.
+**Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
+scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build) and their tests.
 
 ## Releases
 
@@ -40,6 +41,9 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.125](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.125) | 2026-10-11 | test(e2e): Add Playwright end-to-end tests run through the AppHost | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md) |
+| [v0.0.124](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.124) | 2026-10-10 | feat(aspire): Add the Aspire AppHost and ServiceDefaults for the UI | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-268-feat-aspire-add-the-aspire-apphost-and-servicedefaults-for-the-ui.md) |
+| [v0.0.123](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.123) | 2026-10-10 | feat(ui): Add the Blazor Web App with Tailwind CSS and feature slices | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-260-feat-ui-add-the-blazor-web-app-with-tailwind-css-and-feature-slices.md) |
 | [v0.0.122](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.122) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-264-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.121](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.121) | 2026-10-10 | feat(sandcastle): Write a run report with outcomes, hand-backs and token usage | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) |
 | [v0.0.120](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.120) | 2026-10-10 | feat(sandcastle): Follow-up passes fix red CI on Sandcastle PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-259-feat-sandcastle-follow-up-passes-fix-red-ci-on-sandcastle-prs.md) |
@@ -47,9 +51,6 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 | [v0.0.118](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.118) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-255-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.117](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.117) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-253-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.116](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.116) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-251-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.115](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.115) | 2026-10-10 | feat(sandcastle): Follow-up passes resolve review threads and merge conflicts | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-243-feat-sandcastle-follow-up-passes-resolve-review-threads-and-merge-conflicts.md) |
-| [v0.0.114](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.114) | 2026-10-10 | chore(sandcastle): Install Chromium's system libraries in the sandbox image | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-248-chore-sandcastle-install-chromium-s-system-libraries-in-the-sandbox-image.md) |
-| [v0.0.113](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.113) | 2026-10-10 | feat(sandcastle): Stop unattended runs cleanly when there's no work, time or usage left | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-241-feat-sandcastle-stop-unattended-runs-cleanly-when-there-s-no-work-time-or-usage-left.md) |
 
 <!-- RELEASES_END -->
 
@@ -68,7 +69,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 2. Install the prerequisites:
 
    - The .NET SDK `10.0.401`, as pinned in [global.json](https://github.com/mpaulosky/Blazor-Server/blob/main/global.json) (later 10.0 feature bands are accepted).
-   - Node.js and pnpm (`corepack enable`), used by the git hooks and the lint tools. The repo refuses `npm install`.
+   - Node.js and pnpm (`corepack enable`), used by the Tailwind CSS build, the git hooks and the lint tools. The repo refuses `npm install`.
    - [yamllint](https://yamllint.readthedocs.io/), which the pre-push hook runs on changed YAML files.
 
 3. Install the pnpm packages, then build and test each test project:
@@ -81,6 +82,26 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
    Run the test projects one at a time, as `scripts/gate.sh` and CI do. Under Microsoft Testing Platform,
    `dotnet test --solution` can report zero tests even when the projects pass.
+
+   `pnpm install` must come first: `dotnet build` runs the Tailwind CLI to write `src/UI/wwwroot/css/app.css`, and fails
+   with an error naming `pnpm install` when the packages are missing. Run the app with:
+
+   ```bash
+   dotnet run --project src/UI
+   ```
+
+   Or run it through the Aspire AppHost, which starts the UI as `WebApp` and opens the Aspire dashboard with its logs,
+   traces and metrics. `aspire run` needs the [Aspire CLI](https://aspire.dev/get-started/install-cli/); `dotnet run`
+   works without it, and the `http` profile needs no developer certificate:
+
+   ```bash
+   aspire run
+   dotnet run --project src/AppHost --launch-profile http
+   ```
+
+   In Development, the UI reports its health at `/health` and `/alive`.
+
+   While editing markup, `pnpm --dir src/UI run watch:css` rebuilds the CSS as you save.
 
 4. Optionally enable the git hooks in `.github/hooks` (markdownlint on commit, and `scripts/gate.sh` on push):
 
@@ -107,10 +128,20 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 ## Project layout
 
 ```text
+src/AppHost/                     -- Aspire AppHost: runs the UI as the WebApp resource
 src/Domain/                      -- Shared Kernel: Result, Result<T>, ApplicationConstants
-tests/Architecture.Tests/        -- Architecture rules (keeps Domain free of forbidden dependencies)
+src/ServiceDefaults/             -- Aspire service defaults: OpenTelemetry and health checks
+src/UI/                          -- Blazor Web App (server-rendered)
+src/UI/Components/Features/      -- One folder per feature slice (e.g. Home)
+src/UI/Styles/                   -- Tailwind CSS v4 source
+tests/AppHost.Tests.Integration/ -- AppHost integration tests (Aspire.Hosting.Testing)
+tests/Architecture.Tests/        -- Architecture rules (Domain's dependencies, UI's references, slice boundaries)
 tests/Domain.Tests.Unit/         -- Shared Kernel unit tests
+tests/UI.Tests.Unit/             -- UI component tests (bUnit)
+tests/UI.Tests.Integration/      -- UI integration tests (WebApplicationFactory)
+tests/UI.Tests.E2E/              -- End-to-end tests (Playwright, through the AppHost)
 docs/adr/                        -- Architecture decision records
+aspire.config.json               -- Aspire CLI settings, pointing at src/AppHost
 CONTEXT.md                       -- Domain language
 .sandcastle/                     -- Sandcastle agent setup
 docs/CODING_STANDARDS.md         -- Coding standards
@@ -124,7 +155,6 @@ CLAUDE.md, .claude/              -- Claude Code instructions, rules and skills
 
 All of the following are *planned* and don't exist yet:
 
-- *Planned:* the Blazor Web App (server-rendered).
 - *Planned:* the light/dark **Theme**, defaulting to the OS preference.
 - *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
 - *Planned:* Auth0 authentication, with a Profile page for a **User** and an Admin page for an **Admin**.

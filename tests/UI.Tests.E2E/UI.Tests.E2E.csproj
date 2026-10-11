@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- xUnit requires the collection fixture and its collection definition to be public (xUnit1027), which
+	     CA1515 otherwise asks to narrow to internal. -->
+	<PropertyGroup>
+		<NoWarn>$(NoWarn);CA1515</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Aspire.Hosting.Testing" />
+		<PackageReference Include="FluentAssertions" />
+		<PackageReference Include="Microsoft.Playwright" />
+		<PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+		<PackageReference Include="xunit.v3.mtp-v2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="FluentAssertions" />
+		<Using Include="Microsoft.Playwright" />
+		<Using Include="Xunit" />
+		<Using Include="static Microsoft.Playwright.Assertions" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="../../src/AppHost/AppHost.csproj" />
+		<ProjectReference Include="../../src/Domain/Domain.csproj" />
+	</ItemGroup>
+
+</Project>
