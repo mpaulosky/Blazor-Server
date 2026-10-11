@@ -88,29 +88,41 @@ public sealed class WebAppFixture : IAsyncLifetime
 	}
 
 	/// <summary>
-	///     Installs Chromium, starts the AppHost, waits for <c>WebApp</c> to become healthy, and launches headless
-	///     Chromium.
+	///     Installs Chromium, launches it headless, then starts the AppHost and waits for <c>WebApp</c> to become
+	///     healthy. Launching Chromium first means a broken browser (for example a missing shared library) fails
+	///     fast, before paying the AppHost's own startup budget.
 	/// </summary>
 	public async ValueTask InitializeAsync()
 	{
 		await InstallChromiumAsync();
 
-		using CancellationTokenSource startupTimeout =
-			CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-		startupTimeout.CancelAfter(s_startupTimeout);
+		try
+		{
+			_playwright = await Playwright.CreateAsync();
+			_browser = await _playwright.Chromium.LaunchAsync(new() { Headless = true });
 
-		IDistributedApplicationTestingBuilder builder = await DistributedApplicationTestingBuilder
-			.CreateAsync<global::Projects.AppHost>(startupTimeout.Token);
+			using CancellationTokenSource startupTimeout =
+				CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+			startupTimeout.CancelAfter(s_startupTimeout);
 
-		_application = await builder.BuildAsync(startupTimeout.Token);
-		await _application.StartAsync(startupTimeout.Token);
-		await _application.ResourceNotifications.WaitForResourceHealthyAsync(
-			ApplicationConstants.Website, WaitBehavior.StopOnResourceUnavailable, startupTimeout.Token);
+			IDistributedApplicationTestingBuilder builder = await DistributedApplicationTestingBuilder
+				.CreateAsync<global::Projects.AppHost>(startupTimeout.Token);
 
-		_baseAddress = _application.GetEndpoint(ApplicationConstants.Website, "http");
+			_application = await builder.BuildAsync(startupTimeout.Token);
+			await _application.StartAsync(startupTimeout.Token);
+			await _application.ResourceNotifications.WaitForResourceHealthyAsync(
+				ApplicationConstants.Website, WaitBehavior.StopOnResourceUnavailable, startupTimeout.Token);
 
-		_playwright = await Playwright.CreateAsync();
-		_browser = await _playwright.Chromium.LaunchAsync(new() { Headless = true });
+			_baseAddress = _application.GetEndpoint(ApplicationConstants.Website, "http");
+		}
+		catch
+		{
+			// Nothing that started above is cached by xUnit v3 on a failed InitializeAsync, so DisposeAsync would
+			// never otherwise run: dispose everything that did start before rethrowing.
+			await DisposeAsync();
+
+			throw;
+		}
 	}
 
 	/// <summary>
@@ -231,12 +243,28 @@ public sealed class WebAppFixture : IAsyncLifetime
 			return;
 		}
 
-		if (_captureTraces)
+		// Suppress CA1031: a failed trace save must never replace the test's own failure, which this runs
+		// alongside as part of WebAppPage.DisposeAsync's finally. The context close below must still happen even
+		// when saving the trace throws (an unwritable disk, or a context that already crashed).
+#pragma warning disable CA1031 // Do not catch general exception types
+		try
 		{
-			await pending.Context.Tracing.StopAsync(new() { Path = Path.Combine(s_artifactsDirectory, $"{pending.TraceName}.zip") });
+			if (_captureTraces)
+			{
+				await pending.Context.Tracing.StopAsync(
+					new() { Path = Path.Combine(s_artifactsDirectory, $"{pending.TraceName}.zip") });
+			}
 		}
-
-		await pending.Context.CloseAsync();
+		catch (Exception exception)
+		{
+			TestContext.Current.SendDiagnosticMessage(
+				$"Saving the Playwright trace for '{pending.TraceName}' failed: {exception}");
+		}
+		finally
+		{
+			await pending.Context.CloseAsync();
+		}
+#pragma warning restore CA1031 // Do not catch general exception types
 	}
 
 	private string TraceName()
