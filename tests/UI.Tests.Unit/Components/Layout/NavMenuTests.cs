@@ -8,6 +8,7 @@
 // =============================================
 
 using AngleSharp.Dom;
+using AngleSharp.Html.Dom;
 
 using UI.Components.Layout;
 
@@ -37,9 +38,13 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
+		// Text nodes count here, unlike in CSS :first-child, so the order of the icon and the name is checked; the
+		// whitespace-only text nodes from the markup's indentation are dropped.
 		IElement brand = cut.Find("nav > a[href='']");
-		IElement icon = cut.Find("nav > a[href=''] > img:first-child");
-		icon.GetAttribute("src").Should().Be("favicon.png");
-		brand.TextContent.Trim().Should().Be("UI");
+		INode[] content = [.. brand.ChildNodes.Where(node => node is IElement || !string.IsNullOrWhiteSpace(node.TextContent))];
+		content.Should().HaveCount(2);
+		content[0].Should().BeAssignableTo<IHtmlImageElement>()
+			.Which.GetAttribute("src").Should().Be("favicon.png");
+		content[1].TextContent.Trim().Should().Be("UI");
 	}
 }
