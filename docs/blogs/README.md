@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-10 | [feat(aspire): Add the Aspire AppHost and ServiceDefaults for the UI](2026-10-10-pr-268-feat-aspire-add-the-aspire-apphost-and-servicedefaults-for-the-ui.md) | release,automation |
 | 2026-10-10 | [feat(ui): Add the Blazor Web App with Tailwind CSS and feature slices](2026-10-10-pr-260-feat-ui-add-the-blazor-web-app-with-tailwind-css-and-feature-slices.md) | release,automation |
 | 2026-10-10 | [chore: Re-apply the repo-ci-baseline Template](2026-10-10-pr-264-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-10 | [feat(sandcastle): Write a run report with outcomes, hand-backs and token usage](2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) | release,automation |
