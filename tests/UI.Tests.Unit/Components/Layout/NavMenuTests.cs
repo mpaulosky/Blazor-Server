@@ -27,4 +27,19 @@ public class NavMenuTests : BunitContext
 		IReadOnlyList<IElement> homeLinks = cut.FindAll("a[href='/']");
 		homeLinks.Should().HaveCount(1);
 	}
+
+	[Fact]
+	public void Render_BrandLink_ShowsFaviconBeforeName()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		IElement brand = cut.Find("nav > a[href='']");
+		IElement icon = cut.Find("nav > a[href=''] > img:first-child");
+		icon.GetAttribute("src").Should().Be("favicon.png");
+		brand.TextContent.Trim().Should().Be("UI");
+	}
 }
