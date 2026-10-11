@@ -19,7 +19,8 @@ public class HomeStylingTests(WebAppFixture fixture)
 	{
 		// Arrange
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-		await using IPage page = await fixture.CreatePageAsync(cancellationToken);
+		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage page = webAppPage.Page;
 		await page.GotoAsync(fixture.BaseAddress.ToString());
 		ILocator heading = page.GetByRole(AriaRole.Heading, new() { Name = "Hello, world!" });
 

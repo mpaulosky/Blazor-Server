@@ -7,6 +7,8 @@
 // Project Name :  UI.Tests.E2E
 // =============================================
 
+using System.Text.RegularExpressions;
+
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
@@ -21,7 +23,16 @@ namespace UI.Tests.E2E.Fixtures;
 /// </summary>
 public sealed class WebAppFixture : IAsyncLifetime
 {
+	// A few hundred MB of Chromium, chromium-headless-shell and ffmpeg can take several minutes on a slow link, and
+	// must not race the AppHost's own startup budget below.
+	private static readonly TimeSpan s_installTimeout = TimeSpan.FromMinutes(10);
 	private static readonly TimeSpan s_startupTimeout = TimeSpan.FromMinutes(2);
+
+	// Caps a trace file's name well under the 255-byte path-segment limit that both the local file system and CI's
+	// artifact upload enforce, leaving room for the directory and extension.
+	private const int MaxTraceNameLength = 100;
+
+	private static readonly Regex s_unsafeTraceNameCharacters = new("[^A-Za-z0-9._-]", RegexOptions.Compiled);
 
 	// ci.yml uploads bin/<Configuration>/**/TestResults/playwright-artifacts/ from E2E jobs.
 	private static readonly string s_artifactsDirectory =
@@ -30,7 +41,10 @@ public sealed class WebAppFixture : IAsyncLifetime
 	private readonly bool _captureTraces =
 		string.Equals(Environment.GetEnvironmentVariable("PLAYWRIGHT_ARTIFACTS"), "true", StringComparison.OrdinalIgnoreCase);
 
-	private readonly List<(IBrowserContext Context, string TraceName)> _contexts = [];
+	private readonly object _pendingContextsLock = new();
+	private readonly List<PendingContext> _pendingContexts = [];
+
+	private int _pageSequence;
 
 	private DistributedApplication? _application;
 	private IPlaywright? _playwright;
@@ -46,15 +60,20 @@ public sealed class WebAppFixture : IAsyncLifetime
 	///     Opens a new, isolated browser page against <see cref="BaseAddress" />.
 	/// </summary>
 	/// <param name="cancellationToken">A token that cancels opening the page.</param>
-	public async Task<IPage> CreatePageAsync(CancellationToken cancellationToken)
+	public async Task<WebAppPage> CreatePageAsync(CancellationToken cancellationToken)
 	{
 		IBrowser browser = _browser ?? throw new InvalidOperationException("Chromium has not started yet.");
 		cancellationToken.ThrowIfCancellationRequested();
 
-		// A context per page keeps cookies and storage from leaking between tests. The fixture closes it, rather than
-		// the test, so it can save the context's trace first.
+		// A context per page keeps cookies and storage from leaking between tests. The returned WebAppPage closes
+		// it, rather than the fixture, so the trace is saved and the context freed as soon as each test finishes.
 		IBrowserContext context = await browser.NewContextAsync(new() { BaseURL = BaseAddress.ToString() });
-		_contexts.Add((context, TraceName()));
+		PendingContext pending = new(context, TraceName());
+
+		lock (_pendingContextsLock)
+		{
+			_pendingContexts.Add(pending);
+		}
 
 		if (_captureTraces)
 		{
@@ -63,7 +82,9 @@ public sealed class WebAppFixture : IAsyncLifetime
 
 		cancellationToken.ThrowIfCancellationRequested();
 
-		return await context.NewPageAsync();
+		IPage page = await context.NewPageAsync();
+
+		return new WebAppPage(page, () => ClosePendingContextAsync(pending));
 	}
 
 	/// <summary>
@@ -72,19 +93,11 @@ public sealed class WebAppFixture : IAsyncLifetime
 	/// </summary>
 	public async ValueTask InitializeAsync()
 	{
+		await InstallChromiumAsync();
+
 		using CancellationTokenSource startupTimeout =
 			CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
 		startupTimeout.CancelAfter(s_startupTimeout);
-
-		// Installing is a no-op when Chromium is already there, so CI, the sandbox and a fresh clone all run the same
-		// way. Program.Main blocks synchronously and ignores cancellation, so run it on a pool thread and bound the
-		// wait by the startup timeout rather than letting a stalled download hang the whole test run.
-		int exitCode = await Task.Run(() => Microsoft.Playwright.Program.Main(["install", "chromium"]), startupTimeout.Token)
-			.WaitAsync(startupTimeout.Token);
-		if (exitCode != 0)
-		{
-			throw new InvalidOperationException($"Installing Chromium for Playwright failed with exit code {exitCode}.");
-		}
 
 		IDistributedApplicationTestingBuilder builder = await DistributedApplicationTestingBuilder
 			.CreateAsync<global::Projects.AppHost>(startupTimeout.Token);
@@ -101,7 +114,7 @@ public sealed class WebAppFixture : IAsyncLifetime
 	}
 
 	/// <summary>
-	///     Closes Chromium and the AppHost.
+	///     Closes Chromium and the AppHost, and closes any browser context a test didn't already dispose.
 	/// </summary>
 	// Suppress CA1031: this teardown is the top-level boundary for cleanup. Every disposal below must run even when
 	// an earlier one throws, or a crashed context, browser or Playwright instance leaves the AppHost's WebApp
@@ -111,16 +124,20 @@ public sealed class WebAppFixture : IAsyncLifetime
 	{
 		List<Exception> failures = [];
 
-		foreach ((IBrowserContext context, string traceName) in _contexts)
+		List<PendingContext> remaining;
+
+		lock (_pendingContextsLock)
+		{
+			remaining = [.. _pendingContexts];
+		}
+
+		// Normally empty: each WebAppPage closes its own context when the test disposes it. This is only a
+		// fallback for a context a crashed or cancelled test left open.
+		foreach (PendingContext pending in remaining)
 		{
 			try
 			{
-				if (_captureTraces)
-				{
-					await context.Tracing.StopAsync(new() { Path = Path.Combine(s_artifactsDirectory, $"{traceName}.zip") });
-				}
-
-				await context.CloseAsync();
+				await ClosePendingContextAsync(pending);
 			}
 			catch (Exception exception)
 			{
@@ -168,13 +185,77 @@ public sealed class WebAppFixture : IAsyncLifetime
 	}
 #pragma warning restore CA1031 // Do not catch general exception types
 
+	private static async Task InstallChromiumAsync()
+	{
+		using CancellationTokenSource installTimeout =
+			CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+		installTimeout.CancelAfter(s_installTimeout);
+
+		int exitCode;
+
+		try
+		{
+			// Installing is a no-op when Chromium is already there, so CI, the sandbox and a fresh clone all run
+			// the same way. Program.Main blocks synchronously and ignores cancellation, so run it on a pool thread
+			// and bound the wait by the install timeout rather than letting a stalled download hang the whole run.
+			exitCode = await Task
+				.Run(() => Microsoft.Playwright.Program.Main(["install", "chromium"]), installTimeout.Token)
+				.WaitAsync(installTimeout.Token);
+		}
+		catch (OperationCanceledException exception)
+			when (!TestContext.Current.CancellationToken.IsCancellationRequested)
+		{
+			throw new InvalidOperationException(
+				$"Installing Chromium did not finish within {s_installTimeout.TotalMinutes} minutes. Run " +
+				"'playwright install chromium' manually, then re-run the tests.", exception);
+		}
+
+		if (exitCode != 0)
+		{
+			throw new InvalidOperationException($"Installing Chromium for Playwright failed with exit code {exitCode}.");
+		}
+	}
+
+	private async ValueTask ClosePendingContextAsync(PendingContext pending)
+	{
+		bool stillPending;
+
+		lock (_pendingContextsLock)
+		{
+			stillPending = _pendingContexts.Remove(pending);
+		}
+
+		if (!stillPending)
+		{
+			// Already closed, either by the test's own WebAppPage.DisposeAsync or by this fixture's fallback loop.
+			return;
+		}
+
+		if (_captureTraces)
+		{
+			await pending.Context.Tracing.StopAsync(new() { Path = Path.Combine(s_artifactsDirectory, $"{pending.TraceName}.zip") });
+		}
+
+		await pending.Context.CloseAsync();
+	}
+
 	private string TraceName()
 	{
 		string testName = TestContext.Current.Test?.TestDisplayName ?? "unknown-test";
-		char[] invalidCharacters = Path.GetInvalidFileNameChars();
-		string safeName = string.Concat(testName.Select(character => invalidCharacters.Contains(character) ? '_' : character));
 
-		// The index keeps two pages from the same test from overwriting each other's trace.
-		return $"{_contexts.Count:D3}-{safeName}";
+		// actions/upload-artifact rejects more characters than the local file system does (": < > | * ? " and
+		// control characters), so names are whitelisted rather than built from Path.GetInvalidFileNameChars().
+		string safeName = s_unsafeTraceNameCharacters.Replace(testName, "_");
+		string prefix = $"{Interlocked.Increment(ref _pageSequence) - 1:D3}-";
+		int maxSafeNameLength = Math.Max(0, MaxTraceNameLength - prefix.Length);
+
+		if (safeName.Length > maxSafeNameLength)
+		{
+			safeName = safeName[..maxSafeNameLength];
+		}
+
+		return prefix + safeName;
 	}
+
+	private sealed record PendingContext(IBrowserContext Context, string TraceName);
 }

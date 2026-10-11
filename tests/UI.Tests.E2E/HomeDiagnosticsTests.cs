@@ -19,7 +19,8 @@ public class HomeDiagnosticsTests(WebAppFixture fixture)
 	{
 		// Arrange
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-		await using IPage page = await fixture.CreatePageAsync(cancellationToken);
+		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage page = webAppPage.Page;
 
 		// Act
 		// NetworkIdle waits past the `load` event until the SignalR circuit's websocket upgrade settles, so errors
@@ -38,7 +39,8 @@ public class HomeDiagnosticsTests(WebAppFixture fixture)
 	{
 		// Arrange
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-		await using IPage page = await fixture.CreatePageAsync(cancellationToken);
+		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage page = webAppPage.Page;
 		await page.GotoAsync(fixture.BaseAddress.ToString(), new() { WaitUntil = WaitUntilState.NetworkIdle });
 		ILocator reconnectModal = page.Locator("#components-reconnect-modal");
 
