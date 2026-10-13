@@ -7,6 +7,7 @@
 // Project Name :  UI.Tests.Integration
 // =============================================
 
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 using Auth0.AspNetCore.Authentication;
@@ -97,7 +98,9 @@ public partial class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
 
 	private sealed class CapturingLoggerProvider : ILoggerProvider
 	{
-		public List<string> Messages { get; } = [];
+		// The test server logs "Request finished" after the client already has the response, so the test can read
+		// while the server writes; a ConcurrentQueue enumerates a snapshot instead of throwing.
+		public ConcurrentQueue<string> Messages { get; } = new();
 
 		public ILogger CreateLogger(string categoryName) => new CapturingLogger(Messages);
 
@@ -105,7 +108,7 @@ public partial class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
 		{
 		}
 
-		private sealed class CapturingLogger(List<string> messages) : ILogger
+		private sealed class CapturingLogger(ConcurrentQueue<string> messages) : ILogger
 		{
 			public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
@@ -114,10 +117,7 @@ public partial class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
 			public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
 				Func<TState, Exception?, string> formatter)
 			{
-				lock (messages)
-				{
-					messages.Add(formatter(state, exception));
-				}
+				messages.Enqueue(formatter(state, exception));
 			}
 		}
 	}
