@@ -1,7 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+	<!-- UiWebApplicationFactory must be public: it's the constructor parameter of public IClassFixture<> test
+	     classes in this assembly, which CA1515 otherwise asks to narrow to internal. -->
+	<PropertyGroup>
+		<NoWarn>$(NoWarn);CA1515</NoWarn>
+	</PropertyGroup>
+
 	<ItemGroup>
+		<!-- OpenIdConnectOptions and OpenIdConnectConfiguration, read by the login and logout tests to drive the
+		     Auth0 OIDC handler without a real tenant, aren't in the shared framework: they moved into this
+		     package. -->
 		<PackageReference Include="FluentAssertions" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
 		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
 		<PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
 		<PackageReference Include="xunit.v3.mtp-v2" />

@@ -46,8 +46,38 @@ public class UiTests
 			SliceDependencyRule.FindCrossSliceDependencies(uiAssembly, featuresNamespace);
 
 		// Assert
-		slices.Should().Contain("Home");
+		slices.Should().Contain("Home").And.Contain("Authentication");
 		crossSliceDependencies.Should()
 			.BeEmpty("each feature slice holds everything its use case needs, and depends on no other slice (ADR-0005)");
+	}
+
+	[Fact]
+	public void UiAssembly_Auth0Sdk_IsOnlyDependedOnByTheAuthenticationSlice()
+	{
+		// Arrange
+		Assembly uiAssembly = typeof(App).Assembly;
+		const string authenticationNamespace = "UI.Components.Features.Authentication";
+		const string auth0Sdk = "Auth0.AspNetCore.Authentication";
+
+		// Act
+		NetArchTest.Rules.TestResult outsideSliceResult = Types.InAssembly(uiAssembly)
+			.That()
+			.DoNotResideInNamespace(authenticationNamespace)
+			.ShouldNot()
+			.HaveDependencyOn(auth0Sdk)
+			.GetResult();
+		IEnumerable<Type> typesInsideSliceUsingAuth0Sdk = Types.InAssembly(uiAssembly)
+			.That()
+			.ResideInNamespace(authenticationNamespace)
+			.And()
+			.HaveDependencyOn(auth0Sdk)
+			.GetTypes();
+
+		// Assert
+		(outsideSliceResult.FailingTypeNames ?? []).Should()
+			.BeEmpty("only the Authentication slice may depend on the Auth0 SDK");
+		typesInsideSliceUsingAuth0Sdk.Should().NotBeEmpty(
+			"the Authentication slice is expected to call into the Auth0 SDK; an empty result would let a typo in " +
+			"the namespace above pass that rule vacuously");
 	}
 }

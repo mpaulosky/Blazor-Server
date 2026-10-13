@@ -1,0 +1,16 @@
+@attribute [Route(AuthenticationEndpoints.AccessDeniedPath)]
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+
+<PageTitle>Access denied</PageTitle>
+
+<h1>Access denied</h1>
+
+@code {
+	[CascadingParameter]
+	private HttpContext? HttpContext { get; set; }
+
+	protected override void OnInitialized()
+	{
+		throw new NotImplementedException();
+	}
+}

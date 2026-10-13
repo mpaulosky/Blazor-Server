@@ -17,6 +17,11 @@ public class MainLayoutTests : BunitContext
 {
 	private const string BodyMarkup = "<p>page content</p>";
 
+	public MainLayoutTests()
+	{
+		AddAuthorization().SetNotAuthorized();
+	}
+
 	[Fact]
 	public void Render_RendersBodyContent()
 	{

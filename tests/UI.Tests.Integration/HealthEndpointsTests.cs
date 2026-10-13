@@ -12,6 +12,8 @@ using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
+using UI.Tests.Integration.Fixtures;
+
 namespace UI.Tests.Integration;
 
 public class HealthEndpointsTests
@@ -22,7 +24,7 @@ public class HealthEndpointsTests
 	public async Task GetHealthEndpoint_DevelopmentEnvironment_ReturnsOk(string path)
 	{
 		// Arrange
-		using WebApplicationFactory<Program> factory = new WebApplicationFactory<Program>()
+		using WebApplicationFactory<Program> factory = new UiWebApplicationFactory()
 			.WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
 		using HttpClient client = factory.CreateClient();
 
@@ -40,7 +42,7 @@ public class HealthEndpointsTests
 	public async Task GetHealthEndpoint_ProductionEnvironment_ReturnsNotFound(string path)
 	{
 		// Arrange
-		using WebApplicationFactory<Program> factory = new WebApplicationFactory<Program>()
+		using WebApplicationFactory<Program> factory = new UiWebApplicationFactory()
 			.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
 		using HttpClient client = factory.CreateClient();
 

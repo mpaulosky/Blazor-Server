@@ -10,12 +10,18 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 
+using UI.Components.Features.Authentication;
 using UI.Components.Layout;
 
 namespace UI.Tests.Unit.Components.Layout;
 
 public class NavMenuTests : BunitContext
 {
+	public NavMenuTests()
+	{
+		AddAuthorization().SetNotAuthorized();
+	}
+
 	[Fact]
 	public void Render_HasLinkToHome()
 	{
@@ -47,5 +53,23 @@ public class NavMenuTests : BunitContext
 		content[0].Should().BeAssignableTo<IHtmlImageElement>()
 			.Which.GetAttribute("src").Should().Be("favicon.png");
 		content[1].TextContent.Trim().Should().Be("UI");
+	}
+
+	[Fact]
+	public void Render_SignInOutComponent_IsPlacedAtTheNavBarsRight()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		IElement nav = cut.Find("nav");
+		IElement[] children = [.. nav.Children];
+		children.Should().NotBeEmpty();
+		IRenderedComponent<LoginDisplay> loginDisplay = cut.FindComponent<LoginDisplay>();
+		IElement lastChild = children[^1];
+		loginDisplay.Nodes.Should().NotBeEmpty();
+		loginDisplay.Nodes.Should().AllSatisfy(node => lastChild.Contains(node).Should().BeTrue());
 	}
 }

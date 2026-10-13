@@ -10,15 +10,15 @@
 using System.Net;
 using System.Text.RegularExpressions;
 
-using Microsoft.AspNetCore.Mvc.Testing;
+using UI.Tests.Integration.Fixtures;
 
 namespace UI.Tests.Integration;
 
-public partial class AppTests : IClassFixture<WebApplicationFactory<Program>>
+public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 {
 	private readonly HttpClient _client;
 
-	public AppTests(WebApplicationFactory<Program> factory)
+	public AppTests(UiWebApplicationFactory factory)
 	{
 		ArgumentNullException.ThrowIfNull(factory);
 
