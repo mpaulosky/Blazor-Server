@@ -34,7 +34,8 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
 scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
-Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, and their tests.
+Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, an Admin page only an **Admin** can
+open, and their tests.
 
 ## Releases
 
@@ -42,6 +43,7 @@ Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.134](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.134) | 2026-10-13 | feat(admin): Add an Admin page only an Admin can open | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-293-feat-admin-add-an-admin-page-only-an-admin-can-open.md) |
 | [v0.0.133](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.133) | 2026-10-13 | chore(sandcastle): Merge main in before checkpoint 2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-291-chore-sandcastle-merge-main-in-before-checkpoint-2.md) |
 | [v0.0.132](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.132) | 2026-10-13 | feat(auth): Greet the signed-in User by name in the nav bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-287-feat-auth-greet-the-signed-in-user-by-name-in-the-nav-bar.md) |
 | [v0.0.131](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.131) | 2026-10-13 | feat(profile): Show a User their own claims on a Profile page | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-288-feat-profile-show-a-user-their-own-claims-on-a-profile-page.md) |
@@ -51,7 +53,6 @@ Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims
 | [v0.0.127](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.127) | 2026-10-13 | style(repo): Indent MSBuild and solution files with tabs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-279-style-repo-indent-msbuild-and-solution-files-with-tabs.md) |
 | [v0.0.126](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.126) | 2026-10-11 | feat(UI): Show the favicon before the app name in the nav bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-272-feat-ui-show-the-favicon-before-the-app-name-in-the-nav-bar.md) |
 | [v0.0.125](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.125) | 2026-10-11 | test(e2e): Add Playwright end-to-end tests run through the AppHost | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md) |
-| [v0.0.124](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.124) | 2026-10-10 | feat(aspire): Add the Aspire AppHost and ServiceDefaults for the UI | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-268-feat-aspire-add-the-aspire-apphost-and-servicedefaults-for-the-ui.md) |
 
 <!-- RELEASES_END -->
 
@@ -202,7 +203,6 @@ All of the following are *planned* and don't exist yet:
 
 - *Planned:* the light/dark **Theme**, defaulting to the OS preference.
 - *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
-- *Planned:* an Admin page for an **Admin**, built on the Auth0 sign-in.
 
 ## Contributing
 
