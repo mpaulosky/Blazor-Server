@@ -87,4 +87,40 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 		response.StatusCode.Should().Be(HttpStatusCode.Found);
 		response.Headers.Location.Should().Be(new Uri("/", UriKind.Relative));
 	}
+
+	[Fact]
+	public async Task PostLogout_WithValidAntiforgeryToken_EndsTheAuth0SessionReturningToRoot()
+	{
+		// Arrange
+		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
+		using FormUrlEncodedContent content = new([
+			new KeyValuePair<string?, string?>("__RequestVerificationToken", await ScrapeLogoutTokenAsync(client)),
+		]);
+
+		// Act
+		HttpResponseMessage response = await client.PostAsync(
+			new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative), content,
+			TestContext.Current.CancellationToken);
+
+		// Assert
+		response.StatusCode.Should().Be(HttpStatusCode.Found);
+		response.Headers.Location.Should().Be(new Uri(
+			$"https://{UiWebApplicationFactory.PlaceholderDomain}/v2/logout" +
+			$"?client_id={UiWebApplicationFactory.PlaceholderClientId}&returnTo=http%3A%2F%2Flocalhost%2F"));
+		response.Headers.GetValues("Set-Cookie").Should()
+			.Contain(cookie => cookie.StartsWith(".AspNetCore.Cookies=;", StringComparison.Ordinal) &&
+				cookie.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase));
+	}
+
+	private static async Task<string> ScrapeLogoutTokenAsync(HttpClient client)
+	{
+		HttpResponseMessage homeResponse =
+			await client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
+		string html = await homeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+		Match inputTag = AntiforgeryInputPattern().Match(html);
+		inputTag.Success.Should().BeTrue("the Log out form must render an antiforgery token for a signed-in User");
+
+		return ValueAttributePattern().Match(inputTag.Value).Groups[1].Value;
+	}
 }

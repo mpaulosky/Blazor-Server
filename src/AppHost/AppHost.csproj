@@ -6,6 +6,8 @@
 		     bundle (AspireUseCliBundle=false). Those packages are all it needs, so `dotnet run` and the tests work
 		     without the Aspire CLI installed. -->
 		<NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+		<!-- The same ID as UI's, so the AppHost's Auth0 parameters read the Auth0:* user secrets UI already uses. -->
+		<UserSecretsId>94491f6e-auth0-values-3ff40da38702</UserSecretsId>
 	</PropertyGroup>
 
 	<ItemGroup>

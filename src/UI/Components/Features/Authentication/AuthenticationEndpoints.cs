@@ -7,6 +7,13 @@
 // Project Name :  UI
 // =============================================
 
+using Auth0.AspNetCore.Authentication;
+
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http.HttpResults;
+
 namespace UI.Components.Features.Authentication;
 
 /// <summary>
@@ -29,4 +36,56 @@ public static class AuthenticationEndpoints
 	///   The path shown to a caller Auth0 denies access to.
 	/// </summary>
 	public const string AccessDeniedPath = "/authentication/access-denied";
+
+	/// <summary>
+	///   Maps the GET login endpoint and the antiforgery-protected POST logout endpoint.
+	/// </summary>
+	/// <param name="endpoints">The endpoint route builder to map onto.</param>
+	/// <returns>The same endpoint route builder, for chaining.</returns>
+	public static IEndpointRouteBuilder MapAuthenticationEndpoints(this IEndpointRouteBuilder endpoints)
+	{
+		endpoints.MapGet(LoginPath, Login).AllowAnonymous();
+		endpoints.MapPost(LogoutPath, LogoutAsync);
+
+		// Logout changes state, so it's POST only. Routing would answer a GET with 405 itself, but in Development
+		// MapStaticAssets adds a {**path:file} GET fallback that wins the method match and then 404s.
+		endpoints.MapMethods(LogoutPath, [HttpMethods.Get, HttpMethods.Head], LogoutMethodNotAllowed);
+
+		return endpoints;
+	}
+
+	private static ChallengeHttpResult Login(string? returnUrl)
+	{
+		AuthenticationProperties properties = new LoginAuthenticationPropertiesBuilder()
+			.WithRedirectUri(LocalReturnUrl.OrRoot(returnUrl))
+			.Build();
+
+		return TypedResults.Challenge(properties, [Auth0Constants.AuthenticationScheme]);
+	}
+
+	private static StatusCodeHttpResult LogoutMethodNotAllowed(HttpResponse response)
+	{
+		response.Headers.Allow = HttpMethods.Post;
+
+		return TypedResults.StatusCode(StatusCodes.Status405MethodNotAllowed);
+	}
+
+	// The endpoint binds no form, so minimal APIs don't validate the antiforgery token for it; it does so itself.
+	private static async Task<Results<SignOutHttpResult, BadRequest>> LogoutAsync(HttpContext context,
+		IAntiforgery antiforgery)
+	{
+		if (!await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false))
+		{
+			return TypedResults.BadRequest();
+		}
+
+		// Signing out of the Auth0 scheme redirects to Auth0's logout endpoint, which ends the Auth0 session too and
+		// then returns the browser to "/".
+		AuthenticationProperties properties = new LogoutAuthenticationPropertiesBuilder()
+			.WithRedirectUri("/")
+			.Build();
+
+		return TypedResults.SignOut(properties,
+			[CookieAuthenticationDefaults.AuthenticationScheme, Auth0Constants.AuthenticationScheme]);
+	}
 }
