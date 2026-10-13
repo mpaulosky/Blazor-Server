@@ -45,8 +45,8 @@ public class MainLayoutTests : BunitContext
 			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
 
 		// Assert
-		IReadOnlyList<IElement> homeLinks = cut.FindAll("a[href='/']");
-		homeLinks.Should().HaveCount(1);
+		IReadOnlyList<IElement> homeLinks = cut.FindAll("a").Where(link => link.TextContent.Trim() == "Home").ToList();
+		homeLinks.Should().ContainSingle().Which.GetAttribute("href").Should().BeEmpty();
 	}
 
 	[Fact]
