@@ -56,6 +56,7 @@ function host(
     latestMain = base,
     containsMain = true,
     mergeExitCode = 0,
+    abortExitCode = 0,
     latestMainError,
   }: {
     ahead?: number | number[];
@@ -74,11 +75,13 @@ function host(
     // comment (see DESIGN_MARKER in lib/config.mts).
     designFile?: string;
     // The commit latestMain() resolves origin/main to just before checkpoint
-    // 2, whether the branch already contains it, how `git merge` of it exits,
-    // and an error latestMain() throws instead (a failed fetch).
+    // 2, whether the branch already contains it, how `git merge` of it and
+    // `git merge --abort` exit, and an error latestMain() throws instead (a
+    // failed fetch).
     latestMain?: string;
     containsMain?: boolean;
     mergeExitCode?: number;
+    abortExitCode?: number;
     latestMainError?: string;
   } = {},
 ) {
@@ -137,12 +140,19 @@ function host(
       }
       if (command.startsWith("git merge --abort")) {
         steps.push("merge abort");
-        return { stdout: "", stderr: "", exitCode: 0 };
+        return { stdout: "", stderr: "", exitCode: abortExitCode };
       }
       if (command.startsWith("git merge ")) {
-        headNumber++;
+        // A conflicting merge leaves HEAD where it was.
+        if (mergeExitCode === 0) headNumber++;
         steps.push(`merge ${command.split(" ").at(-1)}`);
         return { stdout: "", stderr: mergeExitCode === 0 ? "" : "CONFLICT (content)", exitCode: mergeExitCode };
+      }
+      const reset = /^git reset --hard '([0-9a-f]+)'$/.exec(command);
+      if (reset) {
+        headNumber = Number.parseInt(reset[1]!, 16);
+        steps.push(`reset ${reset[1]}`);
+        return { stdout: "", stderr: "", exitCode: 0 };
       }
       if (command.includes(".sandcastle/work/")) {
         workCommands.push({ command, rolesRun: runs.length });
@@ -631,9 +641,6 @@ describe("buildIssue publishing", () => {
   });
 });
 
-// #147: a role run that hits Claude's usage limit, or a build the time
-// budget has already stopped, must end the build uncounted rather than
-// treating it as a failed attempt or publishing unreviewed work.
 describe("buildIssue syncing with main before publishing", () => {
   // The commit origin/main has moved on to since the round started.
   const newerMain = "a".repeat(40);
@@ -676,8 +683,8 @@ describe("buildIssue syncing with main before publishing", () => {
     assert.equal(mainChecks.length, 1);
   });
 
-  it("aborts a merge that conflicts and still publishes, leaving the conflict to the follow-up pass", async () => {
-    const { steps, logs, comments, buildHost } = host([0, 0], {
+  it("aborts a merge that conflicts and publishes the reviewed commit, leaving the conflict to the follow-up pass", async () => {
+    const { steps, logs, comments, pushed, head, buildHost } = host([0, 0], {
       latestMain: newerMain,
       containsMain: false,
       mergeExitCode: 1,
@@ -687,7 +694,55 @@ describe("buildIssue syncing with main before publishing", () => {
 
     assert.deepEqual(steps.slice(3, 7), ["reviewer", `merge '${newerMain}'`, "merge abort", "gate: scripts/gate.sh 2>&1"]);
     assert.equal(result.outcome, "published");
+    // tester, backend and reviewer each committed once.
+    assert.deepEqual(pushed, [{ branch, commit: head() }]);
+    assert.equal(head(), (3).toString(16).padStart(40, "0"));
     assert.ok(logs.some((line) => line.includes("merging main conflicted")));
+    assert.deepEqual(comments, []);
+  });
+
+  it("resets to the reviewed commit when aborting the conflicting merge fails", async () => {
+    const { steps, pushed, buildHost } = host([0, 0], {
+      latestMain: newerMain,
+      containsMain: false,
+      mergeExitCode: 1,
+      abortExitCode: 128,
+    });
+    const reviewed = (3).toString(16).padStart(40, "0");
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(steps.slice(5, 8), ["merge abort", `reset ${reviewed}`, "gate: scripts/gate.sh 2>&1"]);
+    assert.equal(result.outcome, "published");
+    assert.deepEqual(pushed, [{ branch, commit: reviewed }]);
+  });
+
+  it("gates the merged tree once without the gate-fixer, and on red publishes the reviewed commit without main", async () => {
+    const { steps, logs, pushed, comments, recordBuildFailureCalls, buildHost } = host([0, 1, 0], {
+      latestMain: newerMain,
+      containsMain: false,
+    });
+    const reviewed = (3).toString(16).padStart(40, "0");
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(steps, [
+      "tester",
+      "backend",
+      "gate: scripts/gate.sh 2>&1",
+      "reviewer",
+      `merge '${newerMain}'`,
+      "gate: scripts/gate.sh 2>&1",
+      `reset ${reviewed}`,
+      "gate: scripts/gate.sh 2>&1",
+      "publish",
+      "close",
+    ]);
+    assert.equal(result.outcome, "published");
+    assert.deepEqual(pushed, [{ branch, commit: reviewed }]);
+    assert.ok(logs.includes("  #69 checkpoint 2: gate failed with main merged in"));
+    assert.ok(logs.some((line) => line.includes("main broke the gate once merged in")));
+    assert.deepEqual(recordBuildFailureCalls, []);
     assert.deepEqual(comments, []);
   });
 
@@ -702,6 +757,9 @@ describe("buildIssue syncing with main before publishing", () => {
   });
 });
 
+// #147: a role run that hits Claude's usage limit, or a build the time
+// budget has already stopped, must end the build uncounted rather than
+// treating it as a failed attempt or publishing unreviewed work.
 describe("buildIssue and the usage limit", () => {
   it("rejects with UncountedStopError, without recording a failed attempt, commenting or publishing, when the tester hits Claude's usage limit", async () => {
     const usageLimitError = new Error("claude-code exited with code 1:\nClaude AI usage limit reached|1760000000");

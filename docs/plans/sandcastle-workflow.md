@@ -272,9 +272,12 @@ authority, not what an agent reports. At each checkpoint the gate-fixer gets **2
 commits, and the build counts as failed.
 
 **Merging main before checkpoint 2.** A build can take an hour, and the host pushes with hooks off, so the pre-push hook's behind-main check never sees it. Just before checkpoint
-2, the host fetches `origin/main` again and, when the branch doesn't contain it, merges it in inside the sandbox, so checkpoint 2 gates the merged branch and the PR doesn't open
-already behind main. A merge that conflicts is aborted and the branch is published as it is: the follow-up pass merges main into a conflicted PR with a role to resolve it. A
-failed fetch also publishes without the merge.
+2, the host fetches `origin/main` again and, when the branch doesn't contain it, merges it in inside the sandbox, so the PR doesn't open already behind main.
+The gate then runs once on the merged tree, without the gate-fixer: the reviewer has already run, so the fixer's repairs to what main broke would go out unreviewed.
+When that gate is red, the host resets the branch to the reviewed commit and runs checkpoint 2 on it as usual, leaving main to the follow-up pass.
+A merge that conflicts is aborted and the branch is published as it is: the follow-up pass merges main into a conflicted PR with a role to resolve it.
+When the abort doesn't put the worktree back on the reviewed commit with nothing uncommitted, the host resets it there, and stops the build if it still can't.
+A failed fetch also publishes without the merge.
 
 **Pushing.** When checkpoint 2 exits 0, the host pushes the commit that gate ran on, by its id (`<sha>:refs/heads/<branch>`) and without force, from the main checkout with git
 hooks off. It never runs git or `gh` in the agent's worktree: git there would run the branch's own pre-push hook, `scripts/gate.sh` and test code, files the agents wrote, on the

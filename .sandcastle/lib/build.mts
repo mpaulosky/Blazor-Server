@@ -8,7 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { isRoleTimeout, runRoleInSandbox } from "./agents.mts";
 import { commitsAhead, fetchMain } from "./branches.mts";
-import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
+import { gateFailureComment, headOf, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
 import {
   BASE_BRANCH,
   BUILD_FAILED_MARKER,
@@ -372,7 +372,8 @@ function shellWord(value: string): string {
 // criteria, then the backend developer makes them pass. If the branch is then
 // ahead of main, the gate runs (checkpoint 1), the reviewer runs, the latest
 // main is merged in when the branch doesn't contain it, and the gate runs again
-// (checkpoint 2) before the branch is pushed and gets a pull request
+// (checkpoint 2, on the reviewed commit when the merge conflicts or the merged
+// tree is red) before the branch is pushed and gets a pull request
 // that closes its issue. Returns the PR's URL, or undefined when a developer
 // run failed, the branch holds nothing to publish or a checkpoint's gate
 // stayed red. `publishFailed` is true only when the branch passed both
@@ -597,32 +598,77 @@ async function buildMarkedIssue(
     return false;
   }
 
+  // Put the worktree back on `commit` with nothing uncommitted, by `undo`
+  // and, when that leaves it anywhere else, by a hard reset. Returns whether
+  // it got there: a tree left mid-merge would be gated with conflict markers
+  // in it, and the gate-fixer might commit them.
+  async function restoredTo(commit: string, undo: string): Promise<boolean> {
+    const cleanAt = async () => {
+      const status = await sandbox.exec("git status --porcelain 2>&1");
+      return (await headOf(sandbox)) === commit && status.exitCode === 0 && status.stdout.trim() === "";
+    };
+    const undone = await sandbox.exec(undo);
+    if (undone.exitCode === 0 && (await cleanAt())) return true;
+    await sandbox.exec(`git reset --hard ${shellWord(commit)}`);
+    return cleanAt();
+  }
+
   // Merge in what landed on main while the roles ran, so the PR doesn't open
   // already behind it: a build can take an hour, and Sandcastle pushes with
-  // hooks off, so the pre-push hook's behind-main check never runs on it. It
-  // runs before checkpoint 2, which then gates the merged branch. A merge that
-  // conflicts is aborted and the branch published as it is: the follow-up
-  // pass (lib/follow-up-pass.mts) merges main into a conflicted PR with a role
-  // to resolve it. A failed fetch publishes without the merge too, since the
+  // hooks off, so the pre-push hook's behind-main check never runs on it.
+  // Returns the reviewed commit the merge went onto, so checkpoint 2 can fall
+  // back to it, or undefined when nothing was merged. A merge that conflicts
+  // is aborted and the branch published as it is: the follow-up pass
+  // (lib/follow-up-pass.mts) merges main into a conflicted PR with a role to
+  // resolve it. A failed fetch publishes without the merge too, since the
   // work is already reviewed and the follow-up pass updates a PR behind main.
-  async function syncWithMain(): Promise<void> {
+  // Throws when an aborted merge can't be undone.
+  async function syncWithMain(): Promise<string | undefined> {
     let main: string;
     try {
       main = host.latestMain();
     } catch (error) {
       console.error(`  ⚠ #${issue.number}: fetching main failed, so ${branch} is published without merging it in: ${error}`);
       log("fetching main failed, so main isn't merged in");
-      return;
+      return undefined;
     }
     const contains = await sandbox.exec(`git merge-base --is-ancestor ${shellWord(main)} HEAD`);
-    if (contains.exitCode === 0) return;
+    if (contains.exitCode === 0) return undefined;
+    const reviewedHead = await headOf(sandbox);
+    if (reviewedHead === undefined) {
+      log("HEAD can't be read, so main isn't merged in");
+      return undefined;
+    }
     const merge = await sandbox.exec(`git merge --no-edit -m ${shellWord(`Merge main into ${branch}`)} ${shellWord(main)}`);
     if (merge.exitCode === 0) {
       log("merged main in before checkpoint 2");
-      return;
+      return reviewedHead;
     }
-    await sandbox.exec("git merge --abort");
+    if (!(await restoredTo(reviewedHead, "git merge --abort"))) {
+      throw new Error(`the conflicting merge of main couldn't be undone, so ${branch} isn't back at ${reviewedHead}`);
+    }
     log("merging main conflicted, so it's left for the follow-up pass and the branch is published as it is");
+    return undefined;
+  }
+
+  // Checkpoint 2. With main merged in, the gate runs once on the merged
+  // tree, without the gate-fixer: the reviewer has already run, so the fixer
+  // would publish unreviewed edits to repair what main broke, and a red main
+  // would fail every build that ends while it's red. When that run is red,
+  // the branch goes back to the reviewed commit and is gated as it would have
+  // been without the merge, leaving main to the follow-up pass.
+  async function checkpoint2Passes(): Promise<string | undefined> {
+    const reviewedHead = await syncWithMain();
+    if (reviewedHead !== undefined) {
+      const merged = await runGate(sandbox);
+      log(`checkpoint 2: gate ${merged.passed ? "passed" : "failed"} with main merged in`);
+      if (merged.passed) return merged.head;
+      if (!(await restoredTo(reviewedHead, `git reset --hard ${shellWord(reviewedHead)}`))) {
+        throw new Error(`the merge of main couldn't be undone, so ${branch} isn't back at ${reviewedHead}`);
+      }
+      log("main broke the gate once merged in, so it's left for the follow-up pass and the branch is gated without it");
+    }
+    return gatePasses(2);
   }
 
   try {
@@ -682,9 +728,7 @@ async function buildMarkedIssue(
       reviewed = false;
     }
 
-    await syncWithMain();
-
-    const gated = await gatePasses(2);
+    const gated = await checkpoint2Passes();
     if (gated === undefined) return unpublished("gate failed", "checkpoint 2");
 
     // The push is public, and the sandbox holds the Claude token or API key.
