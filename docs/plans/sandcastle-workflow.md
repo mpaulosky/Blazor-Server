@@ -220,7 +220,7 @@ Decided in [How the role-based team is composed and run per issue](https://githu
 Each picked issue gets one `createSandbox()`. The host calls `sandbox.run()` once per role, in this order:
 
 ```text
-[architect] → tester → backend → [ui] → gate checkpoint 1 → [scribe] → reviewer → gate checkpoint 2 → publish
+[architect] → tester → backend → [ui] → gate checkpoint 1 → [scribe] → reviewer → merge main → gate checkpoint 2 → publish
 ```
 
 Roles in brackets run only when the planner picked them. The tester, backend developer and reviewer always run.
@@ -270,6 +270,14 @@ validation, marker counting) that unit tests can pin down.
 **Checkpoints.** The host runs the gate through `sandbox.exec()` after the last developer run (checkpoint 1) and just before `publish()` (checkpoint 2). The host's exit code is the
 authority, not what an agent reports. At each checkpoint the gate-fixer gets **2 attempts**, with the gate re-run after each. Past that, nothing is published, the branch keeps its
 commits, and the build counts as failed.
+
+**Merging main before checkpoint 2.** A build can take an hour, and the host pushes with hooks off, so the pre-push hook's behind-main check never sees it. Just before checkpoint
+2, the host fetches `origin/main` again and, when the branch doesn't contain it, merges it in inside the sandbox, so the PR doesn't open already behind main.
+The gate then runs once on the merged tree, without the gate-fixer: the reviewer has already run, so the fixer's repairs to what main broke would go out unreviewed.
+When that gate is red, the host resets the branch to the reviewed commit and runs checkpoint 2 on it as usual, leaving main to the follow-up pass.
+A merge that conflicts is aborted and the branch is published as it is: the follow-up pass merges main into a conflicted PR with a role to resolve it.
+When the abort doesn't put the worktree back on the reviewed commit with nothing uncommitted, the host resets it there, and stops the build if it still can't.
+A failed fetch also publishes without the merge.
 
 **Pushing.** When checkpoint 2 exits 0, the host pushes the commit that gate ran on, by its id (`<sha>:refs/heads/<branch>`) and without force, from the main checkout with git
 hooks off. It never runs git or `gh` in the agent's worktree: git there would run the branch's own pre-push hook, `scripts/gate.sh` and test code, files the agents wrote, on the
