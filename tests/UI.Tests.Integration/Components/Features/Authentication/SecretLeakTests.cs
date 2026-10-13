@@ -7,6 +7,8 @@
 // Project Name :  UI.Tests.Integration
 // =============================================
 
+using System.Text.RegularExpressions;
+
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +19,7 @@ using UI.Tests.Integration.Fixtures;
 
 namespace UI.Tests.Integration.Components.Features.Authentication;
 
-public class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
+public partial class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
 {
 	private readonly UiWebApplicationFactory _factory;
 
@@ -27,6 +29,9 @@ public class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
 
 		_factory = factory;
 	}
+
+	[GeneratedRegex("<input[^>]*name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]*)\"")]
+	private static partial Regex AntiforgeryTokenPattern();
 
 	[Fact]
 	public async Task VisitorAndUserJourneys_NeverExposeTheClientSecret()
@@ -38,21 +43,35 @@ public class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
 				services.AddSingleton<ILoggerProvider>(capturingLoggerProvider)));
 		using HttpClient client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-		List<string> responseBodies = [];
+		List<HttpResponseMessage> responses = [];
 
 		// Act
-		responseBodies.Add(await (await client.GetAsync(new Uri("/", UriKind.Relative), cancellationToken))
-			.Content.ReadAsStringAsync(cancellationToken));
+		responses.Add(await client.GetAsync(new Uri("/", UriKind.Relative), cancellationToken));
 		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
-		responseBodies.Add(await (await client.GetAsync(new Uri("/", UriKind.Relative), cancellationToken))
-			.Content.ReadAsStringAsync(cancellationToken));
-		responseBodies.Add(await (await client.GetAsync(
-			new Uri($"{AuthenticationEndpoints.LoginPath}?returnUrl=%2F", UriKind.Relative), cancellationToken))
-			.Content.ReadAsStringAsync(cancellationToken));
+		HttpResponseMessage userHome = await client.GetAsync(new Uri("/", UriKind.Relative), cancellationToken);
+		responses.Add(userHome);
+		responses.Add(await client.GetAsync(
+			new Uri($"{AuthenticationEndpoints.LoginPath}?returnUrl=%2F", UriKind.Relative), cancellationToken));
+		Match antiforgeryToken =
+			AntiforgeryTokenPattern().Match(await userHome.Content.ReadAsStringAsync(cancellationToken));
+		using FormUrlEncodedContent logoutForm = new([
+			new KeyValuePair<string?, string?>("__RequestVerificationToken", antiforgeryToken.Groups[1].Value),
+		]);
+		HttpResponseMessage logout = await client.PostAsync(
+			new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative), logoutForm, cancellationToken);
+		responses.Add(logout);
+		List<string> exposedText = [];
+		foreach (HttpResponseMessage response in responses)
+		{
+			exposedText.Add(await response.Content.ReadAsStringAsync(cancellationToken));
+			exposedText.Add(response.Headers.Location?.ToString() ?? string.Empty);
+		}
 
 		// Assert
-		responseBodies.Should()
-			.NotContain(body => body.Contains(UiWebApplicationFactory.PlaceholderClientSecret, StringComparison.Ordinal));
+		antiforgeryToken.Success.Should().BeTrue("the Log out form must render an antiforgery token for a signed-in User");
+		logout.Headers.Location.Should().NotBeNull("a valid logout redirects to Auth0's logout endpoint");
+		exposedText.Should()
+			.NotContain(text => text.Contains(UiWebApplicationFactory.PlaceholderClientSecret, StringComparison.Ordinal));
 		capturingLoggerProvider.Messages.Should()
 			.NotContain(message =>
 				message.Contains(UiWebApplicationFactory.PlaceholderClientSecret, StringComparison.Ordinal));
