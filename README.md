@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.135](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.135) | 2026-10-13 | fix(nav): Make the Home link base-relative | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-295-fix-nav-make-the-home-link-base-relative.md) |
 | [v0.0.134](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.134) | 2026-10-13 | feat(admin): Add an Admin page only an Admin can open | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-293-feat-admin-add-an-admin-page-only-an-admin-can-open.md) |
 | [v0.0.133](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.133) | 2026-10-13 | chore(sandcastle): Merge main in before checkpoint 2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-291-chore-sandcastle-merge-main-in-before-checkpoint-2.md) |
 | [v0.0.132](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.132) | 2026-10-13 | feat(auth): Greet the signed-in User by name in the nav bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-287-feat-auth-greet-the-signed-in-user-by-name-in-the-nav-bar.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.128](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.128) | 2026-10-13 | build(deps): Bump CodeCoverage to 18.12.0 and xunit.v3.mtp-v2 to 4.0.2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-281-build-deps-bump-codecoverage-to-18-12-0-and-xunit-v3-mtp-v2-to-4-0-2.md) |
 | [v0.0.127](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.127) | 2026-10-13 | style(repo): Indent MSBuild and solution files with tabs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-279-style-repo-indent-msbuild-and-solution-files-with-tabs.md) |
 | [v0.0.126](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.126) | 2026-10-11 | feat(UI): Show the favicon before the app name in the nav bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-272-feat-ui-show-the-favicon-before-the-app-name-in-the-nav-bar.md) |
-| [v0.0.125](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.125) | 2026-10-11 | test(e2e): Add Playwright end-to-end tests run through the AppHost | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md) |
 
 <!-- RELEASES_END -->
 
