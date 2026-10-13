@@ -89,13 +89,16 @@ public static class AuthenticationFeature
 
 	// The cookie handler builds its sign-in and access-denied redirects from the request's scheme and Host header.
 	// Behind a proxy that terminates TLS, or with a spoofed Host, that origin isn't the one the browser used, so the
-	// redirect keeps only the path and query, which the browser resolves against the page it asked for.
+	// redirect keeps only the path and query, which the browser resolves against the page it asked for. Only an http(s)
+	// URI is rewritten: on Linux a rooted relative path also parses as an absolute file URI, whose PathAndQuery would
+	// escape the "?" into the path.
 	private static Func<RedirectContext<CookieAuthenticationOptions>, Task> WithRelativeRedirectUri(
 		Func<RedirectContext<CookieAuthenticationOptions>, Task> redirect)
 	{
 		return context =>
 		{
-			if (Uri.TryCreate(context.RedirectUri, UriKind.Absolute, out Uri? redirectUri))
+			if (Uri.TryCreate(context.RedirectUri, UriKind.Absolute, out Uri? redirectUri) &&
+				(redirectUri.Scheme == Uri.UriSchemeHttp || redirectUri.Scheme == Uri.UriSchemeHttps))
 			{
 				context.RedirectUri = redirectUri.PathAndQuery;
 			}

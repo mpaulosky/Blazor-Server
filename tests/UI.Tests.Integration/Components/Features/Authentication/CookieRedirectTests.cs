@@ -64,4 +64,26 @@ public class CookieRedirectTests : IClassFixture<UiWebApplicationFactory>
 		httpContext.Response.StatusCode.Should().Be(StatusCodes.Status302Found);
 		httpContext.Response.Headers.Location.ToString().Should().Be(relativeUri);
 	}
+
+	[Theory]
+	[InlineData("/authentication/login?returnUrl=%2Fprofile%3Fx%3D1")]
+	[InlineData("/app/authentication/login?returnUrl=%2Fprofile")]
+	public async Task CookieRedirect_RelativeRedirectUri_SendsItUnchanged(string relativeUri)
+	{
+		// Arrange
+		CookieAuthenticationOptions options = _factory.Services
+			.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+			.Get(CookieAuthenticationDefaults.AuthenticationScheme);
+		DefaultHttpContext httpContext = new();
+		RedirectContext<CookieAuthenticationOptions> context = new(httpContext,
+			new AuthenticationScheme(CookieAuthenticationDefaults.AuthenticationScheme, null,
+				typeof(CookieAuthenticationHandler)),
+			options, new AuthenticationProperties(), relativeUri);
+
+		// Act
+		await options.Events.RedirectToLogin(context);
+
+		// Assert
+		httpContext.Response.Headers.Location.ToString().Should().Be(relativeUri);
+	}
 }
