@@ -84,6 +84,6 @@ public class AdminPageTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().Contain("Admin");
+		html.Should().Contain("Only an Admin can see this page.");
 	}
 }
