@@ -7,78 +7,98 @@
 // Project Name :  UI.Tests.Integration
 // =============================================
 
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
+using UI.Components.Features.Authentication;
 using UI.Tests.Integration.Fixtures;
 
 namespace UI.Tests.Integration.Components.Features.Authentication;
 
+// These run the startup validation the host runs for ValidateOnStart (IStartupValidator) on the feature's own
+// registration, rather than starting the app through WebApplicationFactory. A start that fails there races: the app's
+// entry point throws and disposes its host while the factory's deferred host still reads that host's services, so the
+// test sometimes saw an ObjectDisposedException in place of the validation error.
 public class OptionsValidationTests
 {
 	[Theory]
 	[InlineData("Auth0:Domain")]
 	[InlineData("Auth0:ClientId")]
 	[InlineData("Auth0:ClientSecret")]
-	public void CreateClient_MissingRequiredAuth0Setting_ThrowsOptionsValidationExceptionNamingTheSetting(string key)
+	public void ValidateOnStart_MissingRequiredAuth0Setting_ThrowsOptionsValidationExceptionNamingTheSetting(string key)
 	{
 		// Arrange
-		using WebApplicationFactory<Program> factory = new UiWebApplicationFactory()
-			.WithWebHostBuilder(builder => builder.UseSetting(key, string.Empty));
+		using ServiceProvider provider = ServicesWith(key, string.Empty);
+		IStartupValidator validator = provider.GetRequiredService<IStartupValidator>();
 
 		// Act
-		Action act = () => factory.CreateClient();
+		Action act = validator.Validate;
 
 		// Assert
-		act.Should().Throw<Exception>()
-			.Where(exception => ContainsOptionsValidationExceptionNaming(exception, key));
+		act.Should().Throw<OptionsValidationException>().WithMessage($"*{key}*");
 	}
 
 	[Fact]
-	public void CreateClient_WhitespaceClientSecret_ThrowsOptionsValidationExceptionNamingTheSetting()
+	public void ValidateOnStart_WhitespaceClientSecret_ThrowsOptionsValidationExceptionNamingTheSetting()
 	{
 		// Arrange
-		using WebApplicationFactory<Program> factory = new UiWebApplicationFactory()
-			.WithWebHostBuilder(builder => builder.UseSetting("Auth0:ClientSecret", "   "));
+		using ServiceProvider provider = ServicesWith("Auth0:ClientSecret", "   ");
+		IStartupValidator validator = provider.GetRequiredService<IStartupValidator>();
 
 		// Act
-		Action act = () => factory.CreateClient();
+		Action act = validator.Validate;
 
 		// Assert
-		act.Should().Throw<Exception>()
-			.Where(exception => ContainsOptionsValidationExceptionNaming(exception, "Auth0:ClientSecret"));
+		act.Should().Throw<OptionsValidationException>().WithMessage("*Auth0:ClientSecret*");
 	}
 
 	[Theory]
 	[InlineData("https://my-tenant.us.auth0.com")]
 	[InlineData("my-tenant.us.auth0.com/")]
 	[InlineData("my-tenant")]
-	public void CreateClient_Auth0DomainThatIsNotAHost_ThrowsOptionsValidationExceptionNamingTheSetting(string domain)
+	public void ValidateOnStart_Auth0DomainThatIsNotAHost_ThrowsOptionsValidationExceptionNamingTheSetting(string domain)
 	{
 		// Arrange
-		using WebApplicationFactory<Program> factory = new UiWebApplicationFactory()
-			.WithWebHostBuilder(builder => builder.UseSetting("Auth0:Domain", domain));
+		using ServiceProvider provider = ServicesWith("Auth0:Domain", domain);
+		IStartupValidator validator = provider.GetRequiredService<IStartupValidator>();
 
 		// Act
-		Action act = () => factory.CreateClient();
+		Action act = validator.Validate;
 
 		// Assert
-		act.Should().Throw<Exception>()
-			.Where(exception => ContainsOptionsValidationExceptionNaming(exception, "Auth0:Domain"));
+		act.Should().Throw<OptionsValidationException>().WithMessage("*Auth0:Domain*");
 	}
 
-	private static bool ContainsOptionsValidationExceptionNaming(Exception? exception, string key)
+	[Fact]
+	public void ValidateOnStart_EveryAuth0SettingValid_DoesNotThrow()
 	{
-		for (Exception? current = exception; current is not null; current = current.InnerException)
-		{
-			if (current is OptionsValidationException validationException &&
-				validationException.Message.Contains(key, StringComparison.Ordinal))
-			{
-				return true;
-			}
-		}
+		// Arrange
+		using ServiceProvider provider = ServicesWith("Auth0:Domain", UiWebApplicationFactory.PlaceholderDomain);
+		IStartupValidator validator = provider.GetRequiredService<IStartupValidator>();
 
-		return false;
+		// Act
+		Action act = validator.Validate;
+
+		// Assert
+		act.Should().NotThrow();
+	}
+
+	// The feature registered over the factory's placeholder Auth0 settings, with one of them replaced.
+	private static ServiceProvider ServicesWith(string key, string value)
+	{
+		Dictionary<string, string?> settings = new()
+		{
+			["Auth0:Domain"] = UiWebApplicationFactory.PlaceholderDomain,
+			["Auth0:ClientId"] = UiWebApplicationFactory.PlaceholderClientId,
+			["Auth0:ClientSecret"] = UiWebApplicationFactory.PlaceholderClientSecret,
+			[key] = value,
+		};
+		IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+		ServiceCollection services = new();
+		services.AddSingleton(configuration);
+		services.AddAuthenticationFeature(configuration);
+
+		return services.BuildServiceProvider();
 	}
 }
