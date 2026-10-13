@@ -34,7 +34,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
 scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
-Auth0 with the Admin role mapped, and their tests.
+Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, and their tests.
 
 ## Releases
 
@@ -42,6 +42,7 @@ Auth0 with the Admin role mapped, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.131](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.131) | 2026-10-13 | feat(profile): Show a User their own claims on a Profile page | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-288-feat-profile-show-a-user-their-own-claims-on-a-profile-page.md) |
 | [v0.0.130](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.130) | 2026-10-13 | feat(auth): Sign in and out through Auth0 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-285-feat-auth-sign-in-and-out-through-auth0.md) |
 | [v0.0.129](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.129) | 2026-10-13 | chore(sandcastle): Give the tester 45 minutes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-283-chore-sandcastle-give-the-tester-45-minutes.md) |
 | [v0.0.128](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.128) | 2026-10-13 | build(deps): Bump CodeCoverage to 18.12.0 and xunit.v3.mtp-v2 to 4.0.2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-281-build-deps-bump-codecoverage-to-18-12-0-and-xunit-v3-mtp-v2-to-4-0-2.md) |
@@ -51,7 +52,6 @@ Auth0 with the Admin role mapped, and their tests.
 | [v0.0.124](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.124) | 2026-10-10 | feat(aspire): Add the Aspire AppHost and ServiceDefaults for the UI | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-268-feat-aspire-add-the-aspire-apphost-and-servicedefaults-for-the-ui.md) |
 | [v0.0.123](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.123) | 2026-10-10 | feat(ui): Add the Blazor Web App with Tailwind CSS and feature slices | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-260-feat-ui-add-the-blazor-web-app-with-tailwind-css-and-feature-slices.md) |
 | [v0.0.122](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.122) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-264-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.121](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.121) | 2026-10-10 | feat(sandcastle): Write a run report with outcomes, hand-backs and token usage | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) |
 
 <!-- RELEASES_END -->
 
@@ -202,7 +202,7 @@ All of the following are *planned* and don't exist yet:
 
 - *Planned:* the light/dark **Theme**, defaulting to the OS preference.
 - *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
-- *Planned:* a Profile page for a **User** and an Admin page for an **Admin**, built on the Auth0 sign-in.
+- *Planned:* an Admin page for an **Admin**, built on the Auth0 sign-in.
 
 ## Contributing
 
