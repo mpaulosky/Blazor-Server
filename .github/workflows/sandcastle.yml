@@ -92,17 +92,29 @@ jobs:
 
       # lib/skills.mts mounts the dotnet-* skills into the sandbox from
       # ~/.claude/skills, which a hosted runner doesn't have. They live in the
-      # owner's public dotfiles repository. This runs before the credential
-      # helper is set up, so the clone never sends the PAT.
+      # owner's public dotfiles repository, pinned to a commit like the
+      # actions, so a push there can't change what the agents are told until
+      # this pin moves. This runs before the credential helper is set up, so the
+      # fetch never sends the PAT.
       - name: Install the dotnet skills
+        env:
+          DOTFILES_SHA: 8dc86dfd144cc729b78371702a06395d412d3269 # main as of 2026-10-13
+          SKILLS: dotnet-tdd dotnet-add-testing dotnet-xunit dotnet-testing-strategy dotnet-project-analysis dotnet-inspect
         run: |
           dotfiles="$RUNNER_TEMP/dotfiles"
-          git clone --quiet --depth 1 --filter=blob:none --sparse https://github.com/mpaulosky/dotfiles.git "$dotfiles"
+          skills="$dotfiles/Support For New Projects/.claude/skills"
+          git init --quiet "$dotfiles"
           git -C "$dotfiles" sparse-checkout set "Support For New Projects/.claude/skills"
-          echo "dotfiles at $(git -C "$dotfiles" rev-parse HEAD)"
+          git -C "$dotfiles" fetch --quiet --depth 1 --filter=blob:none https://github.com/mpaulosky/dotfiles.git "$DOTFILES_SHA"
+          git -C "$dotfiles" checkout --quiet FETCH_HEAD
+          for skill in $SKILLS; do
+            if [ ! -f "$skills/$skill/SKILL.md" ]; then
+              echo "::error::dotfiles $DOTFILES_SHA has no $skill skill."
+              exit 1
+            fi
+          done
           mkdir -p "$HOME/.claude"
-          ln -s "$dotfiles/Support For New Projects/.claude/skills" "$HOME/.claude/skills"
-          ls "$HOME/.claude/skills/"
+          ln -s "$skills" "$HOME/.claude/skills"
 
       # The host's git fetches and pushes authenticate through gh's credential
       # helper in the runner's global config, which reads GH_TOKEN from the
@@ -149,12 +161,19 @@ jobs:
           fi
           pnpm run sandcastle
 
-      - name: Upload the logs
+      # Only the run report and the hand-backs: the role transcripts stay on
+      # the runner. Artifacts of a public repository can be downloaded by any
+      # signed-in user, and GitHub masks secrets in step logs, not artifacts,
+      # so a transcript that printed the sandbox's Claude credential would
+      # publish it.
+      - name: Upload the run report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sandcastle-logs
-          path: .sandcastle/logs/
+          name: sandcastle-report
+          path: |
+            .sandcastle/logs/summary.md
+            .sandcastle/logs/handbacks.json
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14

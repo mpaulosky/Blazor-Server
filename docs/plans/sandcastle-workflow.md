@@ -362,9 +362,10 @@ both Claude secrets are missing. Sandcastle passes into the sandbox only the key
 chosen key and no value; Sandcastle takes the value from the host's environment. The step before sets the runner's global git `user.name` and `user.email` to the PAT owner's
 login and no-reply address, because Sandcastle copies the host's git identity into the sandbox for the agents' commits.
 
-**Skills:** `lib/skills.mts` mounts the `dotnet-*` skills from `~/.claude/skills`, which a hosted runner doesn't have. The workflow clones the owner's public
-[dotfiles](https://github.com/mpaulosky/dotfiles) repository (only `Support For New Projects/.claude/skills`, from `main`, with no token) and links that folder to
-`~/.claude/skills` before it sets up the credential helper, so the run mounts all six skills and the clone never sends the PAT. The log records the dotfiles commit.
+**Skills:** `lib/skills.mts` mounts the `dotnet-*` skills from `~/.claude/skills`, which a hosted runner doesn't have. The workflow fetches the owner's public
+[dotfiles](https://github.com/mpaulosky/dotfiles) repository (only `Support For New Projects/.claude/skills`, with no token) at a commit pinned in the workflow, like the actions, and
+links that folder to `~/.claude/skills` before it sets up the credential helper. So the run mounts all six skills, the fetch never sends the PAT, and a push to dotfiles changes
+nothing here until the owner moves the pin. The step fails when the pinned commit lacks one of the six.
 
 Triggers:
 
@@ -400,7 +401,9 @@ bounce issues. The next trigger resumes the work.
 **Renewal:** record each secret's expiry date in the setup issue and a calendar reminder. To renew the OAuth token, run `claude setup-token` and update the secret. To renew the PAT,
 regenerate it under *Settings → Developer settings → Fine-grained tokens* with the same scopes and update the secret. An expired secret shows up as a red run with an auth error.
 
-**Observability:** `.sandcastle/logs/` is uploaded with `actions/upload-artifact` (`if: always()`, 14-day retention). At the end of every run, including one that ended on an
+**Observability:** `.sandcastle/logs/summary.md` and `.sandcastle/logs/handbacks.json` are uploaded with `actions/upload-artifact` (`if: always()`, 14-day retention). The role
+transcripts in `.sandcastle/logs/` are not: any signed-in user can download a public repository's artifacts, and GitHub masks secrets only in step logs, so a transcript that
+printed the sandbox's Claude credential would publish it. At the end of every run, including one that ended on an
 error, `lib/report.mts` writes the run report to `.sandcastle/logs/summary.md` and appends it to the job summary (`$GITHUB_STEP_SUMMARY`). It says how the run ended (finished,
 stopped on the time budget or usage limit, or crashed) and lists each issue or PR touched and its outcome (published, deferred, handed back, role failed, gate failed, timed
 out, stopped, not published, updated, follow-up pass), each hand-back with a link, the open Sandcastle PRs waiting on unresolved review threads a person opened, and each role's
