@@ -1,5 +1,3 @@
-
-
 @page "/Error"
 @using System.Diagnostics
 
@@ -36,5 +34,4 @@
 
 	protected override void OnInitialized() =>
 		RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
-
 }
