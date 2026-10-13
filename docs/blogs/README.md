@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-13 | [feat(auth): Greet the signed-in User by name in the nav bar](2026-10-13-pr-287-feat-auth-greet-the-signed-in-user-by-name-in-the-nav-bar.md) | release,automation |
 | 2026-10-13 | [feat(profile): Show a User their own claims on a Profile page](2026-10-13-pr-288-feat-profile-show-a-user-their-own-claims-on-a-profile-page.md) | release,automation |
 | 2026-10-13 | [feat(auth): Sign in and out through Auth0](2026-10-13-pr-285-feat-auth-sign-in-and-out-through-auth0.md) | release,automation |
 | 2026-10-13 | [chore(sandcastle): Give the tester 45 minutes](2026-10-13-pr-283-chore-sandcastle-give-the-tester-45-minutes.md) | release,automation |
