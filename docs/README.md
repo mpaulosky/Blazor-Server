@@ -41,6 +41,7 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.128](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.128) | 2026-10-13 | build(deps): Bump CodeCoverage to 18.12.0 and xunit.v3.mtp-v2 to 4.0.2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-281-build-deps-bump-codecoverage-to-18-12-0-and-xunit-v3-mtp-v2-to-4-0-2.md) |
 | [v0.0.127](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.127) | 2026-10-13 | style(repo): Indent MSBuild and solution files with tabs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-279-style-repo-indent-msbuild-and-solution-files-with-tabs.md) |
 | [v0.0.126](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.126) | 2026-10-11 | feat(UI): Show the favicon before the app name in the nav bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-272-feat-ui-show-the-favicon-before-the-app-name-in-the-nav-bar.md) |
 | [v0.0.125](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.125) | 2026-10-11 | test(e2e): Add Playwright end-to-end tests run through the AppHost | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md) |
@@ -50,7 +51,6 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
 | [v0.0.121](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.121) | 2026-10-10 | feat(sandcastle): Write a run report with outcomes, hand-backs and token usage | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) |
 | [v0.0.120](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.120) | 2026-10-10 | feat(sandcastle): Follow-up passes fix red CI on Sandcastle PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-259-feat-sandcastle-follow-up-passes-fix-red-ci-on-sandcastle-prs.md) |
 | [v0.0.119](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.119) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-257-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.118](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.118) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-255-chore-re-apply-the-repo-ci-baseline-template.md) |
 
 <!-- RELEASES_END -->
 
