@@ -2,11 +2,16 @@
 
 	<PropertyGroup>
 		<BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+		<UserSecretsId>94491f6e-auth0-values-3ff40da38702</UserSecretsId>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="../Domain/Domain.csproj" />
 		<ProjectReference Include="../ServiceDefaults/ServiceDefaults.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Auth0.AspNetCore.Authentication" />
 	</ItemGroup>
 
 	<!-- Tailwind CSS v4: the CLI (from src/UI/package.json) builds wwwroot/css/app.css from

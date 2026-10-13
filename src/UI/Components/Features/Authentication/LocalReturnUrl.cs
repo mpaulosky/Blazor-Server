@@ -27,6 +27,24 @@ public static class LocalReturnUrl
 			"that's exactly what this method must validate.")]
 	public static string OrRoot(string? returnUrl)
 	{
-		throw new NotImplementedException();
+		return IsLocal(returnUrl) ? returnUrl : "/";
+	}
+
+	// Url.IsLocalUrl's rule, minus its "~/" form: nothing expands "~" in the redirect after the Auth0 callback, so
+	// the browser would resolve it as a relative path. A second '/' or '\' makes a protocol-relative URL (browsers
+	// read '\' as '/'), and a control character could split the Location header.
+	private static bool IsLocal([NotNullWhen(true)] string? returnUrl)
+	{
+		if (string.IsNullOrEmpty(returnUrl) || returnUrl[0] != '/')
+		{
+			return false;
+		}
+
+		if ((returnUrl.Length > 1) && (returnUrl[1] is '/' or '\\'))
+		{
+			return false;
+		}
+
+		return !returnUrl.Any(char.IsControl);
 	}
 }
