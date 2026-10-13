@@ -1,0 +1,27 @@
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+	<NotAuthorized>
+		<a href="@LoginHref" data-enhance-nav="false" class="text-sm text-gray-300 hover:text-white">Log in</a>
+	</NotAuthorized>
+	<Authorized>
+		<form method="post" action="@LogoutAction">
+			<AntiforgeryToken/>
+			<button type="submit" class="text-sm text-gray-300 hover:text-white">Log out</button>
+		</form>
+	</Authorized>
+</AuthorizeView>
+
+@code {
+	// The links are base-relative, like the rest of NavMenu, so they still reach the app under a non-root base path.
+	// The return URL keeps that base path, because the login endpoint redirects to it as given.
+	private string LoginHref => $"{AuthenticationEndpoints.LoginPath[1..]}?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+
+	private static string LogoutAction => AuthenticationEndpoints.LogoutPath[1..];
+
+	// Signing in again from the access-denied page would land the User back on it, so it returns home instead.
+	private string ReturnUrl => new Uri(IsOnAccessDeniedPage ? Navigation.BaseUri : Navigation.Uri).PathAndQuery;
+
+	private bool IsOnAccessDeniedPage => Navigation.ToBaseRelativePath(Navigation.Uri)
+		.StartsWith(AuthenticationEndpoints.AccessDeniedPath[1..], StringComparison.OrdinalIgnoreCase);
+}

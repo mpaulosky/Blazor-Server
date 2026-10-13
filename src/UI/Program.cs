@@ -10,6 +10,7 @@
 using ServiceDefaults;
 
 using UI.Components;
+using UI.Components.Features.Authentication;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,9 @@ builder.AddServiceDefaults();
 
 builder.Services.AddRazorComponents()
 	.AddInteractiveServerComponents();
+
+builder.Services.AddAuthenticationFeature(builder.Configuration);
+builder.Services.AddCascadingAuthenticationState();
 
 WebApplication app = builder.Build();
 
@@ -30,10 +34,15 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
+// After authentication: antiforgery tokens are bound to the signed-in user.
 app.UseAntiforgery();
 
 app.MapDefaultEndpoints();
 app.MapStaticAssets();
+app.MapAuthenticationEndpoints();
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();
 

@@ -30,6 +30,12 @@ public class AppHostTests : IAsyncLifetime
 		IDistributedApplicationTestingBuilder builder = await DistributedApplicationTestingBuilder
 			.CreateAsync<global::Projects.AppHost>(startupTimeout.Token);
 
+		// Aspire parameters resolve lazily, so placeholders set here, only when no user secret or environment
+		// variable already provides a value, still reach the Auth0__* variables the AppHost passes to WebApp.
+		builder.Configuration["Auth0:Domain"] ??= "auth0.placeholder.invalid";
+		builder.Configuration["Auth0:ClientId"] ??= "placeholder-client-id";
+		builder.Configuration["Auth0:ClientSecret"] ??= "placeholder-client-secret";
+
 		_application = await builder.BuildAsync(startupTimeout.Token);
 
 		await _application.StartAsync(startupTimeout.Token);

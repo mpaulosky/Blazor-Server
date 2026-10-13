@@ -1,0 +1,22 @@
+@using Microsoft.AspNetCore.Authorization
+@attribute [Route(AuthenticationEndpoints.AccessDeniedPath)]
+@attribute [AllowAnonymous]
+
+<PageTitle>Access denied</PageTitle>
+
+<h1>Access denied</h1>
+
+<p>You don't have permission to access this page.</p>
+
+@code {
+	[CascadingParameter]
+	private HttpContext? HttpContext { get; set; }
+
+	protected override void OnInitialized()
+	{
+		if (HttpContext is not null)
+		{
+			HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+		}
+	}
+}

@@ -32,6 +32,10 @@ public sealed class WebAppFixture : IAsyncLifetime
 	// artifact upload enforce, leaving room for the directory and extension.
 	private const int MaxTraceNameLength = 100;
 
+	// The .invalid TLD never resolves, so a test run with no real Auth0 tenant configured can't reach one by
+	// accident.
+	private const string PlaceholderAuth0Domain = "auth0.placeholder.invalid";
+
 	private static readonly Regex s_unsafeTraceNameCharacters = new("[^A-Za-z0-9._-]", RegexOptions.Compiled);
 
 	// ci.yml uploads bin/<Configuration>/**/TestResults/playwright-artifacts/ from E2E jobs.
@@ -56,6 +60,16 @@ public sealed class WebAppFixture : IAsyncLifetime
 	///   The base address of the running <c>WebApp</c> resource.
 	/// </summary>
 	public Uri BaseAddress => _baseAddress ?? throw new InvalidOperationException("The AppHost has not started yet.");
+
+	/// <summary>
+	///   The Auth0 tenant domain the running <c>WebApp</c> resource was configured with.
+	/// </summary>
+	public string Auth0Domain { get; private set; } = PlaceholderAuth0Domain;
+
+	/// <summary>
+	///   Whether <see cref="Auth0Domain" /> is the placeholder domain rather than a real, reachable Auth0 tenant.
+	/// </summary>
+	public bool UsesPlaceholderAuth0 { get; private set; } = true;
 
 	/// <summary>
 	///   Opens a new, isolated browser page against <see cref="BaseAddress" />.
@@ -108,6 +122,14 @@ public sealed class WebAppFixture : IAsyncLifetime
 
 			IDistributedApplicationTestingBuilder builder = await DistributedApplicationTestingBuilder
 				.CreateAsync<global::Projects.AppHost>(startupTimeout.Token);
+
+			// Aspire parameters resolve lazily, so placeholders set here, only when no user secret or environment
+			// variable already provides a value, still reach the Auth0__* variables the AppHost passes to WebApp.
+			builder.Configuration["Auth0:Domain"] ??= PlaceholderAuth0Domain;
+			builder.Configuration["Auth0:ClientId"] ??= "placeholder-client-id";
+			builder.Configuration["Auth0:ClientSecret"] ??= "placeholder-client-secret";
+			Auth0Domain = builder.Configuration["Auth0:Domain"] ?? PlaceholderAuth0Domain;
+			UsesPlaceholderAuth0 = Auth0Domain == PlaceholderAuth0Domain;
 
 			_application = await builder.BuildAsync(startupTimeout.Token);
 			await _application.StartAsync(startupTimeout.Token);
