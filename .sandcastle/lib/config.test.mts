@@ -23,7 +23,7 @@ describe("ROLE_AGENTS", () => {
       planner: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
       critique: { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
       architect: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
-      tester: { model: sonnet, effort: "high", maxIterations: 3, timeoutMinutes: 30 },
+      tester: { model: sonnet, effort: "high", maxIterations: 3, timeoutMinutes: 45 },
       backend: { model: opus, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
       ui: { model: sonnet, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
       scribe: { model: sonnet, effort: "medium", maxIterations: 1, timeoutMinutes: 15 },
