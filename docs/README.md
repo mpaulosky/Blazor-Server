@@ -33,7 +33,8 @@ The Template is intended to give every Generated App:
 See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md) for the exact meaning of these terms.
 
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
-scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build) and their tests.
+scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
+Auth0 with the Admin role mapped, and their tests.
 
 ## Releases
 
@@ -41,6 +42,7 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.130](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.130) | 2026-10-13 | feat(auth): Sign in and out through Auth0 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-285-feat-auth-sign-in-and-out-through-auth0.md) |
 | [v0.0.129](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.129) | 2026-10-13 | chore(sandcastle): Give the tester 45 minutes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-283-chore-sandcastle-give-the-tester-45-minutes.md) |
 | [v0.0.128](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.128) | 2026-10-13 | build(deps): Bump CodeCoverage to 18.12.0 and xunit.v3.mtp-v2 to 4.0.2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-281-build-deps-bump-codecoverage-to-18-12-0-and-xunit-v3-mtp-v2-to-4-0-2.md) |
 | [v0.0.127](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.127) | 2026-10-13 | style(repo): Indent MSBuild and solution files with tabs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-279-style-repo-indent-msbuild-and-solution-files-with-tabs.md) |
@@ -50,7 +52,6 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
 | [v0.0.123](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.123) | 2026-10-10 | feat(ui): Add the Blazor Web App with Tailwind CSS and feature slices | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-260-feat-ui-add-the-blazor-web-app-with-tailwind-css-and-feature-slices.md) |
 | [v0.0.122](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.122) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-264-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.121](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.121) | 2026-10-10 | feat(sandcastle): Write a run report with outcomes, hand-backs and token usage | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) |
-| [v0.0.120](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.120) | 2026-10-10 | feat(sandcastle): Follow-up passes fix red CI on Sandcastle PRs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-259-feat-sandcastle-follow-up-passes-fix-red-ci-on-sandcastle-prs.md) |
 
 <!-- RELEASES_END -->
 
@@ -112,9 +113,53 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
    `scripts/gate.sh` lints the files changed since the branch left `origin/main`, then builds and tests the solution in Release. Run it by hand to
    check a branch before pushing.
 
+## Auth0 setup
+
+The app won't start without an Auth0 tenant's settings: it validates `Auth0:Domain`, `Auth0:ClientId` and
+`Auth0:ClientSecret` on startup and names any that's missing.
+
+1. In the [Auth0 dashboard](https://manage.auth0.com/), create an application of type **Regular Web Application**.
+   Sign-in uses the authorization-code flow, so leave the **Authorization Code** grant on (it is by default). The app
+   sends the client secret only to Auth0's token endpoint, from the server.
+2. In the application's settings, add:
+   - **Allowed Callback URLs:** `http://localhost:5112/callback, https://localhost:7161/callback`
+   - **Allowed Logout URLs:** `http://localhost:5112/, https://localhost:7161/`
+
+   Sign-in works on the `http` profile only on `localhost`, because the browser keeps Auth0's `Secure` sign-in cookies
+   for `http://localhost` alone. The `https` profile is the safer choice anywhere else.
+3. Under **User Management → Roles**, create a role named `Admin` and assign it to the users who should be an **Admin**.
+4. Under **Actions → Library**, create a **Post Login** Action that adds the user's roles to the ID token, and add it to
+   the Login flow:
+
+   ```javascript
+   exports.onExecutePostLogin = async (event, api) => {
+     api.idToken.setCustomClaim('https://blazor-server-template/roles', event.authorization?.roles ?? []);
+   };
+   ```
+
+5. Store the application's settings as user secrets. `Auth0:Domain` is the tenant's host only, with no `https://`
+   (for example `my-tenant.us.auth0.com`):
+
+   ```bash
+   dotnet user-secrets set "Auth0:Domain" "<your-tenant>.auth0.com" --project src/UI
+   dotnet user-secrets set "Auth0:ClientId" "<client-id>" --project src/UI
+   dotnet user-secrets set "Auth0:ClientSecret" "<client-secret>" --project src/UI
+   ```
+
+   The AppHost shares the UI's user secrets, so `aspire run` reads the same values and passes them to `WebApp` as
+   `Auth0__Domain`, `Auth0__ClientId` and `Auth0__ClientSecret`. When one is missing, the Aspire dashboard asks for it.
+   Outside Development, set those environment variables instead.
+
+`Auth0:RoleClaimType` names the claim the roles arrive in. It defaults to `https://blazor-server-template/roles`, the
+claim the Action above sets; change both together. The app maps each role in that claim to a .NET role, so an `Admin`
+there satisfies the Admin policy.
+
 ## After generating your app
 
 - Replace this README with one that describes your Generated App.
+- Give your app its own user secrets: replace the `UserSecretsId` in both `src/UI/UI.csproj` and
+  `src/AppHost/AppHost.csproj` with one new GUID (for example from `uuidgen`). Otherwise every app made from this
+  template reads and writes the same `Auth0:*` secrets on your machine.
 - Repoint the badges at your own repository, or remove them.
 - Decide whether to keep the release automation: [release.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/release.yml) tags a release and
   opens a release-notes PR for every merged PR, which also copies `README.md` to `docs/README.md`. Delete it if you don't want it.
@@ -157,7 +202,7 @@ All of the following are *planned* and don't exist yet:
 
 - *Planned:* the light/dark **Theme**, defaulting to the OS preference.
 - *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
-- *Planned:* Auth0 authentication, with a Profile page for a **User** and an Admin page for an **Admin**.
+- *Planned:* a Profile page for a **User** and an Admin page for an **Admin**, built on the Auth0 sign-in.
 
 ## Contributing
 
