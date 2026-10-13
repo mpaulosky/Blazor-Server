@@ -334,10 +334,18 @@ the `Sandcastle` label, and a `Sandcastle` issue that depends on it lists it as 
 
 **Notification: the run ends red.** The PAT is the human's own, so GitHub never notifies them about Sandcastle's labels or comments. The host records every hand-back (`needs-info` or
 `needs-human`) it applies in the run, and after all work is done a final workflow step fails the job when that list is non-empty. GitHub Actions then emails the person who triggered
-the run, and scheduled runs notify the workflow's creator. A crash fails an earlier step, and the job summary tells a hand-back from a crash. Who gets the email for runs started by
-Copilot's `pull_request_review` or by `workflow_run` can only be confirmed from live runs, so the trigger issue
-([#82](https://github.com/mpaulosky/Blazor-Server/issues/82)) finds out and records the answer here. If this proves noisy, the upgrade path is a separate bot identity (a GitHub App
-or machine user).
+the run, and scheduled runs notify the workflow's creator. A crash fails an earlier step, and the job summary tells a hand-back from a crash.
+
+Who gets the email for the other triggers was checked against the runs GitHub attributed in this repository on 2026-10-13 (each run's `triggering_actor`):
+
+- **`workflow_run`** (CI finishing on a Sandcastle branch): the owner. CI on those branches starts from the PAT's pushes, and the downstream run keeps that actor: all of the last
+  100 `workflow_run` runs of PR Auto-Merge and 99 of the last 100 `pull_request` CI runs (the other was Dependabot's) were the owner's.
+- **`pull_request_review`** (Copilot's review): usually the owner, sometimes nobody. GitHub attributes most Copilot reviews to whoever requested them, which on a Sandcastle PR is
+  the owner, but some to `Copilot` itself: 96 of the last 100 runs of PR Review Submitted were the owner's and 4 were `Copilot`'s (for example run 38477763399). A red run
+  attributed to `Copilot` emails no one. Its hand-back still shows as a red run in the Actions tab and in the saved search under **Labels**, and the next scheduled run doesn't
+  repeat the email, since the hand-back is already applied.
+
+If this proves noisy or the `Copilot` gap matters, the upgrade path is a separate bot identity (a GitHub App or machine user).
 
 ## Trigger and run environment
 
@@ -346,11 +354,20 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 [ADR 0002](../adr/0002-unattended-sandcastle-on-a-hosted-runner.md).
 
 **Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` (never the event's ref) with `persist-credentials: false`, sets up pnpm and Node 22, runs
-`pnpm install --frozen-lockfile` to install the locked dependencies (including the `tsx` devDependency), and then runs `pnpm exec tsx .sandcastle/main.mts` with `GH_TOKEN` set to
+`pnpm install --frozen-lockfile` to install the locked dependencies (including the `tsx` devDependency), and then runs `pnpm run sandcastle` (`tsx .sandcastle/main.mts`) with `GH_TOKEN` set to
 `SANDCASTLE_GH_TOKEN`. The `gh` CLI reads `GH_TOKEN`, and the host's own git fetches and pushes authenticate through `gh auth setup-git`, a credential helper in the runner's global git
 config that reads `GH_TOKEN` from the host's environment. Nothing in the repository's `.git` holds the token, so the worktree and git metadata the sandbox mounts carry no credential. The
 step also passes `ANTHROPIC_API_KEY` when that secret is set and `CLAUDE_CODE_OAUTH_TOKEN` otherwise, and an earlier step fails the job with a clear message when `SANDCASTLE_GH_TOKEN` or
-both Claude secrets are missing. Triggers:
+both Claude secrets are missing. Sandcastle passes into the sandbox only the keys `.sandcastle/.env` names, and that file is git-ignored, so the run step writes it with the
+chosen key and no value; Sandcastle takes the value from the host's environment. The step before sets the runner's global git `user.name` and `user.email` to the PAT owner's
+login and no-reply address, because Sandcastle copies the host's git identity into the sandbox for the agents' commits.
+
+**Skills:** `lib/skills.mts` mounts the `dotnet-*` skills from `~/.claude/skills`, which a hosted runner doesn't have. The workflow fetches the owner's public
+[dotfiles](https://github.com/mpaulosky/dotfiles) repository (only `Support For New Projects/.claude/skills`, with no token) at a commit pinned in the workflow, like the actions, and
+links that folder to `~/.claude/skills` before it sets up the credential helper. So the run mounts all six skills, the fetch never sends the PAT, and a push to dotfiles changes
+nothing here until the owner moves the pin. The step fails when the pinned commit lacks one of the six.
+
+Triggers:
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
@@ -384,7 +401,9 @@ bounce issues. The next trigger resumes the work.
 **Renewal:** record each secret's expiry date in the setup issue and a calendar reminder. To renew the OAuth token, run `claude setup-token` and update the secret. To renew the PAT,
 regenerate it under *Settings → Developer settings → Fine-grained tokens* with the same scopes and update the secret. An expired secret shows up as a red run with an auth error.
 
-**Observability:** `.sandcastle/logs/` is uploaded with `actions/upload-artifact` (`if: always()`, 14-day retention). At the end of every run, including one that ended on an
+**Observability:** `.sandcastle/logs/summary.md` and `.sandcastle/logs/handbacks.json` are uploaded with `actions/upload-artifact` (`if: always()`, 14-day retention). The role
+transcripts in `.sandcastle/logs/` are not: any signed-in user can download a public repository's artifacts, and GitHub masks secrets only in step logs, so a transcript that
+printed the sandbox's Claude credential would publish it. At the end of every run, including one that ended on an
 error, `lib/report.mts` writes the run report to `.sandcastle/logs/summary.md` and appends it to the job summary (`$GITHUB_STEP_SUMMARY`). It says how the run ended (finished,
 stopped on the time budget or usage limit, or crashed) and lists each issue or PR touched and its outcome (published, deferred, handed back, role failed, gate failed, timed
 out, stopped, not published, updated, follow-up pass), each hand-back with a link, the open Sandcastle PRs waiting on unresolved review threads a person opened, and each role's
