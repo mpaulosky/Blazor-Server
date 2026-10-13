@@ -294,7 +294,7 @@ the reviewer or CI checks the output anyway.
 | planner | Opus | high | 1 (structured) | 15 |
 | critique | Sonnet | high | 1 (structured) | 15 |
 | architect | Opus | high | 1 | 15 |
-| tester | Sonnet | high | 3 | 30 |
+| tester | Sonnet | high | 3 | 45 |
 | backend | Opus | high | 10 | 45 |
 | ui | Sonnet | high | 10 | 45 |
 | scribe | Sonnet | medium | 1 | 15 |
