@@ -34,7 +34,8 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
 scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
-Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, and their tests.
+Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, an Admin page only an **Admin** can
+open, and their tests.
 
 ## Releases
 
@@ -202,7 +203,6 @@ All of the following are *planned* and don't exist yet:
 
 - *Planned:* the light/dark **Theme**, defaulting to the OS preference.
 - *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
-- *Planned:* an Admin page for an **Admin**, built on the Auth0 sign-in.
 
 ## Contributing
 
