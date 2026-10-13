@@ -63,6 +63,10 @@ internal sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSche
 		[
 			new Claim(ClaimTypes.NameIdentifier, userName.ToString()),
 			new Claim(ClaimTypes.Name, userName.ToString()),
+
+			// Auth0's ID token carries the OIDC standard "name" claim under that literal type, not ClaimTypes.Name,
+			// so the nav bar's greeting (which reads "name"/"nickname"/"email") has something to find.
+			new Claim("name", userName.ToString()),
 		];
 
 		foreach (string? roleClaimValue in Request.Headers[RoleClaimHeaderName])
