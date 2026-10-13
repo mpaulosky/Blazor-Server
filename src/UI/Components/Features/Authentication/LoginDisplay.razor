@@ -13,6 +13,7 @@
 </AuthorizeView>
 
 @code {
-	private string LoginHref =>
-		$"{AuthenticationEndpoints.LoginPath}?returnUrl={Uri.EscapeDataString($"/{Navigation.ToBaseRelativePath(Navigation.Uri)}")}";
+	private string CurrentPath => $"/{Navigation.ToBaseRelativePath(Navigation.Uri)}";
+
+	private string LoginHref => $"{AuthenticationEndpoints.LoginPath}?returnUrl={Uri.EscapeDataString(CurrentPath)}";
 }

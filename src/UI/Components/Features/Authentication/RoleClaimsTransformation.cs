@@ -7,6 +7,7 @@
 // Project Name :  UI
 // =============================================
 
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using System.Text.Json;
 
@@ -73,18 +74,31 @@ public sealed class RoleClaimsTransformation : IClaimsTransformation
 	// claim per element. Both shapes, and a plain single role, end up as a list of roles.
 	private static IEnumerable<string> ParseRoles(string value)
 	{
-		if (value.StartsWith('['))
+		if (string.IsNullOrWhiteSpace(value))
 		{
-			try
-			{
-				return JsonSerializer.Deserialize<string[]>(value)?.Where(role => !string.IsNullOrEmpty(role)) ?? [];
-			}
-			catch (JsonException)
-			{
-				// Not a JSON array after all, so the value is taken as the role name itself.
-			}
+			return [];
 		}
 
-		return string.IsNullOrWhiteSpace(value) ? [] : [value];
+		if (value.StartsWith('[') && TryParseJsonArray(value, out string[]? roles))
+		{
+			return roles.Where(role => !string.IsNullOrEmpty(role));
+		}
+
+		return [value];
+	}
+
+	// A value that starts with '[' but isn't a JSON array of strings is taken as the role name itself.
+	private static bool TryParseJsonArray(string value, [NotNullWhen(true)] out string[]? roles)
+	{
+		try
+		{
+			roles = JsonSerializer.Deserialize<string[]>(value) ?? [];
+			return true;
+		}
+		catch (JsonException)
+		{
+			roles = null;
+			return false;
+		}
 	}
 }

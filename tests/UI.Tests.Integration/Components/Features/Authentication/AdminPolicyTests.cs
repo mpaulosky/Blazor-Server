@@ -43,6 +43,8 @@ public class AdminPolicyTests : IClassFixture<UiWebApplicationFactory>
 	{
 		// Arrange
 		await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
+
+		// Act
 		AuthorizationResult result = await AuthorizeAgainstAdminPolicyAsync(scope.ServiceProvider,
 			Auth0Options.DefaultRoleClaimType, roleClaimValue);
 

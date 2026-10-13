@@ -7,10 +7,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<!-- OpenIdConnectOptions and OpenIdConnectConfiguration, read by the login and logout tests to drive the
-		     Auth0 OIDC handler without a real tenant, aren't in the shared framework: they moved into this
-		     package. -->
 		<PackageReference Include="FluentAssertions" />
+		<!-- OpenIdConnectOptions and OpenIdConnectConfiguration, which the fixture and the login tests use to drive
+		     the Auth0 OIDC handler without a real tenant, aren't in the shared framework. UI gets this package only
+		     through the Auth0 SDK, so it's referenced directly rather than relied on transitively. -->
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
 		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
 		<PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />

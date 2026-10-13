@@ -1,5 +1,6 @@
+@using Microsoft.AspNetCore.Authorization
 @attribute [Route(AuthenticationEndpoints.AccessDeniedPath)]
-@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [AllowAnonymous]
 
 <PageTitle>Access denied</PageTitle>
 
