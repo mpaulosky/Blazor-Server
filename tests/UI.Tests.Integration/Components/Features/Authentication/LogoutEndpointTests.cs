@@ -89,7 +89,7 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 	}
 
 	[Fact]
-	public async Task PostLogout_TokenFromEndedSession_StillEndsTheAuth0SessionReturningToRoot()
+	public async Task PostLogout_TokenFromEndedSession_ReturnsBadRequest()
 	{
 		// Arrange
 		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
@@ -106,20 +106,22 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 			TestContext.Current.CancellationToken);
 
 		// Assert
-		response.StatusCode.Should().Be(HttpStatusCode.Found);
-		response.Headers.Location.Should().Be(new Uri(
-			$"https://{UiWebApplicationFactory.PlaceholderDomain}/v2/logout" +
-			$"?client_id={UiWebApplicationFactory.PlaceholderClientId}&returnTo=http%3A%2F%2Flocalhost%2F"));
+		response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 	}
 
 	[Theory]
+	[InlineData(null, null)]
+	[InlineData("Sec-Fetch-Site", "same-origin")]
+	[InlineData("Origin", "http://localhost")]
 	[InlineData("Sec-Fetch-Site", "cross-site")]
-	[InlineData("Origin", "https://evil.example")]
-	public async Task PostLogout_CallerWithoutSessionFromAnotherSite_ReturnsBadRequest(string header, string value)
+	public async Task PostLogout_CallerWithoutSessionOrToken_ReturnsBadRequest(string? header, string? value)
 	{
 		// Arrange
 		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-		client.DefaultRequestHeaders.Add(header, value);
+		if (header is not null)
+		{
+			client.DefaultRequestHeaders.Add(header, value);
+		}
 
 		// Act
 		HttpResponseMessage response = await client.PostAsync(new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative),
@@ -127,37 +129,6 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-	}
-
-	[Fact]
-	public async Task PostLogout_CallerWithoutSessionOrOriginHeaders_ReturnsBadRequest()
-	{
-		// Arrange
-		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-
-		// Act
-		HttpResponseMessage response = await client.PostAsync(new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative),
-			content: null, TestContext.Current.CancellationToken);
-
-		// Assert
-		response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-	}
-
-	[Fact]
-	public async Task PostLogout_CallerWithoutSessionFromThisOrigin_EndsTheAuth0Session()
-	{
-		// Arrange
-		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-		client.DefaultRequestHeaders.Add("Origin", "http://localhost");
-
-		// Act
-		HttpResponseMessage response = await client.PostAsync(new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative),
-			content: null, TestContext.Current.CancellationToken);
-
-		// Assert
-		response.StatusCode.Should().Be(HttpStatusCode.Found);
-		response.Headers.Location!.ToString().Should()
-			.StartWith($"https://{UiWebApplicationFactory.PlaceholderDomain}/v2/logout");
 	}
 
 	private static async Task<string> ScrapeLogoutTokenAsync(HttpClient client)
