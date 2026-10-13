@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.137](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.137) | 2026-10-13 | test(auth): Run the Auth0 options validation without starting the app | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-298-test-auth-run-the-auth0-options-validation-without-starting-the-app.md) |
 | [v0.0.136](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.136) | 2026-10-13 | fix(auth): Isolate the greeting name's text direction with bdi | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-296-fix-auth-isolate-the-greeting-name-s-text-direction-with-bdi.md) |
 | [v0.0.135](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.135) | 2026-10-13 | fix(nav): Make the Home link base-relative | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-295-fix-nav-make-the-home-link-base-relative.md) |
 | [v0.0.134](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.134) | 2026-10-13 | feat(admin): Add an Admin page only an Admin can open | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-293-feat-admin-add-an-admin-page-only-an-admin-can-open.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.130](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.130) | 2026-10-13 | feat(auth): Sign in and out through Auth0 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-285-feat-auth-sign-in-and-out-through-auth0.md) |
 | [v0.0.129](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.129) | 2026-10-13 | chore(sandcastle): Give the tester 45 minutes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-283-chore-sandcastle-give-the-tester-45-minutes.md) |
 | [v0.0.128](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.128) | 2026-10-13 | build(deps): Bump CodeCoverage to 18.12.0 and xunit.v3.mtp-v2 to 4.0.2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-281-build-deps-bump-codecoverage-to-18-12-0-and-xunit-v3-mtp-v2-to-4-0-2.md) |
-| [v0.0.127](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.127) | 2026-10-13 | style(repo): Indent MSBuild and solution files with tabs | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-279-style-repo-indent-msbuild-and-solution-files-with-tabs.md) |
 
 <!-- RELEASES_END -->
 
