@@ -7,6 +7,8 @@
 // Project Name :  UI.Tests.Unit
 // =============================================
 
+using System.Security.Claims;
+
 using AngleSharp.Dom;
 
 using Microsoft.AspNetCore.Components;
@@ -73,6 +75,92 @@ public class LoginDisplayTests : BunitContext
 
 		// Assert
 		cut.Find("a").GetAttribute("href").Should().Be($"authentication/login?returnUrl={expectedReturnUrl}");
+	}
+
+	[Fact]
+	public void Render_User_NameClaimSet_ShowsWelcomeWithNameBeforeLogOut()
+	{
+		// Arrange
+		AddAuthorization().SetAuthorized("test-user").SetClaims(new Claim("name", "Jane Doe"));
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.Markup.IndexOf("Welcome! Jane Doe", StringComparison.Ordinal).Should()
+			.BeGreaterThanOrEqualTo(0)
+			.And.BeLessThan(cut.Markup.IndexOf("<form", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void Render_User_OnlyNicknameClaimSet_ShowsWelcomeWithNickname()
+	{
+		// Arrange
+		AddAuthorization().SetAuthorized("test-user").SetClaims(new Claim("nickname", "jd"));
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.Markup.Should().Contain("Welcome! jd");
+	}
+
+	[Fact]
+	public void Render_User_OnlyEmailClaimSet_ShowsWelcomeWithEmail()
+	{
+		// Arrange
+		AddAuthorization().SetAuthorized("test-user").SetClaims(new Claim("email", "jane@example.com"));
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.Markup.Should().Contain("Welcome! jane@example.com");
+	}
+
+	[Theory]
+	[InlineData("", "", "jane@example.com", "jane@example.com")]
+	[InlineData("   ", "Janie", "jane@example.com", "Janie")]
+	[InlineData("Jane Doe", "Janie", "jane@example.com", "Jane Doe")]
+	public void Render_User_EmptyOrWhitespaceClaims_AreSkipped(string name, string nickname, string email,
+		string expectedName)
+	{
+		// Arrange
+		AddAuthorization().SetAuthorized("test-user")
+			.SetClaims(new Claim("name", name), new Claim("nickname", nickname), new Claim("email", email));
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.Markup.Should().Contain($"Welcome! {expectedName}");
+	}
+
+	[Fact]
+	public void Render_Visitor_ShowsNoWelcomeText()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.Markup.Should().NotContain("Welcome!");
+	}
+
+	[Fact]
+	public void Render_User_NameClaimContainsHtml_ShowsNameEscaped()
+	{
+		// Arrange
+		AddAuthorization().SetAuthorized("test-user").SetClaims(new Claim("name", "<b>Jane</b>"));
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.FindAll("b").Should().BeEmpty();
+		cut.Markup.Should().Contain("Welcome! &lt;b&gt;Jane&lt;/b&gt;");
 	}
 
 	private sealed class FakeAntiforgeryStateProvider : AntiforgeryStateProvider

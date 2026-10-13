@@ -25,7 +25,7 @@ public class NavBarTests : IClassFixture<UiWebApplicationFactory>
 	}
 
 	[Fact]
-	public async Task GetHome_Visitor_ShowsLogInAndNoLogOut()
+	public async Task GetHome_Visitor_ShowsLogInAndNoLogOutOrWelcomeText()
 	{
 		// Arrange
 		using HttpClient client = _factory.CreateClient();
@@ -39,6 +39,7 @@ public class NavBarTests : IClassFixture<UiWebApplicationFactory>
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
 		html.Should().Contain("Log in");
 		html.Should().NotContain("Log out");
+		html.Should().NotContain("Welcome!");
 	}
 
 	[Fact]
@@ -55,6 +56,24 @@ public class NavBarTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
+		html.Should().Contain("Log out");
+	}
+
+	[Fact]
+	public async Task GetHome_User_ShowsWelcomeWithName()
+	{
+		// Arrange
+		using HttpClient client = _factory.CreateClient();
+		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
+
+		// Act
+		HttpResponseMessage response =
+			await client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
+		string html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+		// Assert
+		response.StatusCode.Should().Be(HttpStatusCode.OK);
+		html.Should().Contain("Welcome! a-user");
 		html.Should().Contain("Log out");
 	}
 }
