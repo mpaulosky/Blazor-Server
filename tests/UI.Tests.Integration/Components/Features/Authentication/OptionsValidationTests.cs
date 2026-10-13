@@ -35,6 +35,21 @@ public class OptionsValidationTests
 			.Where(exception => ContainsOptionsValidationExceptionNaming(exception, key));
 	}
 
+	[Fact]
+	public void CreateClient_WhitespaceClientSecret_ThrowsOptionsValidationExceptionNamingTheSetting()
+	{
+		// Arrange
+		using WebApplicationFactory<Program> factory = new UiWebApplicationFactory()
+			.WithWebHostBuilder(builder => builder.UseSetting("Auth0:ClientSecret", "   "));
+
+		// Act
+		Action act = () => factory.CreateClient();
+
+		// Assert
+		act.Should().Throw<Exception>()
+			.Where(exception => ContainsOptionsValidationExceptionNaming(exception, "Auth0:ClientSecret"));
+	}
+
 	[Theory]
 	[InlineData("https://my-tenant.us.auth0.com")]
 	[InlineData("my-tenant.us.auth0.com/")]

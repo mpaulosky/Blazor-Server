@@ -9,10 +9,14 @@
 
 using System.Text.RegularExpressions;
 
+using Auth0.AspNetCore.Authentication;
+
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using UI.Components.Features.Authentication;
 using UI.Tests.Integration.Fixtures;
@@ -75,6 +79,20 @@ public partial class SecretLeakTests : IClassFixture<UiWebApplicationFactory>
 		capturingLoggerProvider.Messages.Should()
 			.NotContain(message =>
 				message.Contains(UiWebApplicationFactory.PlaceholderClientSecret, StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void Auth0Scheme_SignedIn_KeepsTokensOutOfTheCookie()
+	{
+		// Arrange
+		IOptionsMonitor<OpenIdConnectOptions> options =
+			_factory.Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>();
+
+		// Act
+		OpenIdConnectOptions auth0Options = options.Get(Auth0Constants.AuthenticationScheme);
+
+		// Assert
+		auth0Options.SaveTokens.Should().BeFalse("the cookie ticket store would send saved tokens to the browser");
 	}
 
 	private sealed class CapturingLoggerProvider : ILoggerProvider

@@ -13,6 +13,7 @@ using Domain.Constants;
 
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace UI.Components.Features.Authentication;
@@ -54,11 +55,16 @@ public static class AuthenticationFeature
 			// Sign-in uses the authorization-code flow, so the client secret only ever goes from the server to Auth0's
 			// token endpoint. The SDK throws at once for the code flow without a secret, so a missing one keeps the
 			// SDK's default flow here and lets ValidateOnStart stop the app, naming the setting, before anyone signs in.
-			if (!string.IsNullOrEmpty(clientSecret))
+			if (!string.IsNullOrWhiteSpace(clientSecret))
 			{
 				options.ResponseType = OpenIdConnectResponseType.Code;
 			}
 		});
+
+		// The SDK saves the ID and access tokens in the authentication ticket, and the default ticket store is the
+		// cookie itself, so they'd travel to the browser on every response. Nothing in the app uses them.
+		services.PostConfigure<OpenIdConnectOptions>(Auth0Constants.AuthenticationScheme,
+			options => options.SaveTokens = false);
 
 		services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 		{
