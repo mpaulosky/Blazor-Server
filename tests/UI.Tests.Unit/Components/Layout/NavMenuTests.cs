@@ -22,7 +22,7 @@ public class NavMenuTests : BunitContext
 	}
 
 	[Fact]
-	public void Render_HasLinkToHome()
+	public void Render_HomeLink_IsBaseRelative()
 	{
 		// Arrange
 
@@ -30,8 +30,10 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
-		IReadOnlyList<IElement> homeLinks = cut.FindAll("a[href='/']");
-		homeLinks.Should().HaveCount(1);
+		// An empty href resolves against <base href>, so Home still reaches the app's root under a non-root base path,
+		// like the brand link and the Profile and Admin links.
+		IElement homeLink = cut.FindAll("a").Single(link => link.TextContent.Trim() == "Home");
+		homeLink.GetAttribute("href").Should().BeEmpty();
 	}
 
 	[Fact]
