@@ -91,6 +91,7 @@ public class GreetingNameTests
 		result.Should().Be("<b>Jane</b>");
 	}
 
+	// A null value leaves that claim off the User. The Where drops those, so the Select never sees a null Value.
 	private static ClaimsPrincipal CreateUser(params (string Type, string? Value)[] claims) =>
 		new(new ClaimsIdentity(
 			claims.Where(claim => claim.Value is not null).Select(claim => new Claim(claim.Type, claim.Value!)),

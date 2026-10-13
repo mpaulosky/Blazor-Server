@@ -5,10 +5,7 @@
 		<a href="@LoginHref" data-enhance-nav="false" class="text-sm text-gray-300 hover:text-white">Log in</a>
 	</NotAuthorized>
 	<Authorized>
-		@{
-			string? greetingName = GreetingName.For(context.User);
-		}
-		@if (greetingName is not null)
+		@if (GreetingName.For(context.User) is string greetingName)
 		{
 			<span class="text-sm text-gray-300">Welcome! @greetingName</span>
 		}
