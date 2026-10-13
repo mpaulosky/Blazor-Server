@@ -55,6 +55,22 @@ public class LoginEndpointTests : IClassFixture<UiWebApplicationFactory>
 		query["client_id"].ToString().Should().Be(UiWebApplicationFactory.PlaceholderClientId);
 	}
 
+	[Fact]
+	public async Task GetLogin_RequestsAnAuthorizationCode()
+	{
+		// Arrange
+
+		// Act
+		HttpResponseMessage response = await _client.GetAsync(
+			new Uri($"{AuthenticationEndpoints.LoginPath}?returnUrl=%2F", UriKind.Relative),
+			TestContext.Current.CancellationToken);
+
+		// Assert
+		Uri? location = response.Headers.Location;
+		location.Should().NotBeNull();
+		QueryHelpers.ParseQuery(location!.Query)["response_type"].ToString().Should().Be("code");
+	}
+
 	[Theory]
 	[InlineData("/")]
 	[InlineData("/profile?x=1")]

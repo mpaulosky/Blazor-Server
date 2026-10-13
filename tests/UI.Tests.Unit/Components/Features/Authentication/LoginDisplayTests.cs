@@ -9,6 +9,7 @@
 
 using AngleSharp.Dom;
 
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -34,7 +35,7 @@ public class LoginDisplayTests : BunitContext
 
 		// Assert
 		IElement link = cut.Find("a");
-		link.GetAttribute("href").Should().Be($"{AuthenticationEndpoints.LoginPath}?returnUrl=%2F");
+		link.GetAttribute("href").Should().Be("authentication/login?returnUrl=%2F");
 		link.GetAttribute("data-enhance-nav").Should().Be("false");
 		link.TextContent.Trim().Should().Be("Log in");
 		cut.FindAll("form").Should().BeEmpty();
@@ -52,10 +53,26 @@ public class LoginDisplayTests : BunitContext
 		// Assert
 		IElement form = cut.Find("form");
 		form.GetAttribute("method").Should().Be("post");
-		form.GetAttribute("action").Should().Be(AuthenticationEndpoints.LogoutPath);
+		form.GetAttribute("action").Should().Be("authentication/logout");
 		IElement button = cut.Find("form button[type='submit']");
 		button.TextContent.Trim().Should().Be("Log out");
 		cut.FindAll("a").Should().BeEmpty();
+	}
+
+	[Theory]
+	[InlineData("counter?page=2", "%2Fcounter%3Fpage%3D2")]
+	[InlineData("authentication/access-denied?ReturnUrl=%2Fadmin", "%2F")]
+	public void Render_VisitorOnPage_LogInLinkReturnsToTheRightPage(string relativeUri, string expectedReturnUrl)
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+		Services.GetRequiredService<NavigationManager>().NavigateTo(relativeUri);
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.Find("a").GetAttribute("href").Should().Be($"authentication/login?returnUrl={expectedReturnUrl}");
 	}
 
 	private sealed class FakeAntiforgeryStateProvider : AntiforgeryStateProvider

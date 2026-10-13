@@ -71,10 +71,14 @@ public static class AuthenticationEndpoints
 	}
 
 	// The endpoint binds no form, so minimal APIs don't validate the antiforgery token for it; it does so itself.
+	// The token guards a signed-in User's session. A caller with no session (a stale tab, or an expired cookie) has
+	// a token issued to a user who is gone, so it never validates; sign them out of Auth0 anyway, or the next
+	// Log in would skip the credentials prompt.
 	private static async Task<Results<SignOutHttpResult, BadRequest>> LogoutAsync(HttpContext context,
 		IAntiforgery antiforgery)
 	{
-		if (!await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false))
+		if (context.User.Identity?.IsAuthenticated == true &&
+			!await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false))
 		{
 			return TypedResults.BadRequest();
 		}

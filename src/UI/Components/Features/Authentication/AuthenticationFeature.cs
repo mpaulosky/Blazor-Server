@@ -13,6 +13,7 @@ using Domain.Constants;
 
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace UI.Components.Features.Authentication;
 
@@ -40,15 +41,23 @@ public static class AuthenticationFeature
 
 		// The SDK runs this lambda straight away, while services are still being registered, so it reads
 		// configuration directly. It mustn't throw on a missing value: ValidateOnStart reports those, naming the
-		// setting. The SDK's default id_token flow doesn't need the client secret, so the SDK doesn't reject a
-		// missing one first.
+		// setting.
 		IConfigurationSection auth0Section = configuration.GetSection(Auth0Options.SectionName);
 		services.AddAuth0WebAppAuthentication(options =>
 		{
+			string? clientSecret = auth0Section[nameof(Auth0Options.ClientSecret)];
 			options.Domain = auth0Section[nameof(Auth0Options.Domain)] ?? string.Empty;
 			options.ClientId = auth0Section[nameof(Auth0Options.ClientId)] ?? string.Empty;
-			options.ClientSecret = auth0Section[nameof(Auth0Options.ClientSecret)];
+			options.ClientSecret = clientSecret;
 			options.AccessDeniedPath = AuthenticationEndpoints.AccessDeniedPath;
+
+			// Sign-in uses the authorization-code flow, so the client secret only ever goes from the server to Auth0's
+			// token endpoint. The SDK throws at once for the code flow without a secret, so a missing one keeps the
+			// SDK's default flow here and lets ValidateOnStart stop the app, naming the setting, before anyone signs in.
+			if (!string.IsNullOrEmpty(clientSecret))
+			{
+				options.ResponseType = OpenIdConnectResponseType.Code;
+			}
 		});
 
 		services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>

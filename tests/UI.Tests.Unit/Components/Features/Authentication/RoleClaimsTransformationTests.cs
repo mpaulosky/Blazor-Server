@@ -117,14 +117,14 @@ public class RoleClaimsTransformationTests
 		RoleClaimsTransformation sut =
 			new(Options.Create(new Auth0Options { RoleClaimType = customRoleClaimType }));
 		ClaimsPrincipal principal = CreateAuthenticatedPrincipal(
-			new Claim(Auth0Options.DefaultRoleClaimType, "Admin"),
+			new Claim(Auth0Options.DefaultRoleClaimType, "User"),
 			new Claim(customRoleClaimType, "Admin"));
 
 		// Act
 		ClaimsPrincipal result = await sut.TransformAsync(principal);
 
 		// Assert
-		result.FindAll(ClaimTypes.Role).Should().ContainSingle();
+		result.FindAll(ClaimTypes.Role).Should().ContainSingle().Which.Value.Should().Be("Admin");
 	}
 
 	[Fact]

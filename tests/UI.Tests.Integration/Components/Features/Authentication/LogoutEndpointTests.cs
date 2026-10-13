@@ -49,10 +49,11 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 	}
 
 	[Fact]
-	public async Task PostLogout_WithoutAntiforgeryToken_ReturnsBadRequest()
+	public async Task PostLogout_SignedInUserWithoutAntiforgeryToken_ReturnsBadRequest()
 	{
 		// Arrange
 		using HttpClient client = _factory.CreateClient();
+		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
 
 		// Act
 		HttpResponseMessage response = await client.PostAsync(new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative),
@@ -85,6 +86,29 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 		response.Headers.GetValues("Set-Cookie").Should()
 			.Contain(cookie => cookie.StartsWith(".AspNetCore.Cookies=;", StringComparison.Ordinal) &&
 				cookie.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase));
+	}
+
+	[Fact]
+	public async Task PostLogout_TokenFromEndedSession_StillEndsTheAuth0SessionReturningToRoot()
+	{
+		// Arrange
+		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
+		using FormUrlEncodedContent content = new([
+			new KeyValuePair<string?, string?>("__RequestVerificationToken", await ScrapeLogoutTokenAsync(client)),
+		]);
+		client.DefaultRequestHeaders.Remove(TestAuthHandler.UserHeaderName);
+
+		// Act
+		HttpResponseMessage response = await client.PostAsync(
+			new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative), content,
+			TestContext.Current.CancellationToken);
+
+		// Assert
+		response.StatusCode.Should().Be(HttpStatusCode.Found);
+		response.Headers.Location.Should().Be(new Uri(
+			$"https://{UiWebApplicationFactory.PlaceholderDomain}/v2/logout" +
+			$"?client_id={UiWebApplicationFactory.PlaceholderClientId}&returnTo=http%3A%2F%2Flocalhost%2F"));
 	}
 
 	private static async Task<string> ScrapeLogoutTokenAsync(HttpClient client)

@@ -119,7 +119,8 @@ The app won't start without an Auth0 tenant's settings: it validates `Auth0:Doma
 `Auth0:ClientSecret` on startup and names any that's missing.
 
 1. In the [Auth0 dashboard](https://manage.auth0.com/), create an application of type **Regular Web Application**.
-   Leave the **Implicit** grant on (it is by default): sign-in uses the Auth0 SDK's default `id_token` flow.
+   Sign-in uses the authorization-code flow, so leave the **Authorization Code** grant on (it is by default). The app
+   sends the client secret only to Auth0's token endpoint, from the server.
 2. In the application's settings, add:
    - **Allowed Callback URLs:** `http://localhost:5112/callback, https://localhost:7161/callback`
    - **Allowed Logout URLs:** `http://localhost:5112/, https://localhost:7161/`
@@ -156,6 +157,9 @@ there satisfies the Admin policy.
 ## After generating your app
 
 - Replace this README with one that describes your Generated App.
+- Give your app its own user secrets: replace the `UserSecretsId` in both `src/UI/UI.csproj` and
+  `src/AppHost/AppHost.csproj` with one new GUID (for example from `uuidgen`). Otherwise every app made from this
+  template reads and writes the same `Auth0:*` secrets on your machine.
 - Repoint the badges at your own repository, or remove them.
 - Decide whether to keep the release automation: [release.yml](https://github.com/mpaulosky/Blazor-Server/blob/main/.github/workflows/release.yml) tags a release and
   opens a release-notes PR for every merged PR, which also copies `README.md` to `docs/README.md`. Delete it if you don't want it.
