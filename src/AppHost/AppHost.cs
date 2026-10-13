@@ -21,10 +21,17 @@ IResourceBuilder<ParameterResource> auth0ClientSecret =
 
 // The http launch profile lets the AppHost start the UI where there's no developer certificate (CI, the Sandcastle
 // sandbox). The health check holds WebApp back from "healthy" until it answers /health, which it maps in Development.
-builder.AddProject<Projects.UI>(ApplicationConstants.Website, launchProfileName: "http")
+IResourceBuilder<ProjectResource> webApp = builder.AddProject<Projects.UI>(ApplicationConstants.Website, launchProfileName: "http")
 	.WithHttpHealthCheck("/health")
 	.WithEnvironment("Auth0__Domain", auth0Domain)
 	.WithEnvironment("Auth0__ClientId", auth0ClientId)
 	.WithEnvironment("Auth0__ClientSecret", auth0ClientSecret);
+
+// The role claim type is optional and WebApp has its own default, so it's passed on only when it's set.
+string? auth0RoleClaimType = builder.Configuration["Auth0:RoleClaimType"];
+if (!string.IsNullOrEmpty(auth0RoleClaimType))
+{
+	webApp.WithEnvironment("Auth0__RoleClaimType", auth0RoleClaimType);
+}
 
 builder.Build().Run();

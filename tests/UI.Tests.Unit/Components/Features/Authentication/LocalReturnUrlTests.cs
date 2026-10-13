@@ -38,6 +38,7 @@ public class LocalReturnUrlTests
 	[InlineData("/\\evil.example")]
 	[InlineData("evil.com")]
 	[InlineData("javascript:alert(1)")]
+	[InlineData("/.//evil.example")]
 	public void OrRoot_NonLocalPath_ReturnsRoot(string? returnUrl)
 	{
 		// Arrange
@@ -47,5 +48,17 @@ public class LocalReturnUrlTests
 
 		// Assert
 		result.Should().Be("/");
+	}
+
+	[Fact]
+	public void OrRoot_NonAsciiLocalPath_ReturnsItPercentEncoded()
+	{
+		// Arrange
+
+		// Act
+		string result = LocalReturnUrl.OrRoot("/caf\u00e9?q=\u00fc");
+
+		// Assert
+		result.Should().Be("/caf%C3%A9?q=%C3%BC");
 	}
 }

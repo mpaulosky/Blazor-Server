@@ -30,6 +30,8 @@ public sealed class Auth0Options
 	///   The Auth0 tenant's domain, as a host only (for example <c>my-tenant.us.auth0.com</c>), with no scheme.
 	/// </summary>
 	[Required(ErrorMessage = "Auth0:Domain is required. Set it in user secrets or the Auth0__Domain environment variable.")]
+	[RegularExpression(@"^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$",
+		ErrorMessage = "Auth0:Domain must be the tenant's host only, such as my-tenant.us.auth0.com, with no scheme, port or path.")]
 	public string Domain { get; set; } = string.Empty;
 
 	/// <summary>

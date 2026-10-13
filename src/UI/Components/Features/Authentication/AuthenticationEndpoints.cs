@@ -71,14 +71,17 @@ public static class AuthenticationEndpoints
 	}
 
 	// The endpoint binds no form, so minimal APIs don't validate the antiforgery token for it; it does so itself.
-	// The token guards a signed-in User's session. A caller with no session (a stale tab, or an expired cookie) has
-	// a token issued to a user who is gone, so it never validates; sign them out of Auth0 anyway, or the next
-	// Log in would skip the credentials prompt.
+	// A caller with no session (a stale tab, or an expired cookie) holds a token issued to a user who is gone, so it
+	// never validates. That caller is still signed out of Auth0, or the next Log in would skip the credentials
+	// prompt, but only when the browser says the POST came from this app: the SameSite=Lax session cookie is also
+	// missing from a cross-site POST, which would otherwise let any page end a visitor's Auth0 session.
 	private static async Task<Results<SignOutHttpResult, BadRequest>> LogoutAsync(HttpContext context,
 		IAntiforgery antiforgery)
 	{
-		if (context.User.Identity?.IsAuthenticated == true &&
-			!await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false))
+		bool allowed = context.User.Identity?.IsAuthenticated == true
+			? await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false)
+			: IsSameOrigin(context.Request);
+		if (!allowed)
 		{
 			return TypedResults.BadRequest();
 		}
@@ -91,5 +94,21 @@ public static class AuthenticationEndpoints
 
 		return TypedResults.SignOut(properties,
 			[CookieAuthenticationDefaults.AuthenticationScheme, Auth0Constants.AuthenticationScheme]);
+	}
+
+	// Browsers send Sec-Fetch-Site on every POST; Origin is the fallback for those that don't. A request with
+	// neither can't show where it came from, so it isn't trusted.
+	private static bool IsSameOrigin(HttpRequest request)
+	{
+		string? fetchSite = request.Headers["Sec-Fetch-Site"];
+		if (fetchSite is not null)
+		{
+			return fetchSite == "same-origin";
+		}
+
+		string? origin = request.Headers.Origin;
+
+		return origin is not null &&
+			string.Equals(origin, $"{request.Scheme}://{request.Host}", StringComparison.OrdinalIgnoreCase);
 	}
 }

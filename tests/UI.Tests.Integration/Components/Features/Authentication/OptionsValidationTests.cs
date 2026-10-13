@@ -35,6 +35,24 @@ public class OptionsValidationTests
 			.Where(exception => ContainsOptionsValidationExceptionNaming(exception, key));
 	}
 
+	[Theory]
+	[InlineData("https://my-tenant.us.auth0.com")]
+	[InlineData("my-tenant.us.auth0.com/")]
+	[InlineData("my-tenant")]
+	public void CreateClient_Auth0DomainThatIsNotAHost_ThrowsOptionsValidationExceptionNamingTheSetting(string domain)
+	{
+		// Arrange
+		using WebApplicationFactory<Program> factory = new UiWebApplicationFactory()
+			.WithWebHostBuilder(builder => builder.UseSetting("Auth0:Domain", domain));
+
+		// Act
+		Action act = () => factory.CreateClient();
+
+		// Assert
+		act.Should().Throw<Exception>()
+			.Where(exception => ContainsOptionsValidationExceptionNaming(exception, "Auth0:Domain"));
+	}
+
 	private static bool ContainsOptionsValidationExceptionNaming(Exception? exception, string key)
 	{
 		for (Exception? current = exception; current is not null; current = current.InnerException)

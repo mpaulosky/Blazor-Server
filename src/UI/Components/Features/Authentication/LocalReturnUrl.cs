@@ -17,8 +17,11 @@ namespace UI.Components.Features.Authentication;
 /// </summary>
 public static class LocalReturnUrl
 {
+	private static readonly Uri s_anyOrigin = new("http://localhost");
+
 	/// <summary>
-	///   Returns <paramref name="returnUrl" /> unchanged when it is a local path, otherwise <c>"/"</c>.
+	///   Returns <paramref name="returnUrl" />, percent-encoded where it isn't plain ASCII, when it is a local path,
+	///   otherwise <c>"/"</c>.
 	/// </summary>
 	/// <param name="returnUrl">The visitor-supplied return URL, or <see langword="null" />.</param>
 	/// <returns>A path safe to redirect to.</returns>
@@ -27,7 +30,18 @@ public static class LocalReturnUrl
 			"that's exactly what this method must validate.")]
 	public static string OrRoot(string? returnUrl)
 	{
-		return IsLocal(returnUrl) ? returnUrl : "/";
+		if (!IsLocal(returnUrl))
+		{
+			return "/";
+		}
+
+		// The redirect after the Auth0 callback puts this in a Location header, which Kestrel refuses to send with
+		// non-ASCII text in it. Resolving it as a URI escapes that text, but also collapses dot segments, so the
+		// result is checked again: "/.//evil.example" would otherwise become a protocol-relative URL.
+		Uri resolved = new(s_anyOrigin, returnUrl);
+		string escaped = resolved.PathAndQuery + resolved.Fragment;
+
+		return IsLocal(escaped) ? escaped : "/";
 	}
 
 	// Url.IsLocalUrl's rule, minus its "~/" form: nothing expands "~" in the redirect after the Auth0 callback, so
