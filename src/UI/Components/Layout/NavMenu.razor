@@ -1,3 +1,5 @@
+@using UI.Components.Features.Authentication
+
 <nav class="flex h-14 items-center gap-6 bg-gray-900 px-4">
 	<a href="" class="flex items-center gap-2 text-lg font-semibold text-white">
 		<img src="favicon.png" alt="" class="h-8 w-8"/>
@@ -11,4 +13,8 @@
 		ActiveClass="text-white font-semibold">
 		Home
 	</NavLink>
+
+	<div class="ml-auto">
+		<LoginDisplay/>
+	</div>
 </nav>

@@ -1,2 +1,18 @@
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+	<NotAuthorized>
+		<a href="@LoginHref" data-enhance-nav="false" class="text-sm text-gray-300 hover:text-white">Log in</a>
+	</NotAuthorized>
+	<Authorized>
+		<form method="post" action="@AuthenticationEndpoints.LogoutPath">
+			<AntiforgeryToken/>
+			<button type="submit" class="text-sm text-gray-300 hover:text-white">Log out</button>
+		</form>
+	</Authorized>
+</AuthorizeView>
+
 @code {
+	private string LoginHref =>
+		$"{AuthenticationEndpoints.LoginPath}?returnUrl={Uri.EscapeDataString($"/{Navigation.ToBaseRelativePath(Navigation.Uri)}")}";
 }
