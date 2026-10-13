@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.135">v0.0.135</a></td>
+                <td>2026-10-13</td>
+                <td>fix(nav): Make the Home link base-relative</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-295-fix-nav-make-the-home-link-base-relative.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.134">v0.0.134</a></td>
                 <td>2026-10-13</td>
                 <td>feat(admin): Add an Admin page only an Admin can open</td>
@@ -282,12 +288,6 @@
                 <td>feat(UI): Show the favicon before the app name in the nav bar</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-272-feat-ui-show-the-favicon-before-the-app-name-in-the-nav-bar.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.125">v0.0.125</a></td>
-                <td>2026-10-11</td>
-                <td>test(e2e): Add Playwright end-to-end tests run through the AppHost</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-13">13 Oct 2026</time><span class="post-tag">v0.0.135</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-295-fix-nav-make-the-home-link-base-relative.md">fix(nav): Make the Home link base-relative</a></h3>
+              <p class="post-excerpt">The Home NavLink pointed at /. When the Generated App is hosted under a non-root base path (for example /app/), that link leaves the app for the host&#x27;s root. The brand, Profile and Admin links are…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/295">PR #295</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-13">13 Oct 2026</time><span class="post-tag">v0.0.134</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-272-feat-ui-show-the-favicon-before-the-app-name-in-the-nav-bar.md">feat(UI): Show the favicon before the app name in the nav bar</a></h3>
               <p class="post-excerpt">The nav bar&#x27;s brand link was the text &quot;UI&quot; on its own. Showing the app&#x27;s favicon next to it gives the Generated App a recognisable mark in the header, the same one the browser tab already shows.</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/272">PR #272</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-11">11 Oct 2026</time><span class="post-tag">v0.0.125</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md">test(e2e): Add Playwright end-to-end tests run through the AppHost</a></h3>
-              <p class="post-excerpt">Implemented and reviewed by Sandcastle.</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/270">PR #270</a></p>
             </article>
           </li>
         </ul>
