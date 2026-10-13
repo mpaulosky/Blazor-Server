@@ -1,3 +1,4 @@
+@using Domain.Constants
 @using UI.Components.Features.Authentication
 
 <nav class="flex h-14 items-center gap-6 bg-gray-900 px-4">
@@ -21,6 +22,17 @@
 				class="text-sm text-gray-300 hover:text-white"
 				ActiveClass="text-white font-semibold">
 				Profile
+			</NavLink>
+		</Authorized>
+	</AuthorizeView>
+
+	<AuthorizeView Policy="@ApplicationConstants.AdminPolicy">
+		<Authorized>
+			<NavLink
+				href="admin"
+				class="text-sm text-gray-300 hover:text-white"
+				ActiveClass="text-white font-semibold">
+				Admin
 			</NavLink>
 		</Authorized>
 	</AuthorizeView>

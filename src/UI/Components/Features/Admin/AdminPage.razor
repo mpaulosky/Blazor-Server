@@ -1,0 +1,11 @@
+@page "/admin"
+@attribute [Authorize(Policy = ApplicationConstants.AdminPolicy)]
+
+@using Domain.Constants
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Admin</PageTitle>
+
+<h1 class="text-balance text-4xl font-bold tracking-tight text-gray-900">Admin</h1>
+
+<p class="mt-4 text-sm text-gray-600">Only an Admin can see this page.</p>
