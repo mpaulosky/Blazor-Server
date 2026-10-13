@@ -18,8 +18,8 @@ using Domain.Constants;
 namespace UI.Tests.E2E.Fixtures;
 
 /// <summary>
-///     Starts the AppHost and a headless Chromium instance once for every E2E test, and hands each test a page
-///     against <see cref="ApplicationConstants.Website" />.
+///   Starts the AppHost and a headless Chromium instance once for every E2E test, and hands each test a page
+///   against <see cref="ApplicationConstants.Website" />.
 /// </summary>
 public sealed class WebAppFixture : IAsyncLifetime
 {
@@ -39,7 +39,8 @@ public sealed class WebAppFixture : IAsyncLifetime
 		Path.Combine(AppContext.BaseDirectory, "TestResults", "playwright-artifacts");
 
 	private readonly bool _captureTraces =
-		string.Equals(Environment.GetEnvironmentVariable("PLAYWRIGHT_ARTIFACTS"), "true", StringComparison.OrdinalIgnoreCase);
+		string.Equals(Environment.GetEnvironmentVariable("PLAYWRIGHT_ARTIFACTS"), "true",
+			StringComparison.OrdinalIgnoreCase);
 
 	private readonly object _pendingContextsLock = new();
 	private readonly List<PendingContext> _pendingContexts = [];
@@ -52,12 +53,12 @@ public sealed class WebAppFixture : IAsyncLifetime
 	private Uri? _baseAddress;
 
 	/// <summary>
-	///     The base address of the running <c>WebApp</c> resource.
+	///   The base address of the running <c>WebApp</c> resource.
 	/// </summary>
 	public Uri BaseAddress => _baseAddress ?? throw new InvalidOperationException("The AppHost has not started yet.");
 
 	/// <summary>
-	///     Opens a new, isolated browser page against <see cref="BaseAddress" />.
+	///   Opens a new, isolated browser page against <see cref="BaseAddress" />.
 	/// </summary>
 	/// <param name="cancellationToken">A token that cancels opening the page.</param>
 	public async Task<WebAppPage> CreatePageAsync(CancellationToken cancellationToken)
@@ -88,9 +89,9 @@ public sealed class WebAppFixture : IAsyncLifetime
 	}
 
 	/// <summary>
-	///     Installs Chromium, launches it headless, then starts the AppHost and waits for <c>WebApp</c> to become
-	///     healthy. Launching Chromium first means a broken browser (for example a missing shared library) fails
-	///     fast, before paying the AppHost's own startup budget.
+	///   Installs Chromium, launches it headless, then starts the AppHost and waits for <c>WebApp</c> to become
+	///   healthy. Launching Chromium first means a broken browser (for example a missing shared library) fails
+	///   fast, before paying the AppHost's own startup budget.
 	/// </summary>
 	public async ValueTask InitializeAsync()
 	{
@@ -126,7 +127,7 @@ public sealed class WebAppFixture : IAsyncLifetime
 	}
 
 	/// <summary>
-	///     Closes Chromium and the AppHost, and closes any browser context a test didn't already dispose.
+	///   Closes Chromium and the AppHost, and closes any browser context a test didn't already dispose.
 	/// </summary>
 	// Suppress CA1031: this teardown is the top-level boundary for cleanup. Every disposal below must run even when
 	// an earlier one throws, or a crashed context, browser or Playwright instance leaves the AppHost's WebApp

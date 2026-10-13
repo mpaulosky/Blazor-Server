@@ -23,7 +23,8 @@ public class MainLayoutTests : BunitContext
 		// Arrange
 
 		// Act
-		IRenderedComponent<MainLayout> cut = Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
+		IRenderedComponent<MainLayout> cut =
+			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
 
 		// Assert
 		cut.Markup.Should().Contain("page content");
@@ -35,7 +36,8 @@ public class MainLayoutTests : BunitContext
 		// Arrange
 
 		// Act
-		IRenderedComponent<MainLayout> cut = Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
+		IRenderedComponent<MainLayout> cut =
+			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
 
 		// Assert
 		IReadOnlyList<IElement> homeLinks = cut.FindAll("a[href='/']");
@@ -48,7 +50,8 @@ public class MainLayoutTests : BunitContext
 		// Arrange
 
 		// Act
-		IRenderedComponent<MainLayout> cut = Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
+		IRenderedComponent<MainLayout> cut =
+			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
 
 		// Assert
 		IElement errorUi = cut.Find("#blazor-error-ui");

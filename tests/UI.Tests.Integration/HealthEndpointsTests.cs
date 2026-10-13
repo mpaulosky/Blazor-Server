@@ -27,7 +27,8 @@ public class HealthEndpointsTests
 		using HttpClient client = factory.CreateClient();
 
 		// Act
-		HttpResponseMessage response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+		HttpResponseMessage response =
+			await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -44,7 +45,8 @@ public class HealthEndpointsTests
 		using HttpClient client = factory.CreateClient();
 
 		// Act
-		HttpResponseMessage response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+		HttpResponseMessage response =
+			await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.NotFound);

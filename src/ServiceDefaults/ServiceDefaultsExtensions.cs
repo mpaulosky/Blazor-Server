@@ -22,8 +22,8 @@ using OpenTelemetry.Trace;
 namespace ServiceDefaults;
 
 /// <summary>
-///     Wires OpenTelemetry and health checks into a Generated App's host, and maps the health endpoints Development
-///     uses to probe it.
+///   Wires OpenTelemetry and health checks into a Generated App's host, and maps the health endpoints Development
+///   uses to probe it.
 /// </summary>
 public static class ServiceDefaultsExtensions
 {
@@ -34,8 +34,8 @@ public static class ServiceDefaultsExtensions
 	private const string LiveTag = "live";
 
 	/// <summary>
-	///     Adds OpenTelemetry logging, metrics and tracing, and a <c>self</c> health check tagged <c>live</c>, to
-	///     <paramref name="builder" />.
+	///   Adds OpenTelemetry logging, metrics and tracing, and a <c>self</c> health check tagged <c>live</c>, to
+	///   <paramref name="builder" />.
 	/// </summary>
 	/// <typeparam name="TBuilder">The host builder type.</typeparam>
 	/// <param name="builder">The host builder to configure.</param>
@@ -54,7 +54,7 @@ public static class ServiceDefaultsExtensions
 	}
 
 	/// <summary>
-	///     Maps <c>/health</c> and <c>/alive</c> on <paramref name="app" /> when its environment is Development.
+	///   Maps <c>/health</c> and <c>/alive</c> on <paramref name="app" /> when its environment is Development.
 	/// </summary>
 	/// <param name="app">The application to map the endpoints on.</param>
 	/// <returns><paramref name="app" />, for chaining.</returns>
@@ -69,10 +69,8 @@ public static class ServiceDefaultsExtensions
 			// /health requires every check to pass; /alive only the "live" ones, so a slow dependency doesn't get a
 			// healthy process restarted.
 			app.MapHealthChecks(HealthEndpointPath);
-			app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
-			{
-				Predicate = registration => registration.Tags.Contains(LiveTag)
-			});
+			app.MapHealthChecks(AlivenessEndpointPath,
+				new HealthCheckOptions { Predicate = registration => registration.Tags.Contains(LiveTag) });
 		}
 
 		return app;

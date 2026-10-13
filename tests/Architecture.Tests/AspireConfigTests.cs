@@ -24,7 +24,9 @@ public class AspireConfigTests
 		bool exists = File.Exists(rootConfigPath);
 
 		// Assert
-		exists.Should().BeTrue("the Aspire CLI's shared settings are committed once at the repository root, pointing at src/AppHost/AppHost.csproj");
+		exists.Should()
+			.BeTrue(
+				"the Aspire CLI's shared settings are committed once at the repository root, pointing at src/AppHost/AppHost.csproj");
 	}
 
 	[Fact]
@@ -38,6 +40,8 @@ public class AspireConfigTests
 		bool exists = File.Exists(appHostConfigPath);
 
 		// Assert
-		exists.Should().BeFalse("a per-machine copy the Aspire CLI writes next to the AppHost is noise once the repository-root copy is committed");
+		exists.Should()
+			.BeFalse(
+				"a per-machine copy the Aspire CLI writes next to the AppHost is noise once the repository-root copy is committed");
 	}
 }

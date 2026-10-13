@@ -25,7 +25,8 @@ public class UiTests
 		HashSet<string> allowed = new(StringComparer.Ordinal) { "Domain", "ServiceDefaults" };
 
 		// Act
-		IReadOnlyList<string> forbiddenReferences = ProjectReferenceRule.FindForbiddenProjectReferences(uiAssembly, allowed);
+		IReadOnlyList<string> forbiddenReferences =
+			ProjectReferenceRule.FindForbiddenProjectReferences(uiAssembly, allowed);
 
 		// Assert
 		forbiddenReferences.Should().BeEmpty(
@@ -41,10 +42,12 @@ public class UiTests
 
 		// Act
 		IReadOnlyList<string> slices = SliceDependencyRule.FindSliceNames(uiAssembly, featuresNamespace);
-		IReadOnlyList<string> crossSliceDependencies = SliceDependencyRule.FindCrossSliceDependencies(uiAssembly, featuresNamespace);
+		IReadOnlyList<string> crossSliceDependencies =
+			SliceDependencyRule.FindCrossSliceDependencies(uiAssembly, featuresNamespace);
 
 		// Assert
 		slices.Should().Contain("Home");
-		crossSliceDependencies.Should().BeEmpty("each feature slice holds everything its use case needs, and depends on no other slice (ADR-0005)");
+		crossSliceDependencies.Should()
+			.BeEmpty("each feature slice holds everything its use case needs, and depends on no other slice (ADR-0005)");
 	}
 }

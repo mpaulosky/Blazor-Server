@@ -34,7 +34,8 @@ public partial class AppTests : IClassFixture<WebApplicationFactory<Program>>
 		// Arrange
 
 		// Act
-		HttpResponseMessage response = await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
+		HttpResponseMessage response =
+			await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
 		string html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
 		// Assert
@@ -46,7 +47,8 @@ public partial class AppTests : IClassFixture<WebApplicationFactory<Program>>
 	public async Task GetStylesheet_ReturnsCssContainingHomeOnlyUtility()
 	{
 		// Arrange
-		HttpResponseMessage homeResponse = await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
+		HttpResponseMessage homeResponse =
+			await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
 		string html = await homeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 		Match match = StylesheetHrefPattern().Match(html);
 		match.Success.Should().BeTrue();
@@ -68,7 +70,8 @@ public partial class AppTests : IClassFixture<WebApplicationFactory<Program>>
 		// Arrange
 
 		// Act
-		HttpResponseMessage response = await _client.GetAsync(new Uri("/this-page-does-not-exist", UriKind.Relative), TestContext.Current.CancellationToken);
+		HttpResponseMessage response = await _client.GetAsync(new Uri("/this-page-does-not-exist", UriKind.Relative),
+			TestContext.Current.CancellationToken);
 		string html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
 		// Assert

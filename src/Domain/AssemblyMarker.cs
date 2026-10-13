@@ -12,6 +12,6 @@
 namespace Domain;
 
 /// <summary>
-///     Marker type used for assembly reflection (e.g., architecture tests).
+///   Marker type used for assembly reflection (e.g., architecture tests).
 /// </summary>
 public sealed class AssemblyMarker;
