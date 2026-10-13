@@ -53,6 +53,21 @@ public class RoleClaimsTransformationTests
 	}
 
 	[Fact]
+	public async Task TransformAsync_BracketedValueThatIsNotJson_TakesTheValueAsTheRole()
+	{
+		// Arrange
+		const string roleClaimValue = "[Admin";
+		ClaimsPrincipal principal =
+			CreateAuthenticatedPrincipal(new Claim(Auth0Options.DefaultRoleClaimType, roleClaimValue));
+
+		// Act
+		ClaimsPrincipal result = await _sut.TransformAsync(principal);
+
+		// Assert
+		result.FindAll(ClaimTypes.Role).Should().ContainSingle().Which.Value.Should().Be(roleClaimValue);
+	}
+
+	[Fact]
 	public async Task TransformAsync_NoRoleClaim_GrantsNoAdminRole()
 	{
 		// Arrange
