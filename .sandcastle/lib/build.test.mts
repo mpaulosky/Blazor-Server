@@ -53,6 +53,10 @@ function host(
     publishError,
     designNote,
     designFile = "",
+    latestMain = base,
+    containsMain = true,
+    mergeExitCode = 0,
+    latestMainError,
   }: {
     ahead?: number | number[];
     statuses?: string[];
@@ -69,6 +73,13 @@ function host(
     // the architect has run, read back and posted as the issue's design
     // comment (see DESIGN_MARKER in lib/config.mts).
     designFile?: string;
+    // The commit latestMain() resolves origin/main to just before checkpoint
+    // 2, whether the branch already contains it, how `git merge` of it exits,
+    // and an error latestMain() throws instead (a failed fetch).
+    latestMain?: string;
+    containsMain?: boolean;
+    mergeExitCode?: number;
+    latestMainError?: string;
   } = {},
 ) {
   const steps: string[] = [];
@@ -91,6 +102,7 @@ function host(
   const aheadBases: string[] = [];
   const scanned: string[] = [];
   const scannedBases: string[] = [];
+  const mainChecks: string[] = [];
   const pushed: { branch: string; commit: string }[] = [];
   // Each command on .sandcastle/work/ (the design note), with how many role
   // runs came before it.
@@ -118,6 +130,19 @@ function host(
       }
       if (command === "git rev-parse HEAD") {
         return { stdout: `${head()}\n`, stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git merge-base --is-ancestor")) {
+        mainChecks.push(command);
+        return { stdout: "", stderr: "", exitCode: containsMain ? 0 : 1 };
+      }
+      if (command.startsWith("git merge --abort")) {
+        steps.push("merge abort");
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git merge ")) {
+        headNumber++;
+        steps.push(`merge ${command.split(" ").at(-1)}`);
+        return { stdout: "", stderr: mergeExitCode === 0 ? "" : "CONFLICT (content)", exitCode: mergeExitCode };
       }
       if (command.includes(".sandcastle/work/")) {
         workCommands.push({ command, rolesRun: runs.length });
@@ -190,6 +215,10 @@ function host(
       steps.push(`publish${reviewed ? "" : " unreviewed"}${docsFailed ? " docs-failed" : ""}`);
       return "https://github.com/o/r/pull/1";
     },
+    latestMain: () => {
+      if (latestMainError !== undefined) throw new Error(latestMainError);
+      return latestMain;
+    },
     worktreeProblems: () => worktreeProblems,
     publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), () => false),
     limits: new RunLimits(),
@@ -201,6 +230,7 @@ function host(
   return {
     steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
     order, buildingCalls, designNoteCalls, publishCalls, workCommands, startFromMainCalls, handBackWorkflowChangeCalls,
+    mainChecks,
   };
 }
 
@@ -604,6 +634,74 @@ describe("buildIssue publishing", () => {
 // #147: a role run that hits Claude's usage limit, or a build the time
 // budget has already stopped, must end the build uncounted rather than
 // treating it as a failed attempt or publishing unreviewed work.
+describe("buildIssue syncing with main before publishing", () => {
+  // The commit origin/main has moved on to since the round started.
+  const newerMain = "a".repeat(40);
+
+  it("merges main in after the reviewer and before checkpoint 2 when the branch doesn't contain it", async () => {
+    const { steps, mainChecks, logs, buildHost } = host([0, 0], { latestMain: newerMain, containsMain: false });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(steps, [
+      "tester",
+      "backend",
+      "gate: scripts/gate.sh 2>&1",
+      "reviewer",
+      `merge '${newerMain}'`,
+      "gate: scripts/gate.sh 2>&1",
+      "publish",
+      "close",
+    ]);
+    assert.deepEqual(mainChecks, [`git merge-base --is-ancestor '${newerMain}' HEAD`]);
+    assert.ok(logs.includes("  #69 merged main in before checkpoint 2"));
+  });
+
+  it("pushes the commit checkpoint 2 passed on after the merge", async () => {
+    const { pushed, scanned, scannedBases, head, buildHost } = host([0, 0], { latestMain: newerMain, containsMain: false });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(pushed, [{ branch, commit: head() }]);
+    assert.deepEqual(scanned, [head()]);
+    assert.deepEqual(scannedBases, [base]);
+  });
+
+  it("merges nothing when the branch already contains main", async () => {
+    const { steps, mainChecks, buildHost } = host([0, 0], { latestMain: newerMain });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(!steps.some((step) => step.startsWith("merge")));
+    assert.equal(mainChecks.length, 1);
+  });
+
+  it("aborts a merge that conflicts and still publishes, leaving the conflict to the follow-up pass", async () => {
+    const { steps, logs, comments, buildHost } = host([0, 0], {
+      latestMain: newerMain,
+      containsMain: false,
+      mergeExitCode: 1,
+    });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.deepEqual(steps.slice(3, 7), ["reviewer", `merge '${newerMain}'`, "merge abort", "gate: scripts/gate.sh 2>&1"]);
+    assert.equal(result.outcome, "published");
+    assert.ok(logs.some((line) => line.includes("merging main conflicted")));
+    assert.deepEqual(comments, []);
+  });
+
+  it("still publishes, without merging, when fetching main fails", async () => {
+    const { steps, logs, buildHost } = host([0, 0], { latestMainError: "could not resolve host" });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(!steps.some((step) => step.startsWith("merge")));
+    assert.equal(result.outcome, "published");
+    assert.ok(logs.some((line) => line.includes("fetching main failed")));
+  });
+});
+
 describe("buildIssue and the usage limit", () => {
   it("rejects with UncountedStopError, without recording a failed attempt, commenting or publishing, when the tester hits Claude's usage limit", async () => {
     const usageLimitError = new Error("claude-code exited with code 1:\nClaude AI usage limit reached|1760000000");

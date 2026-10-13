@@ -63,8 +63,9 @@
 //                               run's commits or earlier ones), the host runs
 //                               scripts/gate.sh in the sandbox (checkpoint 1),
 //                               the scribe (when picked) documents the change,
-//                               a reviewer runs, and the gate runs again
-//                               (checkpoint 2). A red gate gets two gate-fixer
+//                               a reviewer runs, main is merged in when the
+//                               branch doesn't contain it, and the gate runs
+//                               again (checkpoint 2). A red gate gets two gate-fixer
 //                               attempts per checkpoint; past that nothing is
 //                               pushed. A red checkpoint or a failed architect,
 //                               tester, backend or UI run is a failed build

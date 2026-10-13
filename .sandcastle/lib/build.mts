@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { isRoleTimeout, runRoleInSandbox } from "./agents.mts";
-import { commitsAhead } from "./branches.mts";
+import { commitsAhead, fetchMain } from "./branches.mts";
 import { gateFailureComment, runCheckpoint, runGate, type Checkpoint } from "./checkpoint.mts";
 import {
   BASE_BRANCH,
@@ -250,6 +250,10 @@ export type BuildHost = {
   // (handing it back first) or a ref can't be deleted.
   startFromMain(issueNumber: number, branch: string, base: string): { pr: number; deleted: string[] } | undefined;
   publish: typeof publish;
+  // Fetches origin/main and returns the commit it now names (see
+  // lib/branches.mts#fetchMain), so a build can merge in what landed on main
+  // while it ran. Throws when the fetch fails.
+  latestMain(): string;
   // What's wrong with how the worktree finds its repository (see
   // lib/host-safety.mts); empty when nothing is.
   worktreeProblems(worktreePath: string): string[];
@@ -346,6 +350,7 @@ const liveHost: BuildHost = {
   startFromMain: (issueNumber, branch, base) => sweepStartFromMain(issueNumber, branch, base),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
+  latestMain: fetchMain,
   worktreeProblems,
   log: console.log,
   limits: runLimits,
@@ -353,14 +358,21 @@ const liveHost: BuildHost = {
   handBackWorkflowChange: (issueNumber, branch, detail, change) => handBackWorkflowChange(issueNumber, branch, detail, change),
 };
 
+// `value` as one single-quoted shell word, for the commit and branch names
+// buildIssue puts in a sandbox command.
+function shellWord(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
 // The branch comes from prepareBranches, which has already fetched it when it
 // exists on origin. `base` is the commit fetchMain() resolved origin/main to
 // before any sandbox of the round started: the ref itself is in the shared .git,
 // which agents can write, so moving it mustn't be able to shrink the range the
 // secret scan reads. The tester commits failing tests for the acceptance
 // criteria, then the backend developer makes them pass. If the branch is then
-// ahead of main, the gate runs (checkpoint 1), the reviewer runs, and the gate
-// runs again (checkpoint 2) before the branch is pushed and gets a pull request
+// ahead of main, the gate runs (checkpoint 1), the reviewer runs, the latest
+// main is merged in when the branch doesn't contain it, and the gate runs again
+// (checkpoint 2) before the branch is pushed and gets a pull request
 // that closes its issue. Returns the PR's URL, or undefined when a developer
 // run failed, the branch holds nothing to publish or a checkpoint's gate
 // stayed red. `publishFailed` is true only when the branch passed both
@@ -585,6 +597,34 @@ async function buildMarkedIssue(
     return false;
   }
 
+  // Merge in what landed on main while the roles ran, so the PR doesn't open
+  // already behind it: a build can take an hour, and Sandcastle pushes with
+  // hooks off, so the pre-push hook's behind-main check never runs on it. It
+  // runs before checkpoint 2, which then gates the merged branch. A merge that
+  // conflicts is aborted and the branch published as it is: the follow-up
+  // pass (lib/follow-up-pass.mts) merges main into a conflicted PR with a role
+  // to resolve it. A failed fetch publishes without the merge too, since the
+  // work is already reviewed and the follow-up pass updates a PR behind main.
+  async function syncWithMain(): Promise<void> {
+    let main: string;
+    try {
+      main = host.latestMain();
+    } catch (error) {
+      console.error(`  ⚠ #${issue.number}: fetching main failed, so ${branch} is published without merging it in: ${error}`);
+      log("fetching main failed, so main isn't merged in");
+      return;
+    }
+    const contains = await sandbox.exec(`git merge-base --is-ancestor ${shellWord(main)} HEAD`);
+    if (contains.exitCode === 0) return;
+    const merge = await sandbox.exec(`git merge --no-edit -m ${shellWord(`Merge main into ${branch}`)} ${shellWord(main)}`);
+    if (merge.exitCode === 0) {
+      log("merged main in before checkpoint 2");
+      return;
+    }
+    await sandbox.exec("git merge --abort");
+    log("merging main conflicted, so it's left for the follow-up pass and the branch is published as it is");
+  }
+
   try {
     // The worktree is named after the branch, so it may still hold an earlier
     // round's design note, and every role follows the note when it exists:
@@ -641,6 +681,8 @@ async function buildMarkedIssue(
       console.error(`  ⚠ #${issue.number}: reviewer failed, publishing unreviewed: ${error}`);
       reviewed = false;
     }
+
+    await syncWithMain();
 
     const gated = await gatePasses(2);
     if (gated === undefined) return unpublished("gate failed", "checkpoint 2");
