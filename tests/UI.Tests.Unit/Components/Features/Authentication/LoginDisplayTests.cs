@@ -11,6 +11,8 @@ using System.Security.Claims;
 
 using AngleSharp.Dom;
 
+using Bunit.TestDoubles;
+
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.DependencyInjection;
@@ -147,6 +149,42 @@ public class LoginDisplayTests : BunitContext
 
 		// Assert
 		cut.Markup.Should().NotContain("Welcome!");
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData(" ")]
+	public void Render_User_NoUsableGreetingClaim_ShowsLogOutWithoutWelcome(string? name)
+	{
+		// Arrange
+		BunitAuthorizationContext authorization = AddAuthorization().SetAuthorized("test-user");
+		if (name is not null)
+		{
+			authorization.SetClaims(new Claim("name", name));
+		}
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		cut.Markup.Should().NotContain("Welcome!");
+		cut.Find("button[type=submit]").TextContent.Should().Be("Log out");
+	}
+
+	[Fact]
+	public void Render_User_LongName_TruncatesTheGreetingAndKeepsTheFullNameInItsTitle()
+	{
+		// Arrange
+		string longName = new('x', 200);
+		AddAuthorization().SetAuthorized("test-user").SetClaims(new Claim("name", longName));
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		IElement greeting = cut.Find("span");
+		greeting.ClassList.Should().Contain(["truncate", "max-w-48"]);
+		greeting.GetAttribute("title").Should().Be(longName);
 	}
 
 	[Fact]

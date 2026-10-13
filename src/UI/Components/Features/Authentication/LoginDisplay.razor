@@ -7,7 +7,9 @@
 	<Authorized>
 		@if (GreetingName.For(context.User) is string greetingName)
 		{
-			<span class="text-sm text-gray-300">Welcome! @greetingName</span>
+			@* The name comes from the User's Auth0 profile and can be any length, so it's capped and truncated, with the
+			   full value in the tooltip. *@
+			<span class="block max-w-48 truncate text-sm text-gray-300" title="@greetingName">Welcome! @greetingName</span>
 		}
 		<form method="post" action="@LogoutAction">
 			<AntiforgeryToken/>
