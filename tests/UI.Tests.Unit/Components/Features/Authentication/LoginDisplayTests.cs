@@ -89,7 +89,8 @@ public class LoginDisplayTests : BunitContext
 		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
 
 		// Assert
-		cut.Markup.IndexOf("Welcome! Jane Doe", StringComparison.Ordinal).Should()
+		cut.Find("span").TextContent.Should().Be("Welcome! Jane Doe");
+		cut.Markup.IndexOf("Welcome!", StringComparison.Ordinal).Should()
 			.BeGreaterThanOrEqualTo(0)
 			.And.BeLessThan(cut.Markup.IndexOf("<form", StringComparison.Ordinal));
 	}
@@ -104,7 +105,7 @@ public class LoginDisplayTests : BunitContext
 		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
 
 		// Assert
-		cut.Markup.Should().Contain("Welcome! jd");
+		cut.Find("span").TextContent.Should().Be("Welcome! jd");
 	}
 
 	[Fact]
@@ -117,7 +118,7 @@ public class LoginDisplayTests : BunitContext
 		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
 
 		// Assert
-		cut.Markup.Should().Contain("Welcome! jane@example.com");
+		cut.Find("span").TextContent.Should().Be("Welcome! jane@example.com");
 	}
 
 	[Theory]
@@ -135,7 +136,7 @@ public class LoginDisplayTests : BunitContext
 		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
 
 		// Assert
-		cut.Markup.Should().Contain($"Welcome! {expectedName}");
+		cut.Find("span").TextContent.Should().Be($"Welcome! {expectedName}");
 	}
 
 	[Fact]
@@ -198,7 +199,23 @@ public class LoginDisplayTests : BunitContext
 
 		// Assert
 		cut.FindAll("b").Should().BeEmpty();
-		cut.Markup.Should().Contain("Welcome! &lt;b&gt;Jane&lt;/b&gt;");
+		cut.Find("span").TextContent.Should().Be("Welcome! <b>Jane</b>");
+	}
+
+	[Theory]
+	[InlineData("Jane Doe")]
+	[InlineData("محمد علي")]
+	public void Render_User_NameClaimSet_IsolatesTheNamesTextDirection(string name)
+	{
+		// Arrange
+		AddAuthorization().SetAuthorized("test-user").SetClaims(new Claim("name", name));
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		// A right-to-left name outside a <bdi> would reorder the "Welcome!" around it.
+		cut.Find("span > bdi").TextContent.Should().Be(name);
 	}
 
 	private sealed class FakeAntiforgeryStateProvider : AntiforgeryStateProvider

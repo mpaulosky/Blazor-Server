@@ -73,7 +73,7 @@ public class NavBarTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().Contain("Welcome! a-user");
+		html.Should().Contain("Welcome! <bdi>a-user</bdi>");
 		html.Should().Contain("Log out");
 	}
 }
