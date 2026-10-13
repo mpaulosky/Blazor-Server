@@ -42,6 +42,7 @@ Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.131](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.131) | 2026-10-13 | feat(profile): Show a User their own claims on a Profile page | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-288-feat-profile-show-a-user-their-own-claims-on-a-profile-page.md) |
 | [v0.0.130](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.130) | 2026-10-13 | feat(auth): Sign in and out through Auth0 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-285-feat-auth-sign-in-and-out-through-auth0.md) |
 | [v0.0.129](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.129) | 2026-10-13 | chore(sandcastle): Give the tester 45 minutes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-283-chore-sandcastle-give-the-tester-45-minutes.md) |
 | [v0.0.128](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.128) | 2026-10-13 | build(deps): Bump CodeCoverage to 18.12.0 and xunit.v3.mtp-v2 to 4.0.2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-281-build-deps-bump-codecoverage-to-18-12-0-and-xunit-v3-mtp-v2-to-4-0-2.md) |
@@ -51,7 +52,6 @@ Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims
 | [v0.0.124](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.124) | 2026-10-10 | feat(aspire): Add the Aspire AppHost and ServiceDefaults for the UI | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-268-feat-aspire-add-the-aspire-apphost-and-servicedefaults-for-the-ui.md) |
 | [v0.0.123](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.123) | 2026-10-10 | feat(ui): Add the Blazor Web App with Tailwind CSS and feature slices | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-260-feat-ui-add-the-blazor-web-app-with-tailwind-css-and-feature-slices.md) |
 | [v0.0.122](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.122) | 2026-10-10 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-264-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.121](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.121) | 2026-10-10 | feat(sandcastle): Write a run report with outcomes, hand-backs and token usage | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-10-pr-261-feat-sandcastle-write-a-run-report-with-outcomes-hand-backs-and-token-usage.md) |
 
 <!-- RELEASES_END -->
 
