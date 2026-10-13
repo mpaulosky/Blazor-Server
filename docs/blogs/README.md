@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-13 | [ci(sandcastle): Trigger Sandcastle automatically from GitHub Actions](2026-10-13-pr-301-ci-sandcastle-trigger-sandcastle-automatically-from-github-actions.md) | release,automation |
 | 2026-10-13 | [test(auth): Run the Auth0 options validation without starting the app](2026-10-13-pr-298-test-auth-run-the-auth0-options-validation-without-starting-the-app.md) | release,automation |
 | 2026-10-13 | [fix(auth): Isolate the greeting name's text direction with bdi](2026-10-13-pr-296-fix-auth-isolate-the-greeting-name-s-text-direction-with-bdi.md) | release,automation |
 | 2026-10-13 | [fix(nav): Make the Home link base-relative](2026-10-13-pr-295-fix-nav-make-the-home-link-base-relative.md) | release,automation |
