@@ -39,8 +39,7 @@ public class AdminNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().Contain("href=\"admin\"");
-		html.Should().Contain("Admin");
+		html.Should().MatchRegex("<a[^>]*href=\"admin\"[^>]*>\\s*Admin\\s*</a>");
 	}
 
 	[Fact]
