@@ -63,32 +63,6 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 	}
 
 	[Fact]
-	public async Task PostLogout_WithValidAntiforgeryToken_SignsOutAndRedirectsToRoot()
-	{
-		// Arrange
-		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
-		HttpResponseMessage homeResponse =
-			await client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
-		string html = await homeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-		Match inputTag = AntiforgeryInputPattern().Match(html);
-		inputTag.Success.Should().BeTrue("the Log out form must render an antiforgery token for a signed-in User");
-		string token = ValueAttributePattern().Match(inputTag.Value).Groups[1].Value;
-
-		using FormUrlEncodedContent content =
-			new([new KeyValuePair<string?, string?>("__RequestVerificationToken", token)]);
-
-		// Act
-		HttpResponseMessage response = await client.PostAsync(
-			new Uri(AuthenticationEndpoints.LogoutPath, UriKind.Relative), content,
-			TestContext.Current.CancellationToken);
-
-		// Assert
-		response.StatusCode.Should().Be(HttpStatusCode.Found);
-		response.Headers.Location.Should().Be(new Uri("/", UriKind.Relative));
-	}
-
-	[Fact]
 	public async Task PostLogout_WithValidAntiforgeryToken_EndsTheAuth0SessionReturningToRoot()
 	{
 		// Arrange
