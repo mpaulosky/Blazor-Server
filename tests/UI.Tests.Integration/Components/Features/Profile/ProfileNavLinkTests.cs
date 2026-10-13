@@ -38,7 +38,7 @@ public class ProfileNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().Contain("href=\"/profile\"");
+		html.Should().Contain("href=\"profile\"");
 		html.Should().Contain("Profile");
 	}
 
@@ -55,6 +55,6 @@ public class ProfileNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().NotContain("href=\"/profile\"");
+		html.Should().NotContain("href=\"profile\"");
 	}
 }
