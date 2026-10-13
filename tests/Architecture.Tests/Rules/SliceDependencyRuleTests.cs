@@ -37,7 +37,8 @@ public class SliceDependencyRuleTests
 		Assembly fixturesAssembly = typeof(BetaComponent).Assembly;
 
 		// Act
-		IReadOnlyList<string> failingTypeNames = SliceDependencyRule.FindCrossSliceDependencies(fixturesAssembly, FixturesFeaturesNamespace);
+		IReadOnlyList<string> failingTypeNames =
+			SliceDependencyRule.FindCrossSliceDependencies(fixturesAssembly, FixturesFeaturesNamespace);
 
 		// Assert
 		failingTypeNames.Should().Equal(typeof(BetaComponent).FullName);

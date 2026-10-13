@@ -3,7 +3,6 @@
 		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
 		<CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
 	</PropertyGroup>
-
 	<ItemGroup Label="Application">
 		<PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.1" />
 		<PackageVersion Include="Auth0.AspNetCore.Authentication" Version="1.11.0" />
@@ -15,7 +14,6 @@
 		<PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
 		<PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
 	</ItemGroup>
-
 	<ItemGroup Label="Testing">
 		<PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.1" />
 		<PackageVersion Include="bunit" Version="2.11.3" />

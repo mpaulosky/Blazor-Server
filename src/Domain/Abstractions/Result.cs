@@ -12,48 +12,48 @@ using System.Diagnostics.CodeAnalysis;
 namespace Domain.Abstractions;
 
 /// <summary>
-///     Describes the category of error represented by a failed result.
+///   Describes the category of error represented by a failed result.
 /// </summary>
 public enum ResultErrorCode
 {
 	/// <summary>
-	///     Indicates that no error occurred.
+	///   Indicates that no error occurred.
 	/// </summary>
 	None = 0,
 
 	/// <summary>
-	///     Indicates that the operation failed because the persisted data changed concurrently.
+	///   Indicates that the operation failed because the persisted data changed concurrently.
 	/// </summary>
 	Concurrency = 1,
 
 	/// <summary>
-	///     Indicates that the requested resource could not be found.
+	///   Indicates that the requested resource could not be found.
 	/// </summary>
 	NotFound = 2,
 
 	/// <summary>
-	///     Indicates that input validation failed.
+	///   Indicates that input validation failed.
 	/// </summary>
 	Validation = 3,
 
 	/// <summary>
-	///     Indicates that the operation conflicts with the current resource state.
+	///   Indicates that the operation conflicts with the current resource state.
 	/// </summary>
 	Conflict = 4,
 
 	/// <summary>
-	///     Indicates that the caller is not authorized to complete the operation.
+	///   Indicates that the caller is not authorized to complete the operation.
 	/// </summary>
 	Unauthorized = 5
 }
 
 /// <summary>
-///     Represents the success or failure outcome of an operation.
+///   Represents the success or failure outcome of an operation.
 /// </summary>
 public class Result
 {
 	/// <summary>
-	///     Initializes a new instance of the <see cref="Result" /> class.
+	///   Initializes a new instance of the <see cref="Result" /> class.
 	/// </summary>
 	/// <param name="success">Whether the operation succeeded.</param>
 	/// <param name="errorMessage">The optional failure message.</param>
@@ -69,32 +69,32 @@ public class Result
 	}
 
 	/// <summary>
-	///     Gets a value indicating whether the operation succeeded.
+	///   Gets a value indicating whether the operation succeeded.
 	/// </summary>
 	public bool Success { get; }
 
 	/// <summary>
-	///     Gets a value indicating whether the operation failed.
+	///   Gets a value indicating whether the operation failed.
 	/// </summary>
 	public bool Failure => !Success;
 
 	/// <summary>
-	///     Gets the failure message, when the operation failed.
+	///   Gets the failure message, when the operation failed.
 	/// </summary>
 	public string? Error { get; }
 
 	/// <summary>
-	///     Gets the failure category for this result.
+	///   Gets the failure category for this result.
 	/// </summary>
 	public ResultErrorCode ErrorCode { get; }
 
 	/// <summary>
-	///     Gets optional structured error details, such as the server version on a concurrency conflict.
+	///   Gets optional structured error details, such as the server version on a concurrency conflict.
 	/// </summary>
 	public object? Details { get; }
 
 	/// <summary>
-	///     Creates a successful result with no value.
+	///   Creates a successful result with no value.
 	/// </summary>
 	/// <returns>A successful <see cref="Result" />.</returns>
 	public static Result Ok()
@@ -103,7 +103,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a failed result with an error message.
+	///   Creates a failed result with an error message.
 	/// </summary>
 	/// <param name="errorMessage">The failure message.</param>
 	/// <returns>A failed <see cref="Result" />.</returns>
@@ -113,7 +113,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a failed result with an error message and category.
+	///   Creates a failed result with an error message and category.
 	/// </summary>
 	/// <param name="errorMessage">The failure message.</param>
 	/// <param name="code">The failure category.</param>
@@ -124,7 +124,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a failed result with an error message, category, and structured details.
+	///   Creates a failed result with an error message, category, and structured details.
 	/// </summary>
 	/// <param name="errorMessage">The failure message.</param>
 	/// <param name="code">The failure category.</param>
@@ -136,7 +136,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a successful result that carries a value.
+	///   Creates a successful result that carries a value.
 	/// </summary>
 	/// <typeparam name="T">The value type.</typeparam>
 	/// <param name="value">The result value.</param>
@@ -147,7 +147,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a failed typed result with an error message.
+	///   Creates a failed typed result with an error message.
 	/// </summary>
 	/// <typeparam name="T">The value type.</typeparam>
 	/// <param name="errorMessage">The failure message.</param>
@@ -158,7 +158,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a failed typed result with an error message and category.
+	///   Creates a failed typed result with an error message and category.
 	/// </summary>
 	/// <typeparam name="T">The value type.</typeparam>
 	/// <param name="errorMessage">The failure message.</param>
@@ -170,7 +170,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a failed typed result with an error message, category, and structured details.
+	///   Creates a failed typed result with an error message, category, and structured details.
 	/// </summary>
 	/// <typeparam name="T">The value type.</typeparam>
 	/// <param name="errorMessage">The failure message.</param>
@@ -183,7 +183,7 @@ public class Result
 	}
 
 	/// <summary>
-	///     Creates a successful typed result when a value is present; otherwise, creates a failed result.
+	///   Creates a successful typed result when a value is present; otherwise, creates a failed result.
 	/// </summary>
 	/// <typeparam name="T">The value type.</typeparam>
 	/// <param name="value">The value to wrap.</param>
@@ -195,13 +195,13 @@ public class Result
 }
 
 /// <summary>
-///     Represents the success or failure outcome of an operation that returns a value.
+///   Represents the success or failure outcome of an operation that returns a value.
 /// </summary>
 /// <typeparam name="T">The value type.</typeparam>
 public sealed class Result<T> : Result
 {
 	/// <summary>
-	///     Initializes a new instance of the <see cref="Result{T}" /> class.
+	///   Initializes a new instance of the <see cref="Result{T}" /> class.
 	/// </summary>
 	/// <param name="value">The operation value.</param>
 	/// <param name="success">Whether the operation succeeded.</param>
@@ -218,12 +218,12 @@ public sealed class Result<T> : Result
 	private const string NullValueError = "Value cannot be null.";
 
 	/// <summary>
-	///     Gets the operation value when the result is successful.
+	///   Gets the operation value when the result is successful.
 	/// </summary>
 	public T? Value { get; }
 
 	/// <summary>
-	///     Returns the wrapped value.
+	///   Returns the wrapped value.
 	/// </summary>
 	/// <returns>The wrapped value, or the default value when none is present.</returns>
 	public T? ToValue() => Value;
@@ -237,7 +237,7 @@ public sealed class Result<T> : Result
 	// a type-inferred factory API consistent with the non-generic Result base class.
 #pragma warning disable CA1000 // Do not declare static members on generic types
 	/// <summary>
-	///     Creates a successful result when a value is present; otherwise, creates a failed result.
+	///   Creates a successful result when a value is present; otherwise, creates a failed result.
 	/// </summary>
 	/// <param name="value">The value to wrap.</param>
 	/// <returns>A typed result containing the value, or a validation failure when the value is null.</returns>
@@ -247,7 +247,7 @@ public sealed class Result<T> : Result
 	}
 
 	/// <summary>
-	///     Creates a failed typed result with an error message.
+	///   Creates a failed typed result with an error message.
 	/// </summary>
 	/// <param name="errorMessage">The failure message.</param>
 	/// <returns>A failed <see cref="Result{T}" />.</returns>
@@ -257,7 +257,7 @@ public sealed class Result<T> : Result
 	}
 
 	/// <summary>
-	///     Creates a failed typed result with an error message and category.
+	///   Creates a failed typed result with an error message and category.
 	/// </summary>
 	/// <param name="errorMessage">The failure message.</param>
 	/// <param name="code">The failure category.</param>
@@ -268,7 +268,7 @@ public sealed class Result<T> : Result
 	}
 
 	/// <summary>
-	///     Creates a failed typed result with an error message, category, and structured details.
+	///   Creates a failed typed result with an error message, category, and structured details.
 	/// </summary>
 	/// <param name="errorMessage">The failure message.</param>
 	/// <param name="code">The failure category.</param>
@@ -283,7 +283,7 @@ public sealed class Result<T> : Result
 	// CA2225 does not recognize Result<T>.FromValue() as the named alternate for this generic
 	// implicit conversion, so suppress the warning only on the operator.
 	/// <summary>
-	///     Converts a value to a successful result, or to a failed result when the value is null.
+	///   Converts a value to a successful result, or to a failed result when the value is null.
 	/// </summary>
 	/// <param name="value">The value to wrap.</param>
 	[SuppressMessage("Usage", "CA2225:Operator overloads have named alternates",

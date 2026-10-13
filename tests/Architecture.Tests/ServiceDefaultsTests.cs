@@ -25,7 +25,8 @@ public class ServiceDefaultsTests
 		HashSet<string> allowed = new(StringComparer.Ordinal);
 
 		// Act
-		IReadOnlyList<string> forbiddenReferences = ProjectReferenceRule.FindForbiddenProjectReferences(serviceDefaultsAssembly, allowed);
+		IReadOnlyList<string> forbiddenReferences =
+			ProjectReferenceRule.FindForbiddenProjectReferences(serviceDefaultsAssembly, allowed);
 
 		// Assert
 		forbiddenReferences.Should().BeEmpty(

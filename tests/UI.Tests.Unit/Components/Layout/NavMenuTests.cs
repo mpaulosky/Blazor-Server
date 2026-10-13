@@ -41,7 +41,8 @@ public class NavMenuTests : BunitContext
 		// Text nodes count here, unlike in CSS :first-child, so the order of the icon and the name is checked; the
 		// whitespace-only text nodes from the markup's indentation are dropped.
 		IElement brand = cut.Find("nav > a[href='']");
-		INode[] content = [.. brand.ChildNodes.Where(node => node is IElement || !string.IsNullOrWhiteSpace(node.TextContent))];
+		INode[] content =
+			[.. brand.ChildNodes.Where(node => node is IElement || !string.IsNullOrWhiteSpace(node.TextContent))];
 		content.Should().HaveCount(2);
 		content[0].Should().BeAssignableTo<IHtmlImageElement>()
 			.Which.GetAttribute("src").Should().Be("favicon.png");

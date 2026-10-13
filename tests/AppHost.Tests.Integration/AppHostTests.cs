@@ -49,7 +49,8 @@ public class AppHostTests : IAsyncLifetime
 	public async Task GetRoot_WebAppResource_ReturnsOk()
 	{
 		// Arrange
-		DistributedApplication application = _application ?? throw new InvalidOperationException("The AppHost has not started yet.");
+		DistributedApplication application =
+			_application ?? throw new InvalidOperationException("The AppHost has not started yet.");
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 		using CancellationTokenSource healthyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		healthyTimeout.CancelAfter(s_startupTimeout);

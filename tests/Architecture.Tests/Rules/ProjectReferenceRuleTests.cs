@@ -26,7 +26,8 @@ public class ProjectReferenceRuleTests
 		_ = typeof(App);
 
 		// Act
-		IReadOnlyList<string> result = ProjectReferenceRule.FindForbiddenProjectReferences(architectureTestsAssembly, allowed);
+		IReadOnlyList<string> result =
+			ProjectReferenceRule.FindForbiddenProjectReferences(architectureTestsAssembly, allowed);
 
 		// Assert
 		result.Should().BeEquivalentTo(["UI"]);
