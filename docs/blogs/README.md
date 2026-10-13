@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-13 | [feat(admin): Add an Admin page only an Admin can open](2026-10-13-pr-293-feat-admin-add-an-admin-page-only-an-admin-can-open.md) | release,automation |
 | 2026-10-13 | [chore(sandcastle): Merge main in before checkpoint 2](2026-10-13-pr-291-chore-sandcastle-merge-main-in-before-checkpoint-2.md) | release,automation |
 | 2026-10-13 | [feat(auth): Greet the signed-in User by name in the nav bar](2026-10-13-pr-287-feat-auth-greet-the-signed-in-user-by-name-in-the-nav-bar.md) | release,automation |
 | 2026-10-13 | [feat(profile): Show a User their own claims on a Profile page](2026-10-13-pr-288-feat-profile-show-a-user-their-own-claims-on-a-profile-page.md) | release,automation |
