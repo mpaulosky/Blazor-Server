@@ -4,6 +4,8 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-13 | [chore(sandcastle): Give the tester 45 minutes](2026-10-13-pr-283-chore-sandcastle-give-the-tester-45-minutes.md) | release,automation |
+| 2026-10-13 | [build(deps): Bump CodeCoverage to 18.12.0 and xunit.v3.mtp-v2 to 4.0.2](2026-10-13-pr-281-build-deps-bump-codecoverage-to-18-12-0-and-xunit-v3-mtp-v2-to-4-0-2.md) | release,automation |
 | 2026-10-13 | [style(repo): Indent MSBuild and solution files with tabs](2026-10-13-pr-279-style-repo-indent-msbuild-and-solution-files-with-tabs.md) | release,automation |
 | 2026-10-11 | [feat(UI): Show the favicon before the app name in the nav bar](2026-10-11-pr-272-feat-ui-show-the-favicon-before-the-app-name-in-the-nav-bar.md) | release,automation |
 | 2026-10-11 | [test(e2e): Add Playwright end-to-end tests run through the AppHost](2026-10-11-pr-270-test-e2e-add-playwright-end-to-end-tests-run-through-the-apphost.md) | release,automation |
