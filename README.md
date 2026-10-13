@@ -33,7 +33,8 @@ The Template is intended to give every Generated App:
 See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md) for the exact meaning of these terms.
 
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
-scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build) and their tests.
+scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
+Auth0 with the Admin role mapped, and their tests.
 
 ## Releases
 
@@ -112,6 +113,46 @@ scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CS
    `scripts/gate.sh` lints the files changed since the branch left `origin/main`, then builds and tests the solution in Release. Run it by hand to
    check a branch before pushing.
 
+## Auth0 setup
+
+The app won't start without an Auth0 tenant's settings: it validates `Auth0:Domain`, `Auth0:ClientId` and
+`Auth0:ClientSecret` on startup and names any that's missing.
+
+1. In the [Auth0 dashboard](https://manage.auth0.com/), create an application of type **Regular Web Application**.
+   Leave the **Implicit** grant on (it is by default): sign-in uses the Auth0 SDK's default `id_token` flow.
+2. In the application's settings, add:
+   - **Allowed Callback URLs:** `http://localhost:5112/callback, https://localhost:7161/callback`
+   - **Allowed Logout URLs:** `http://localhost:5112/, https://localhost:7161/`
+
+   Sign-in works on the `http` profile only on `localhost`, because the browser keeps Auth0's `Secure` sign-in cookies
+   for `http://localhost` alone. The `https` profile is the safer choice anywhere else.
+3. Under **User Management → Roles**, create a role named `Admin` and assign it to the users who should be an **Admin**.
+4. Under **Actions → Library**, create a **Post Login** Action that adds the user's roles to the ID token, and add it to
+   the Login flow:
+
+   ```javascript
+   exports.onExecutePostLogin = async (event, api) => {
+     api.idToken.setCustomClaim('https://blazor-server-template/roles', event.authorization?.roles ?? []);
+   };
+   ```
+
+5. Store the application's settings as user secrets. `Auth0:Domain` is the tenant's host only, with no `https://`
+   (for example `my-tenant.us.auth0.com`):
+
+   ```bash
+   dotnet user-secrets set "Auth0:Domain" "<your-tenant>.auth0.com" --project src/UI
+   dotnet user-secrets set "Auth0:ClientId" "<client-id>" --project src/UI
+   dotnet user-secrets set "Auth0:ClientSecret" "<client-secret>" --project src/UI
+   ```
+
+   The AppHost shares the UI's user secrets, so `aspire run` reads the same values and passes them to `WebApp` as
+   `Auth0__Domain`, `Auth0__ClientId` and `Auth0__ClientSecret`. When one is missing, the Aspire dashboard asks for it.
+   Outside Development, set those environment variables instead.
+
+`Auth0:RoleClaimType` names the claim the roles arrive in. It defaults to `https://blazor-server-template/roles`, the
+claim the Action above sets; change both together. The app maps each role in that claim to a .NET role, so an `Admin`
+there satisfies the Admin policy.
+
 ## After generating your app
 
 - Replace this README with one that describes your Generated App.
@@ -157,7 +198,7 @@ All of the following are *planned* and don't exist yet:
 
 - *Planned:* the light/dark **Theme**, defaulting to the OS preference.
 - *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
-- *Planned:* Auth0 authentication, with a Profile page for a **User** and an Admin page for an **Admin**.
+- *Planned:* a Profile page for a **User** and an Admin page for an **Admin**, built on the Auth0 sign-in.
 
 ## Contributing
 

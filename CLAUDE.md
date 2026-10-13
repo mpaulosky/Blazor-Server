@@ -2,8 +2,9 @@
 
 This repository is a GitHub template for a server-rendered Blazor Web App on .NET 10 and C# 14, with Tailwind CSS v4
 theming and Auth0 authentication. Today it holds the Shared Kernel (`src/Domain/`), the Blazor Web App scaffold
-(`src/UI/`, with a Home page and the Tailwind build), the Aspire AppHost and ServiceDefaults, and their tests; Theme,
-Palette and Auth0 are on the README roadmap.
+(`src/UI/`, with a Home page, the Tailwind build and the Auth0 sign-in and sign-out in the `Authentication` slice), the
+Aspire AppHost and ServiceDefaults, and their tests; Theme, Palette and the Profile and Admin pages are on the README
+roadmap.
 
 ## Domain language
 
