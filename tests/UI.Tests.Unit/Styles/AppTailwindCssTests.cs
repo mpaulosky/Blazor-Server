@@ -13,23 +13,7 @@ public class AppTailwindCssTests
 {
 	private static string ReadAppTailwindCss()
 	{
-		string path = Path.Combine(FindRepositoryRoot(), "src", "UI", "Styles", "app.tailwind.css");
-
-		return File.ReadAllText(path);
-	}
-
-	private static string FindRepositoryRoot()
-	{
-		DirectoryInfo? directory = new(AppContext.BaseDirectory);
-
-		while ((directory is not null) && !File.Exists(Path.Combine(directory.FullName, "Directory.Packages.props")))
-		{
-			directory = directory.Parent;
-		}
-
-		return directory?.FullName
-			?? throw new InvalidOperationException(
-				$"Could not find the repository root (Directory.Packages.props) above '{AppContext.BaseDirectory}'.");
+		return RepositoryFiles.ReadAllText("src", "UI", "Styles", "app.tailwind.css");
 	}
 
 	[Fact]

@@ -27,4 +27,43 @@ public class NotFoundTests : BunitContext
 		IElement heading = cut.Find("h1");
 		heading.TextContent.Should().Be("Page not found");
 	}
+
+	[Fact]
+	public void Render_ShowsStatusCodeEyebrow()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<NotFound> cut = Render<NotFound>();
+
+		// Assert
+		cut.FindAll("*").Should().Contain(element => element.TextContent.Trim() == "404");
+	}
+
+	[Fact]
+	public void Render_ShowsLead()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<NotFound> cut = Render<NotFound>();
+
+		// Assert
+		cut.FindAll("p").Should()
+			.Contain(element => element.TextContent.Trim() == "Sorry, the content you are looking for does not exist.");
+	}
+
+	[Fact]
+	public void Render_ShowsBackToHomeLink()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<NotFound> cut = Render<NotFound>();
+
+		// Assert
+		IElement link = cut.Find("a");
+		link.GetAttribute("href").Should().Be("");
+		link.TextContent.Trim().Should().Be("Back to home");
+	}
 }
