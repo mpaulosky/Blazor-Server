@@ -1,5 +1,6 @@
 @using Domain.Constants
 @using UI.Components.Features.Authentication
+@using UI.Components.Features.Palettes
 @using UI.Components.Features.Themes
 
 <header
@@ -18,12 +19,10 @@
 			</span>
 		</a>
 
-		<nav class="ml-auto hidden items-center gap-1 md:flex">
-			@Links(DesktopLinkClass)
-			<LoginDisplay/>
-			<ThemeControl/>
-		</nav>
-
+		@* The mobile <details> comes before <nav> in markup, though it sits visually on the same side: "hidden"/
+		   "md:hidden" make the two mutually exclusive by viewport, so swapping their order has no visual effect. It
+		   does mean a bare "details" selector in a test resolves to this one rather than to the Palette menu's own
+		   nested <details> inside <nav>. *@
 		<details class="group ml-auto md:hidden">
 			<summary
 				class="cursor-pointer list-none rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-accent-500 dark:border-slate-700">
@@ -35,9 +34,17 @@
 				<LoginDisplay/>
 				<div class="flex flex-col gap-3 border-t border-slate-200 px-3 pt-3 dark:border-slate-800">
 					<ThemeControl Mobile="true"/>
+					<PaletteMenu Mobile="true"/>
 				</div>
 			</div>
 		</details>
+
+		<nav class="ml-auto hidden items-center gap-1 md:flex">
+			@Links(DesktopLinkClass)
+			<LoginDisplay/>
+			<ThemeControl/>
+			<PaletteMenu/>
+		</nav>
 	</div>
 </header>
 

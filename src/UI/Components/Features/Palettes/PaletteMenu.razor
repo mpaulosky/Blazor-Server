@@ -7,6 +7,35 @@
    Project Name :  UI
    ============================================= *@
 
+@using Domain.Constants
+
+@inject NavigationManager Navigation
+
+@if (Mobile)
+{
+	<section aria-labelledby="palette-menu-heading">
+		<h2 id="palette-menu-heading" class="mb-1 text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+			Palette
+		</h2>
+		@Form()
+	</section>
+}
+else
+{
+	<details class="relative">
+		<summary
+			aria-label="@SummaryLabel"
+			title="@SummaryLabel"
+			class="flex cursor-pointer list-none items-center gap-1 rounded-full border border-slate-200 px-2.5 py-2 text-slate-600 hover:border-accent-300 hover:text-accent-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-500/50 dark:hover:text-accent-300">
+			<span aria-hidden="true" class="size-4 rounded-full @CurrentPalette.SwatchClass()"></span>
+			<span aria-hidden="true">▾</span>
+		</summary>
+		<div class="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+			@Form()
+		</div>
+	</details>
+}
+
 @code {
 	/// <summary>
 	///   Lays the menu out for the <c>&lt;details&gt;</c> mobile menu instead of the desktop nav.
@@ -17,9 +46,51 @@
 	[CascadingParameter]
 	private HttpContext? HttpContext { get; set; }
 
-	/// <inheritdoc />
-	protected override void OnInitialized()
+	private const string TileClass =
+		"flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-xs focus-visible:outline-2 focus-visible:outline-accent-500";
+
+	private const string CurrentTileClass = "bg-slate-100 font-semibold dark:bg-slate-800";
+
+	private const string OtherTileClass = "hover:bg-slate-100 dark:hover:bg-slate-800";
+
+	private const string CurrentSwatchRingClass =
+		"ring-2 ring-slate-900 ring-offset-2 ring-offset-white dark:ring-white dark:ring-offset-slate-900";
+
+	private string ReturnUrl => new Uri(Navigation.Uri).PathAndQuery;
+
+	private Palette CurrentPalette =>
+		Palette.FromCookie(HttpContext?.Request.Cookies[ApplicationConstants.PaletteCookie]);
+
+	private string SummaryLabel => $"Palette: {CurrentPalette}";
+
+	private RenderFragment Form() =>
+		@<form
+			method="post"
+			action="@(PaletteEndpoints.Path[1..])"
+			data-enhance
+			class="grid grid-cols-4 gap-1">
+			<AntiforgeryToken/>
+			<input type="hidden" name="returnUrl" value="@ReturnUrl"/>
+			@foreach (Palette hue in Enum.GetValues<Palette>())
+			{
+				@Tile(hue)
+			}
+		</form>;
+
+	private RenderFragment Tile(Palette hue)
 	{
-		throw new NotImplementedException();
+		bool isCurrent = (hue == CurrentPalette);
+
+		// aria-pressed takes the strings "true" and "false": Blazor would render a bool as a bare attribute, or drop it.
+		return
+			@<button
+				type="submit"
+				name="palette"
+				value="@hue.ToCookieValue()"
+				aria-pressed="@(isCurrent ? "true" : "false")"
+				class="@TileClass @(isCurrent ? CurrentTileClass : OtherTileClass)">
+				<span aria-hidden="true" class="size-6 rounded-full @hue.SwatchClass() @(isCurrent ? CurrentSwatchRingClass : null)"></span>
+				@hue.ToString()
+			</button>;
 	}
 }
