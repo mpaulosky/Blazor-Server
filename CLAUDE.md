@@ -28,7 +28,9 @@ matching files.
   `src/Domain` and `src/ServiceDefaults` (see `docs/adr/0005-feature-slices-live-in-the-ui-project.md` and its amendment,
   `docs/adr/0006-ui-references-servicedefaults.md`).
 - `src/AppHost/`: the Aspire AppHost (entry file `AppHost.cs`). It runs the UI as the resource
-  `ApplicationConstants.Website` (`WebApp`) with the UI's `http` launch profile, so it needs no developer certificate.
+  `ApplicationConstants.Website` (`WebApp`) with the UI launch profile of the same name as its own: `https` locally,
+  `http` where there's no developer certificate. Tests that start the AppHost pass `--DOTNET_LAUNCH_PROFILE=http`,
+  because the testing builder otherwise applies the AppHost's first profile, `https`.
 - `src/ServiceDefaults/`: OpenTelemetry (logging, metrics, tracing) and health checks, added by `AddServiceDefaults()`.
   `MapDefaultEndpoints()` maps `/health` and `/alive` in Development only. It references no project, and has no HTTP
   resilience or service discovery package until something calls another service.
@@ -58,7 +60,7 @@ scripts/gate.sh                                       # the full check; needs a 
 dotnet build Blazor-Server.slnx                       # quick build while iterating
 dotnet test --project tests/<Project>/<Project>.csproj  # one test project while iterating
 dotnet run --project src/UI                           # run the Blazor Web App
-aspire run                                            # run the AppHost: WebApp plus the Aspire dashboard
+aspire run                                            # run the AppHost over HTTPS: WebApp plus the Aspire dashboard
 dotnet run --project src/AppHost --launch-profile http  # the same without the Aspire CLI or a dev certificate
 pnpm --dir src/UI run watch:css                       # rebuild the CSS live while editing markup
 pnpm run check:sandcastle                             # type-check and test .sandcastle/

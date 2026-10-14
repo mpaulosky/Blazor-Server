@@ -19,9 +19,11 @@ IResourceBuilder<ParameterResource> auth0ClientId =
 IResourceBuilder<ParameterResource> auth0ClientSecret =
 	builder.AddParameterFromConfiguration("auth0-client-secret", "Auth0:ClientSecret", secret: true);
 
-// The http launch profile lets the AppHost start the UI where there's no developer certificate (CI, the Sandcastle
-// sandbox). The health check holds WebApp back from "healthy" until it answers /health, which it maps in Development.
-IResourceBuilder<ProjectResource> webApp = builder.AddProject<Projects.UI>(ApplicationConstants.Website, launchProfileName: "http")
+// With no launch profile named, Aspire starts the UI with its launch profile of the same name as the AppHost's: https
+// for local development, http where there's no developer certificate (CI, the Sandcastle sandbox), which the tests pick
+// with DOTNET_LAUNCH_PROFILE. The health check holds WebApp back from "healthy" until it answers /health, which it
+// maps in Development.
+IResourceBuilder<ProjectResource> webApp = builder.AddProject<Projects.UI>(ApplicationConstants.Website)
 	.WithHttpHealthCheck("/health")
 	.WithEnvironment("Auth0__Domain", auth0Domain)
 	.WithEnvironment("Auth0__ClientId", auth0ClientId)
