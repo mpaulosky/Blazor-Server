@@ -94,12 +94,18 @@ open, and their tests.
 
    Or run it through the Aspire AppHost, which starts the UI as `WebApp` and opens the Aspire dashboard with its logs,
    traces and metrics. `aspire run` needs the [Aspire CLI](https://aspire.dev/get-started/install-cli/); `dotnet run`
-   works without it, and the `http` profile needs no developer certificate:
+   works without it. The AppHost's `https` profile, which `aspire run` uses, serves both the dashboard and `WebApp`
+   over HTTPS (`https://localhost:7161`), and the `http` profile needs no developer certificate:
 
    ```bash
    aspire run
+   dotnet run --project src/AppHost --launch-profile https
    dotnet run --project src/AppHost --launch-profile http
    ```
+
+   The `https` profile needs a trusted developer certificate. Trust it once with `dotnet dev-certs https --trust`. On
+   Linux, .NET also reads the trusted copy only when `$HOME/.aspnet/dev-certs/trust` is in `SSL_CERT_DIR`, for example
+   `export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/etc/ssl/certs"` (see <https://aka.ms/dev-certs-trust>).
 
    In Development, the UI reports its health at `/health` and `/alive`.
 

@@ -27,8 +27,10 @@ public class AppHostTests : IAsyncLifetime
 	{
 		using CancellationTokenSource startupTimeout = new(s_startupTimeout);
 
+		// The testing builder applies the AppHost's first launch profile, https, and WebApp follows it to the UI's https
+		// profile. http needs no developer certificate, so the tests also run in CI and the Sandcastle sandbox.
 		IDistributedApplicationTestingBuilder builder = await DistributedApplicationTestingBuilder
-			.CreateAsync<global::Projects.AppHost>(startupTimeout.Token);
+			.CreateAsync<global::Projects.AppHost>(["--DOTNET_LAUNCH_PROFILE=http"], startupTimeout.Token);
 
 		// Aspire parameters resolve lazily, so placeholders set here, only when no user secret or environment
 		// variable already provides a value, still reach the Auth0__* variables the AppHost passes to WebApp.
