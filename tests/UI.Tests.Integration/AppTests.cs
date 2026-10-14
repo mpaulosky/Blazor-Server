@@ -10,6 +10,8 @@
 using System.Net;
 using System.Text.RegularExpressions;
 
+using Domain.Constants;
+
 using UI.Tests.Integration.Fixtures;
 
 namespace UI.Tests.Integration;
@@ -78,6 +80,50 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 		match.Success.Should().BeTrue();
 		match.Value.Should().Contain("class=\"scheme-light dark:scheme-dark\"");
 		match.Value.Should().NotContain("data-theme");
+	}
+
+	private async Task<string> GetHomeHtmlWithPaletteCookieAsync(string? cookieValue)
+	{
+		using HttpRequestMessage request = new(HttpMethod.Get, new Uri("/", UriKind.Relative));
+		if (cookieValue is not null)
+		{
+			request.Headers.Add("Cookie", $"{ApplicationConstants.PaletteCookie}={cookieValue}");
+		}
+
+		HttpResponseMessage response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+		return await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+	}
+
+	[Fact]
+	public async Task GetHome_PaletteCookieSetToRose_RendersDataPaletteRoseAttribute()
+	{
+		// Arrange
+
+		// Act
+		string html = await GetHomeHtmlWithPaletteCookieAsync("rose");
+		Match match = HtmlTagPattern().Match(html);
+
+		// Assert
+		match.Success.Should().BeTrue();
+		match.Value.Should().Contain("data-palette=\"rose\"");
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("blue")]
+	[InlineData("not-a-hue")]
+	public async Task GetHome_NoCookieBlueOrUnknownPaletteValue_RendersNoDataPaletteAttribute(string? cookieValue)
+	{
+		// Arrange
+
+		// Act
+		string html = await GetHomeHtmlWithPaletteCookieAsync(cookieValue);
+		Match match = HtmlTagPattern().Match(html);
+
+		// Assert
+		match.Success.Should().BeTrue();
+		match.Value.Should().NotContain("data-palette");
 	}
 
 	[Fact]

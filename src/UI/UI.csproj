@@ -12,6 +12,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Auth0.AspNetCore.Authentication" />
+		<PackageReference Include="FluentValidation" />
 	</ItemGroup>
 
 	<!-- Tailwind CSS v4: the CLI (from src/UI/package.json) builds wwwroot/css/app.css from
