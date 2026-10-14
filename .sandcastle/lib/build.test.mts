@@ -45,6 +45,9 @@ const sampleSecretMatch: SecretMatch = {
   kind: { type: "pattern", shape: "sk-ant-" },
 };
 
+// A pr-body.md with the three headings the reviewer must write (#335).
+const validPrBody = "## Why\n\nBecause.\n\n## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests.";
+
 // A host whose sandbox records each role run and gate run in `steps`, and
 // answers the gate with the queued exit codes in order. A role in `failing`
 // throws, and one in `unfinished` ends without signalling completion. A role
@@ -62,7 +65,7 @@ function host(
     publishError,
     designNote,
     designFile = "",
-    prBodyFile = "## Why\n\nBecause.\n\n## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests.",
+    prBodyFile = validPrBody,
     latestMain = base,
     containsMain = true,
     mergeExitCode = 0,
@@ -1138,8 +1141,6 @@ describe("buildIssue optional roles", () => {
 // wrote it) before publishing, and falls back to the generic body, logging
 // why, when the file can't be used as it is.
 describe("buildIssue reading the reviewer's PR body", () => {
-  const validPrBody = "## Why\n\nBecause.\n\n## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests.";
-
   it("reads .sandcastle/work/{n}/pr-body.md through the sandbox, and passes its content to host.publish", async () => {
     const { workCommands, publishedPrBodies, buildHost } = host([0, 0], { prBodyFile: validPrBody });
 

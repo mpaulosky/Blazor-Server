@@ -62,7 +62,7 @@ export { UncountedStopError };
 //
 // `prBody` is the reviewer's `pr-body.md` (its Why, What changed and
 // Verification sections), already read from the sandbox and validated by the
-// caller, or undefined to fall back to today's generic body (#335). A
+// caller, or undefined to fall back to the generic body (#335). A
 // review-failed or docs-failed warning is placed after the reviewer's
 // sections rather than folded into them, since the reviewer wrote them before
 // either was known.
@@ -80,18 +80,18 @@ export async function publish(
 ): Promise<string> {
   await retryOnServerError(() => push(branch, commit), wait);
   const reviewFailedNote = "⚠️ The review step failed, so no agent has reviewed this PR.";
-  let reviewNote: string;
+  let description: string;
   if (prBody !== undefined) {
-    reviewNote = reviewed ? prBody : `${prBody}\n\n${reviewFailedNote}`;
+    description = reviewed ? prBody : `${prBody}\n\n${reviewFailedNote}`;
   } else {
-    reviewNote = reviewed ? "Implemented and reviewed by Sandcastle." : `Implemented by Sandcastle. ${reviewFailedNote}`;
+    description = reviewed ? "Implemented and reviewed by Sandcastle." : `Implemented by Sandcastle. ${reviewFailedNote}`;
   }
   const docsNote = docsFailed
     ? "\n\n⚠️ The documentation step failed, so this PR may leave `CONTEXT.md`, `README.md` or the guides out of date."
     : "";
   // PR_MARKER is how the follow-up sweep (lib/follow-up.mts) tells a PR the
   // host published from a collaborator's on a matching branch (#77).
-  const body = `${PR_MARKER}\nCloses #${issue.number}\n\n${reviewNote}${docsNote}`;
+  const body = `${PR_MARKER}\nCloses #${issue.number}\n\n${description}${docsNote}`;
   // A retry after a create that GitHub carried out but answered with an error
   // finds that PR rather than open a second one: openPullRequest looks for an
   // open PR from the branch first.
