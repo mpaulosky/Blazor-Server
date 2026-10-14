@@ -56,7 +56,7 @@ function host(
     failing = [],
     failWith = {},
     unfinished = [],
-    leaksSecret = false,
+    leaksSecret,
     worktreeProblems = [],
     publishError,
     designNote,
@@ -72,9 +72,7 @@ function host(
     failing?: string[];
     failWith?: Record<string, Error>;
     unfinished?: string[];
-    // `true` stands in for sampleSecretMatch; pass a SecretMatch directly to
-    // check what a test does with its location.
-    leaksSecret?: boolean | SecretMatch;
+    leaksSecret?: SecretMatch;
     worktreeProblems?: string[];
     publishError?: string;
     // What latestDesignNote returns for the architect's prompt: the body of
@@ -226,7 +224,7 @@ function host(
     leaksSecret: (scanBase, commit) => {
       scannedBases.push(scanBase);
       scanned.push(commit);
-      return leaksSecret === false ? undefined : leaksSecret === true ? sampleSecretMatch : leaksSecret;
+      return leaksSecret;
     },
     publish: async (_issue, publishedBranch, commit, reviewed, docsFailed) => {
       if (publishError) throw new Error(publishError);
@@ -533,7 +531,7 @@ describe("buildIssue's outcome and detail", () => {
   });
 
   it("is not published, naming the secret, when a commit holds one of the sandbox's secrets", async () => {
-    const { buildHost } = host([0, 0], { leaksSecret: true });
+    const { buildHost } = host([0, 0], { leaksSecret: sampleSecretMatch });
 
     const result = await buildIssue(issue, branch, base, buildHost);
 
@@ -583,7 +581,7 @@ describe("buildIssue publishing", () => {
   });
 
   it("publishes nothing when a commit holds a secret, and doesn't quote it", async () => {
-    const { steps, comments, buildHost } = host([0, 0], { leaksSecret: true });
+    const { steps, comments, buildHost } = host([0, 0], { leaksSecret: sampleSecretMatch });
 
     const result = await buildIssue(issue, branch, base, buildHost);
 

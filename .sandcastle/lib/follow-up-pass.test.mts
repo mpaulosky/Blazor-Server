@@ -747,9 +747,7 @@ function passHostFake(
     markBuildingResult?: boolean;
     sandbox?: ReturnType<typeof sandboxFake>;
     pushError?: Error;
-    // `true` stands in for sampleSecretMatch; pass a SecretMatch directly to
-    // check what a test does with its location.
-    leaksSecret?: boolean | SecretMatch;
+    leaksSecret?: SecretMatch;
     worktreeProblems?: string[];
     isOwnerFn?: IsOwner;
     hostLogin?: string;
@@ -810,12 +808,7 @@ function passHostFake(
       return sandbox.sandbox;
     },
     worktreeProblems: () => options.worktreeProblems ?? [],
-    leaksSecret: () =>
-      options.leaksSecret === undefined || options.leaksSecret === false
-        ? undefined
-        : options.leaksSecret === true
-          ? sampleSecretMatch
-          : options.leaksSecret,
+    leaksSecret: () => options.leaksSecret,
     push: async (branch, commit) => {
       calls.push.push({ branch, commit });
       if (options.pushError) throw options.pushError;
@@ -1272,7 +1265,7 @@ describe("runPass", () => {
 
   it("gives up without pushing when a commit holds a secret", async () => {
     const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }]) });
-    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox, leaksSecret: true });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox, leaksSecret: sampleSecretMatch });
 
     const outcome = await runPass(passTarget(), issue, BASE, passHost);
 

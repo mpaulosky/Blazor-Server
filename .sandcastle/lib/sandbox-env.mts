@@ -73,7 +73,9 @@ export function containsSandboxSecret(text: string): boolean {
 // the .sandcastle/.env key it came from, or a token shape. Never carries the
 // matched text itself, so a caller can log or report a SecretKind without
 // ever touching the secret (#324).
-export type SecretKind = { readonly type: "secret"; readonly envKey: string } | { readonly type: "pattern"; readonly shape: "sk-ant-" | "gh*_" | "github_pat_" };
+export type SecretKind =
+  | { readonly type: "secret"; readonly envKey: string }
+  | { readonly type: "pattern"; readonly shape: (typeof tokenShapes)[number]["shape"] };
 
 // secretKindIn mirrors containsSecret's rules (a value shorter than
 // minimumSecretLength is too likely to be an ordinary word to look for), but

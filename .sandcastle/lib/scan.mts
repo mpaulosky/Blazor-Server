@@ -10,7 +10,11 @@
 import { secretKindIn, type SecretKind } from "./sandbox-env.mts";
 import { git } from "./shell.mts";
 
-// The added lines of `git log -p --cc -U0` output. A hunk starts at its "@@"
+type Addition = { readonly path: string; readonly line: number; readonly text: string };
+
+// The added lines of `git log -p --cc -U0` output, each with the path of its
+// file, read from the file's "+++" header, and its line number in the new
+// file, counted from the hunk header's "+" range. A hunk starts at its "@@"
 // header, which has one "@" more than the commit has parents being compared:
 // "@@" for an ordinary commit, "@@@" for a merge of two. Each hunk line starts
 // with one marker column per parent; a line in the result that some parent
@@ -18,16 +22,7 @@ import { git } from "./shell.mts";
 // isn't in the result. A hunk ends at the first line that isn't a hunk line,
 // such as the next file's "diff" header. Only hunk lines count, so a file
 // header ("+++ b/path") is never taken for content, nor content for a header.
-export function addedLines(patch: string): string[] {
-  return [...additions(patch)].map(({ text }) => text);
-}
-
-// An added line (see addedLines) with where it sits: the path of its file,
-// read from the file's "+++" header, and its line number in the new file,
-// counted from the hunk header's "+" range.
-type Addition = { readonly path: string; readonly line: number; readonly text: string };
-
-function* additions(patch: string): Generator<Addition> {
+export function* additions(patch: string): Generator<Addition> {
   let columns = 0;
   let path = "";
   let line = 0;
@@ -60,36 +55,30 @@ function* additions(patch: string): Generator<Addition> {
 // a quote, backslash, control character or, by default, any non-ASCII byte
 // comes quoted, the bytes as octal escapes.
 function headerPath(name: string): string {
-  let path = name;
-  if (path.startsWith('"') && path.endsWith('"')) {
-    const escapes: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13 };
-    const bytes: number[] = [];
-    const chars = [...path.slice(1, -1)];
-    for (let i = 0; i < chars.length; i++) {
-      if (chars[i] !== "\\") {
-        bytes.push(...Buffer.from(chars[i]!));
-      } else if (/^[0-7]{3}$/.test(chars.slice(i + 1, i + 4).join(""))) {
-        bytes.push(parseInt(chars.slice(i + 1, i + 4).join(""), 8));
-        i += 3;
-      } else {
-        const escaped = chars[++i] ?? "";
-        bytes.push(...(escapes[escaped] === undefined ? Buffer.from(escaped) : [escapes[escaped]!]));
-      }
-    }
-    path = Buffer.from(bytes).toString("utf8");
-  }
+  const path = name.startsWith('"') && name.endsWith('"') ? unquoted(name.slice(1, -1)) : name;
   return path.startsWith("b/") ? path.slice(2) : path;
 }
 
-// What the commits from `base` to `commit` publish, read in the main checkout.
-// --cc reads merge commits too, so content written while resolving a merge, or
-// amended into one, is scanned; without it git log shows merges with no diff.
-export function publishedText(base: string, commit: string, run: (...args: string[]) => string = git): string {
-  const range = `${base}..${commit}`;
-  const commits = run("log", "--format=%an <%ae>%n%cn <%ce>%n%B", range);
-  const paths = run("log", "--format=", "--name-only", "--cc", "--no-renames", range);
-  const patch = run("log", "--format=", "-p", "--cc", "-U0", "--no-ext-diff", "--no-textconv", "--text", range);
-  return [commits, paths, ...addedLines(patch)].join("\n");
+// The text between a quoted name's quotes, with its escapes undone.
+function unquoted(quoted: string): string {
+  const escapes: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13 };
+  const bytes: number[] = [];
+  const chars = [...quoted];
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i]!;
+    const octal = chars.slice(i + 1, i + 4).join("");
+    if (char !== "\\") {
+      bytes.push(...Buffer.from(char));
+    } else if (/^[0-7]{3}$/.test(octal)) {
+      bytes.push(parseInt(octal, 8));
+      i += 3;
+    } else {
+      const escaped = chars[++i] ?? "";
+      const code = escapes[escaped];
+      bytes.push(...(code === undefined ? Buffer.from(escaped) : [code]));
+    }
+  }
+  return Buffer.from(bytes).toString("utf8");
 }
 
 // Where in a commit a match sits: its author or committer identity, its
@@ -113,8 +102,8 @@ export type SecretMatch = { readonly location: MatchLocation; readonly kind: Sec
 // reading `git log -p base..commit` would see them), and within a commit in
 // the order a reviewer would look: its author, its committer, its message,
 // each path it touches, then each line it adds, top to bottom. Undefined
-// when nothing matches. Never reads removed lines or context, for the same
-// reason publishedText doesn't (see the top of this file).
+// when nothing matches. Never reads removed lines or context (see the top of
+// this file).
 export function firstSecretMatch(
   base: string,
   commit: string,
@@ -133,8 +122,11 @@ export function firstSecretMatch(
       const kind = secretKindIn(path, secrets);
       if (kind) return { location: { commit: sha, field: "path" }, kind };
     }
-    // The prefixes are explicit, so a diff.noprefix or diff.mnemonicPrefix
-    // setting can't change the "+++ b/path" headers additions() reads.
+    // --cc reads a merge commit's diff too, so content written while resolving
+    // a merge, or amended into one, is scanned; without it git log shows a
+    // merge with no diff. The prefixes are explicit, so a diff.noprefix or
+    // diff.mnemonicPrefix setting can't change the "+++ b/path" headers
+    // additions() reads.
     const patch = run(
       "log", "-1", "--format=", "-p", "--cc", "-U0", "--no-ext-diff", "--no-textconv", "--text",
       "--src-prefix=a/", "--dst-prefix=b/", sha,
@@ -153,11 +145,12 @@ export function firstSecretMatch(
 // holds the matched text (#324).
 export function describeSecretMatch({ location, kind }: SecretMatch): string {
   const what = kind.type === "secret" ? `the sandbox's ${kind.envKey} value` : `something shaped like a ${kind.shape} token`;
-  const where =
-    location.field === "line"
-      ? `line ${location.line} of ${location.path}, added by commit ${location.commit}`
-      : location.field === "path"
-        ? `a path commit ${location.commit} touches`
-        : `the ${location.field} of commit ${location.commit}`;
-  return `${what} in ${where}`;
+  switch (location.field) {
+    case "line":
+      return `${what} in line ${location.line} of ${location.path}, added by commit ${location.commit}`;
+    case "path":
+      return `${what} in a path commit ${location.commit} touches`;
+    default:
+      return `${what} in the ${location.field} of commit ${location.commit}`;
+  }
 }
