@@ -67,4 +67,68 @@
 		</ItemGroup>
 	</Target>
 
+	<!-- BuildInfo: stamps the Release and commit into the assembly as constants, so the app never runs git or calls
+	     GitHub at runtime. After InitializeSourceControlInformation, Source Link has set SourceRevisionId (the full
+	     SHA) and PrivateRepositoryUrl (the remote, normalized to https; RepositoryUrl is empty in this repo).
+	     The describe Exec ignores its exit code, so a missing git, a missing .git or a repo with no v* tags leaves
+	     the Release empty instead of failing the build; its stderr stays at low importance so -warnaserror can't
+	     promote it. No Inputs/Outputs: a new tag or commit changes no file the build could compare against.
+	     Skipped in design-time builds, which instead compile the file the last real build wrote, when there is one
+	     (an item, because items evaluate after the SDK's targets set IntermediateOutputPath and properties don't). -->
+	<ItemGroup Condition="'$(DesignTimeBuild)' == 'true' And Exists('$(IntermediateOutputPath)BuildInfo.g.cs')">
+		<Compile Include="$(IntermediateOutputPath)BuildInfo.g.cs" />
+	</ItemGroup>
+
+	<Target
+		Name="GenerateBuildInfo"
+		DependsOnTargets="InitializeSourceControlInformation"
+		BeforeTargets="CoreCompile"
+		Condition="'$(DesignTimeBuild)' != 'true'">
+		<Exec
+			Command="git describe --tags --long --match &quot;v[0-9]*&quot;"
+			WorkingDirectory="$(MSBuildProjectDirectory)"
+			ConsoleToMSBuild="true"
+			IgnoreExitCode="true"
+			IgnoreStandardErrorWarningFormat="true"
+			StandardOutputImportance="low"
+			StandardErrorImportance="low"
+			EchoOff="true">
+			<Output TaskParameter="ExitCode" PropertyName="_BuildInfoDescribeExitCode" />
+			<Output TaskParameter="ConsoleOutput" PropertyName="_BuildInfoDescribeOutput" />
+		</Exec>
+
+		<!-- ConsoleOutput holds stderr too, so a failed describe ("fatal: No names found", "git: not found") counts
+		     as no Release. Each value is escaped for a C# string literal, and %09 keeps the indent MSBuild would trim. -->
+		<PropertyGroup>
+			<BuildInfoFile>$(IntermediateOutputPath)BuildInfo.g.cs</BuildInfoFile>
+			<_BuildInfoRelease Condition="'$(_BuildInfoDescribeExitCode)' == '0'">$(_BuildInfoDescribeOutput.Trim())</_BuildInfoRelease>
+			<_BuildInfoRelease>$([System.String]::Copy('$(_BuildInfoRelease)').Replace('\', '\\').Replace('&quot;', '\&quot;'))</_BuildInfoRelease>
+			<_BuildInfoCommit>$([System.String]::Copy('$(SourceRevisionId)').Replace('\', '\\').Replace('&quot;', '\&quot;'))</_BuildInfoCommit>
+			<_BuildInfoRepositoryUrl>$([System.String]::Copy('$(PrivateRepositoryUrl)').Replace('\', '\\').Replace('&quot;', '\&quot;'))</_BuildInfoRepositoryUrl>
+		</PropertyGroup>
+
+		<ItemGroup>
+			<_BuildInfoLine Include="// &lt;auto-generated /&gt;" />
+			<_BuildInfoLine Include="namespace UI.Components.Layout%3B" />
+			<_BuildInfoLine Include="internal static class BuildInfoConstants" />
+			<_BuildInfoLine Include="{" />
+			<_BuildInfoLine Include="%09internal const string Release = &quot;$(_BuildInfoRelease)&quot;%3B" />
+			<_BuildInfoLine Include="%09internal const string Commit = &quot;$(_BuildInfoCommit)&quot;%3B" />
+			<_BuildInfoLine Include="%09internal const string RepositoryUrl = &quot;$(_BuildInfoRepositoryUrl)&quot;%3B" />
+			<_BuildInfoLine Include="}" />
+		</ItemGroup>
+
+		<WriteLinesToFile
+			File="$(BuildInfoFile)"
+			Lines="@(_BuildInfoLine)"
+			Overwrite="true"
+			WriteOnlyWhenDifferent="true" />
+
+		<ItemGroup>
+			<Compile Remove="$(BuildInfoFile)" />
+			<Compile Include="$(BuildInfoFile)" />
+			<FileWrites Include="$(BuildInfoFile)" />
+		</ItemGroup>
+	</Target>
+
 </Project>
