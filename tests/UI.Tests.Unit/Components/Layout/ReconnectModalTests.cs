@@ -15,6 +15,37 @@ namespace UI.Tests.Unit.Components.Layout;
 
 public class ReconnectModalTests : BunitContext
 {
+	// The Card's Section classes from docs/plans/ui-restyle.md, which go on the <dialog> itself.
+	private static readonly string[] CardSectionClasses =
+	[
+		"rounded-3xl",
+		"border",
+		"border-slate-200",
+		"bg-white/80",
+		"p-6",
+		"shadow-sm",
+		"dark:border-slate-800",
+		"dark:bg-slate-900/70",
+	];
+
+	// The Button's Primary classes from docs/plans/ui-restyle.md, written inline on Retry and Resume.
+	private static readonly string[] PrimaryButtonClasses =
+	[
+		"rounded-xl",
+		"bg-accent-600",
+		"px-4",
+		"py-2",
+		"text-sm",
+		"font-semibold",
+		"text-white",
+		"shadow-sm",
+		"hover:bg-accent-700",
+		"focus-visible:outline-2",
+		"focus-visible:outline-offset-2",
+		"focus-visible:outline-accent-500",
+		"motion-safe:transition",
+	];
+
 	private static string ReadReconnectModalCss()
 	{
 		string path = Path.Combine(FindRepositoryRoot(), "src", "UI", "Components", "Layout", "ReconnectModal.razor.css");
@@ -60,14 +91,7 @@ public class ReconnectModalTests : BunitContext
 
 		// Assert
 		IElement dialog = cut.Find("dialog");
-		dialog.ClassList.Should().Contain("rounded-3xl");
-		dialog.ClassList.Should().Contain("border");
-		dialog.ClassList.Should().Contain("border-slate-200");
-		dialog.ClassList.Should().Contain("bg-white/80");
-		dialog.ClassList.Should().Contain("p-6");
-		dialog.ClassList.Should().Contain("shadow-sm");
-		dialog.ClassList.Should().Contain("dark:border-slate-800");
-		dialog.ClassList.Should().Contain("dark:bg-slate-900/70");
+		dialog.ClassList.Should().Contain(CardSectionClasses);
 	}
 
 	[Fact]
@@ -96,19 +120,7 @@ public class ReconnectModalTests : BunitContext
 		button.TagName.Should().Be("BUTTON");
 		button.TextContent.Trim().Should().Be("Retry");
 		button.ClassList.Should().Contain("components-reconnect-failed-visible");
-		button.ClassList.Should().Contain("rounded-xl");
-		button.ClassList.Should().Contain("bg-accent-600");
-		button.ClassList.Should().Contain("px-4");
-		button.ClassList.Should().Contain("py-2");
-		button.ClassList.Should().Contain("text-sm");
-		button.ClassList.Should().Contain("font-semibold");
-		button.ClassList.Should().Contain("text-white");
-		button.ClassList.Should().Contain("shadow-sm");
-		button.ClassList.Should().Contain("hover:bg-accent-700");
-		button.ClassList.Should().Contain("focus-visible:outline-2");
-		button.ClassList.Should().Contain("focus-visible:outline-offset-2");
-		button.ClassList.Should().Contain("focus-visible:outline-accent-500");
-		button.ClassList.Should().Contain("motion-safe:transition");
+		button.ClassList.Should().Contain(PrimaryButtonClasses);
 	}
 
 	[Fact]
@@ -125,19 +137,7 @@ public class ReconnectModalTests : BunitContext
 		button.TextContent.Trim().Should().Be("Resume");
 		button.ClassList.Should().Contain("components-pause-visible");
 		button.ClassList.Should().Contain("components-resume-failed-visible");
-		button.ClassList.Should().Contain("rounded-xl");
-		button.ClassList.Should().Contain("bg-accent-600");
-		button.ClassList.Should().Contain("px-4");
-		button.ClassList.Should().Contain("py-2");
-		button.ClassList.Should().Contain("text-sm");
-		button.ClassList.Should().Contain("font-semibold");
-		button.ClassList.Should().Contain("text-white");
-		button.ClassList.Should().Contain("shadow-sm");
-		button.ClassList.Should().Contain("hover:bg-accent-700");
-		button.ClassList.Should().Contain("focus-visible:outline-2");
-		button.ClassList.Should().Contain("focus-visible:outline-offset-2");
-		button.ClassList.Should().Contain("focus-visible:outline-accent-500");
-		button.ClassList.Should().Contain("motion-safe:transition");
+		button.ClassList.Should().Contain(PrimaryButtonClasses);
 	}
 
 	[Theory]
