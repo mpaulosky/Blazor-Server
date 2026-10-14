@@ -19,6 +19,7 @@ public class ApplicationConstantsTests
 	[InlineData(ApplicationConstants.ThemeCookie, "theme")]
 	[InlineData(ApplicationConstants.PaletteCookie, "palette")]
 	[InlineData(ApplicationConstants.Website, "WebApp")]
+	[InlineData(ApplicationConstants.AppName, "Blazor Server")]
 	public void ApplicationConstants_Member_HasExpectedValue(string actual, string expected)
 	{
 		// Arrange

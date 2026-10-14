@@ -42,4 +42,9 @@ public static class ApplicationConstants
 	///   The Aspire resource name of the UI project, used by the AppHost and the E2E tests.
 	/// </summary>
 	public const string Website = "WebApp";
+
+	/// <summary>
+	///   The Template's brand name. Not yet set to "Blazor Server" (see issue #311).
+	/// </summary>
+	public const string AppName = "";
 }
