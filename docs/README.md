@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.158](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.158) | 2026-10-14 | feat(ui): Add the Themes slice, its cookie and data-theme | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-372-feat-ui-add-the-themes-slice-its-cookie-and-data-theme.md) |
 | [v0.0.157](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.157) | 2026-10-14 | refactor(ui): Move LocalReturnUrl to a cross-cutting UI.Security | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-370-refactor-ui-move-localreturnurl-to-a-cross-cutting-ui-security.md) |
 | [v0.0.156](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.156) | 2026-10-14 | docs(ui): Add the Theme and Palette spec and ADR 0007 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-368-docs-ui-add-the-theme-and-palette-spec-and-adr-0007.md) |
 | [v0.0.155](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.155) | 2026-10-14 | feat(ui): Show the Release and commit in the footer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.151](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.151) | 2026-10-14 | feat(aspire): Serve WebApp over HTTPS from the AppHost's https profile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-343-feat-aspire-serve-webapp-over-https-from-the-apphost-s-https-profile.md) |
 | [v0.0.150](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.150) | 2026-10-14 | feat(ui): Turn Home into the Template showcase | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-341-feat-ui-turn-home-into-the-template-showcase.md) |
 | [v0.0.149](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.149) | 2026-10-14 | feat(sandcastle): Write PR descriptions with Why, What changed and Verification | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-339-feat-sandcastle-write-pr-descriptions-with-why-what-changed-and-verification.md) |
-| [v0.0.148](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.148) | 2026-10-14 | feat(ui): Restyle the page shell, nav, footer and error bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-337-feat-ui-restyle-the-page-shell-nav-footer-and-error-bar.md) |
 
 <!-- RELEASES_END -->
 
