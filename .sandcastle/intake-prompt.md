@@ -28,6 +28,7 @@ You don't edit the issue, and you don't judge whether it's worth doing or how it
 
 **Splitting.** An issue that meets all three requirements but is too big for one pull request can be **split** into child issues, built one after another in the order you list them.
 Split only when the acceptance criteria clearly fall into separate, independently shippable parts; when in doubt, mark the issue ready.
+Each child's title starts with the original title's conventional-commit prefix (such as `feat(ui):`) when the original has one.
 Each child's body has a `## Summary` saying what that child changes and why, and an `## Acceptance criteria` section holding its share of the original's criteria.
 Redistribute the original's criteria among the children, word for word where you can: every criterion goes to exactly one child, and you never add a new one.
 Each child must be buildable once the children before it have landed.
@@ -47,9 +48,9 @@ Give one verdict per issue, as a JSON object wrapped in `<intake>` tags:
    "reason": "The issue has no checkable acceptance criterion, and leaves open which scales the dropdown lists."},
   {"id": "44", "verdict": "split", "bug": false,
    "children": [
-     {"title": "Persist the Palette in a cookie",
+     {"title": "feat(ui): Persist the Palette in a cookie",
       "body": "## Summary\n\nKeeps the Palette across reloads.\n\n## Acceptance criteria\n\n- [ ] A chosen Palette is still applied after a reload."},
-     {"title": "Add the Palette dropdown to the menu",
+     {"title": "feat(ui): Add the Palette dropdown to the menu",
       "body": "## Summary\n\nLets the visitor pick a Palette.\n\n## Acceptance criteria\n\n- [ ] The menu's dropdown lists every Palette."}
    ],
    "reason": "The issue meets the Definition of Ready, but its storage and UI criteria are separate pieces of work that each fit one pull request."}
