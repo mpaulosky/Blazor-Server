@@ -17,6 +17,8 @@ namespace UI.Tests.Unit.Components.Layout;
 
 public class NavMenuTests : BunitContext
 {
+	private const string ThemeFormSelector = "form[role='group'][aria-label='Theme']";
+
 	[Fact]
 	public void Render_BrandLink_IsBaseRelativeAndShowsAriaHiddenLetterTileBeforeAppName()
 	{
@@ -154,13 +156,11 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
-		// Queried from the actually-rendered nav element rather than bUnit's FindComponents<T>().Nodes, which
-		// reparses a component's markup into a brand-new, disconnected AngleSharp document on every access and so
-		// can never be found inside an ancestor from the real render tree.
+		// The form is found in the rendered nav rather than through FindComponents<ThemeControl>(), because bUnit parses
+		// each found component's markup into a document of its own, which no element of the nav ever contains.
 		IElement nav = cut.Find("nav");
-		IElement? themeForm = nav.QuerySelector("form[role='group'][aria-label='Theme']");
-		themeForm.Should().NotBeNull();
-		themeForm!.ClassList.Should().NotContain("grid-cols-3");
+		IElement themeForm = nav.QuerySelectorAll(ThemeFormSelector).Should().ContainSingle().Subject;
+		themeForm.ClassList.Should().NotContain("grid-cols-3");
 	}
 
 	[Fact]
@@ -174,9 +174,8 @@ public class NavMenuTests : BunitContext
 
 		// Assert
 		IElement details = cut.Find("details");
-		IElement? themeForm = details.QuerySelector("form[role='group'][aria-label='Theme']");
-		themeForm.Should().NotBeNull();
-		themeForm!.ClassList.Should().Contain("grid-cols-3");
+		IElement themeForm = details.QuerySelectorAll(ThemeFormSelector).Should().ContainSingle().Subject;
+		themeForm.ClassList.Should().Contain("grid-cols-3");
 	}
 
 	private static void AssertLink(IElement container, string text, string expectedHref)
