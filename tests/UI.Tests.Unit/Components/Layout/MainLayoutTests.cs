@@ -101,16 +101,10 @@ public class MainLayoutTests : BunitContext
 			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
 
 		// Assert
-		IElement errorUi = cut.Find("#blazor-error-ui");
-		IElement? row = errorUi.QuerySelector("div.flex.items-center.gap-4");
-		row.Should().NotBeNull();
-		row!.TextContent.Should().NotBeNullOrWhiteSpace();
-
-		IElement? reload = row.QuerySelector("a.reload");
-		reload.Should().NotBeNull();
-
-		IElement? dismiss = row.QuerySelector("button.dismiss");
-		dismiss.Should().NotBeNull();
-		dismiss!.GetAttribute("aria-label").Should().Be("Dismiss");
+		IElement row = cut.Find("#blazor-error-ui div.flex.items-center.gap-4");
+		row.TextContent.Should().Contain("An unhandled error has occurred.");
+		row.QuerySelectorAll("a.reload").Should().ContainSingle();
+		row.QuerySelectorAll("button.dismiss").Should().ContainSingle()
+			.Which.GetAttribute("aria-label").Should().Be("Dismiss");
 	}
 }
