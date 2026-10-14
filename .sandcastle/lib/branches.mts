@@ -95,9 +95,17 @@ export function commitsAhead(branch: string, base: string): number {
 // each pipeline would contend on the same ref lock. The host works from the
 // returned commit, not the ref: the ref is in the shared .git, which agents can
 // write.
-export function fetchMain(): string {
-  git("fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main");
-  return git("rev-parse", "--verify", "refs/remotes/origin/main^{commit}");
+//
+// A shallow checkout (actions/checkout's default depth of 1 in the workflow) is
+// unshallowed here. Shallow, git can't see that a branch's older history is in
+// main, so `<this commit>..<branch>` lists everything the branch reaches past
+// the cut: the secret scan then read main's whole history as a PR's own, and a
+// fake token in a test on main handed a follow-up pass back (#372). git refuses
+// --unshallow in a full clone, so it's only passed to a shallow one.
+export function fetchMain(run: (...args: string[]) => string = git): string {
+  const shallow = run("rev-parse", "--is-shallow-repository") === "true";
+  run("fetch", "--quiet", ...(shallow ? ["--unshallow"] : []), "origin", "+refs/heads/main:refs/remotes/origin/main");
+  return run("rev-parse", "--verify", "refs/remotes/origin/main^{commit}");
 }
 
 // The git operations discardClosedWork needs; tests pass a stub.
