@@ -11,6 +11,7 @@ using AngleSharp.Dom;
 
 using Domain.Constants;
 
+using UI.Components.Features.Themes;
 using UI.Components.Layout;
 
 namespace UI.Tests.Unit.Components.Layout;
@@ -142,6 +143,38 @@ public class NavMenuTests : BunitContext
 		// is active without an explicit navigation.
 		IElement homeLink = cut.Find("nav").QuerySelectorAll("a").Single(link => link.TextContent.Trim() == "Home");
 		homeLink.ClassList.Should().Contain(["bg-accent-50", "text-accent-700"]);
+	}
+
+	[Fact]
+	public void Render_DesktopNav_RendersThemeControlNotInMobileLayout()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		IElement nav = cut.Find("nav");
+		IRenderedComponent<ThemeControl> themeControl =
+			cut.FindComponents<ThemeControl>().Single(control => nav.Contains(control.Nodes[0]));
+		themeControl.Instance.Mobile.Should().BeFalse();
+	}
+
+	[Fact]
+	public void Render_MobileMenu_RendersThemeControlInMobileLayout()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		IElement details = cut.Find("details");
+		IRenderedComponent<ThemeControl> themeControl =
+			cut.FindComponents<ThemeControl>().Single(control => details.Contains(control.Nodes[0]));
+		themeControl.Instance.Mobile.Should().BeTrue();
 	}
 
 	private static void AssertLink(IElement container, string text, string expectedHref)
