@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.143](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.143) | 2026-10-14 | feat(sandcastle): Say where the secret scan matched when it stops a push | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-327-feat-sandcastle-say-where-the-secret-scan-matched-when-it-stops-a-push.md) |
 | [v0.0.142](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.142) | 2026-10-14 | feat(ui): Add the dark variant, the accent token and the app name constant | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-323-feat-ui-add-the-dark-variant-the-accent-token-and-the-app-name-constant.md) |
 | [v0.0.141](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.141) | 2026-10-14 | fix(sandcastle): End a run red when intake stops for repeated failures | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-321-fix-sandcastle-end-a-run-red-when-intake-stops-for-repeated-failures.md) |
 | [v0.0.140](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.140) | 2026-10-14 | ci(sandcastle): Build the sandbox image before running Sandcastle | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-319-ci-sandcastle-build-the-sandbox-image-before-running-sandcastle.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.136](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.136) | 2026-10-13 | fix(auth): Isolate the greeting name's text direction with bdi | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-296-fix-auth-isolate-the-greeting-name-s-text-direction-with-bdi.md) |
 | [v0.0.135](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.135) | 2026-10-13 | fix(nav): Make the Home link base-relative | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-295-fix-nav-make-the-home-link-base-relative.md) |
 | [v0.0.134](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.134) | 2026-10-13 | feat(admin): Add an Admin page only an Admin can open | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-293-feat-admin-add-an-admin-page-only-an-admin-can-open.md) |
-| [v0.0.133](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.133) | 2026-10-13 | chore(sandcastle): Merge main in before checkpoint 2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-291-chore-sandcastle-merge-main-in-before-checkpoint-2.md) |
 
 <!-- RELEASES_END -->
 
