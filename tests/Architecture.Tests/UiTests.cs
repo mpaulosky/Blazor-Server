@@ -52,6 +52,24 @@ public class UiTests
 	}
 
 	[Fact]
+	public void UiAssembly_FeatureSlices_IncludePalettesWithNoCrossSliceDependencies()
+	{
+		// Arrange
+		Assembly uiAssembly = typeof(App).Assembly;
+		const string featuresNamespace = "UI.Components.Features";
+
+		// Act
+		IReadOnlyList<string> slices = SliceDependencyRule.FindSliceNames(uiAssembly, featuresNamespace);
+		IReadOnlyList<string> crossSliceDependencies =
+			SliceDependencyRule.FindCrossSliceDependencies(uiAssembly, featuresNamespace);
+
+		// Assert
+		slices.Should().Contain("Palettes");
+		crossSliceDependencies.Should()
+			.BeEmpty("each feature slice holds everything its use case needs, and depends on no other slice (ADR-0005)");
+	}
+
+	[Fact]
 	public void UiAssembly_Auth0Sdk_IsOnlyDependedOnByTheAuthenticationSlice()
 	{
 		// Arrange
