@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [fix(sandcastle): Keep the parent's conventional prefix on split child issues](2026-10-14-pr-359-fix-sandcastle-keep-the-parent-s-conventional-prefix-on-split-child-issues.md) | release,automation |
 | 2026-10-14 | [feat(ui): Generate build-time BuildInfo and the Release label function](2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) | release,automation |
 | 2026-10-14 | [fix(ui): Send a stale Log out home instead of a 400](2026-10-14-pr-345-fix-ui-send-a-stale-log-out-home-instead-of-a-400.md) | release,automation |
 | 2026-10-14 | [feat(aspire): Serve WebApp over HTTPS from the AppHost's https profile](2026-10-14-pr-343-feat-aspire-serve-webapp-over-https-from-the-apphost-s-https-profile.md) | release,automation |

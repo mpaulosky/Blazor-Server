@@ -290,7 +290,8 @@ function applyVerdict(
 // listing its children, which lib/umbrella.mts finds it by in later rounds.
 // The children go through intake on their own in the next round. Their title
 // and body are model text posted from the host's account, so mentions and
-// cross-references in them are broken (see withoutReferences).
+// cross-references in them are broken (see withoutReferences). Each title
+// also gets the original's conventional prefix (see withParentPrefix).
 //
 // A split with no children, or a child without a title or acceptance
 // criteria, is malformed: nothing is created, and the issue is handed back
@@ -364,7 +365,7 @@ function applySplit(
   let creating: string | undefined;
   try {
     for (const draft of drafted) {
-      const title = withoutReferences(draft.title.trim());
+      const title = withoutReferences(withParentPrefix(issue.title, draft.title.trim()));
       creating = title;
       // Added after withoutReferences, which would otherwise break its refs.
       const body = withoutReferences(draft.body) + (children.length === 0 ? blockedByLine : "");
@@ -410,6 +411,23 @@ function applySplit(
 }
 
 type SplitChild = { number: number; title: string };
+
+// A conventional-commit prefix as scripts/check-pr-title.sh accepts it: a
+// type, an optional scope, an optional breaking-change marker, a colon and a
+// space.
+const conventionalPrefix = /^(?:feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\([^)]+\))?!?: /;
+
+// A split child's drafted title with the parent title's conventional prefix in
+// front, so the PR built from the child passes the PR title check, which wants
+// that prefix since the title becomes the squash commit's subject. The model
+// drafts child titles without one (#351: #347's children came back bare, and
+// the PR built from the first failed the check). A drafted title that already
+// has a prefix, or a parent title with none, leaves the draft as it is.
+function withParentPrefix(parentTitle: string, drafted: string): string {
+  const prefix = conventionalPrefix.exec(parentTitle.trim())?.[0];
+  if (prefix === undefined || conventionalPrefix.test(drafted)) return drafted;
+  return prefix + drafted;
+}
 
 function issueRefs(children: readonly SplitChild[]): string {
   return children.map((child) => `#${child.number}`).join(", ");
