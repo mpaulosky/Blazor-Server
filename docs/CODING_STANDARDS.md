@@ -85,6 +85,11 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - Keep markup in `.razor` files. Move non-trivial logic into a code-behind (`.razor.cs`) or an injected service.
 - Use `EventCallback` for child-to-parent communication. Call `StateHasChanged()` only when Blazor can't detect the change itself.
 - Style UI with Tailwind CSS v4 utility classes. Avoid inline `style` attributes and one-off CSS.
+- Style every surface for light and dark with `dark:` variants. The `dark` variant follows the OS until the visitor picks a Theme
+  (see [docs/plans/ui-restyle.md](plans/ui-restyle.md)).
+- Write accent colour as `accent-*` (`bg-accent-600`), never as a raw hue such as `blue-*`, so the Palette can swap it.
+  Colours with a fixed meaning, such as the amber warning and the badge tones, keep their hue.
+- Put reusable UI building blocks (card, badge, button) in `Components/Shared/`. They hold no feature or domain logic, aren't the Shared Kernel, and never depend on a feature slice.
 - Call JavaScript interop only from `OnAfterRenderAsync`, never while the component is prerendering. Guard one-time setup with `if (firstRender)`.
 - When a component subscribes to events, starts timers, or holds a `CancellationTokenSource`, implement `IDisposable` or `IAsyncDisposable` and release them.
 - Wrap UI updates that come from outside Blazor's event handlers, such as timers, events, and background tasks, in `await InvokeAsync(StateHasChanged)`.
