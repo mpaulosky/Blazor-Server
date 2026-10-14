@@ -59,27 +59,39 @@ export { UncountedStopError };
 // doesn't stop the pipeline (see "When a role fails" in
 // docs/plans/sandcastle-workflow.md): the PR still publishes, with a note
 // that the documentation step failed.
+//
+// `prBody` is the reviewer's `pr-body.md` (its Why, What changed and
+// Verification sections), already read from the sandbox and validated by the
+// caller, or undefined to fall back to the generic body (#335). A
+// review-failed or docs-failed warning is placed after the reviewer's
+// sections rather than folded into them, since the reviewer wrote them before
+// either was known.
 export async function publish(
   issue: SandcastleIssue,
   branch: string,
   commit: string,
   reviewed: boolean,
   docsFailed: boolean,
+  prBody: string | undefined = undefined,
   push: (branch: string, commit: string) => void = (pushBranch, pushCommit) =>
     void git("push", "--quiet", "origin", `${pushCommit}:refs/heads/${pushBranch}`),
   createPullRequest: (branch: string, title: string, body: string) => string = openPullRequest,
   wait: (ms: number) => Promise<void> = (ms) => sleep(ms),
 ): Promise<string> {
   await retryOnServerError(() => push(branch, commit), wait);
-  const reviewNote = reviewed
-    ? "Implemented and reviewed by Sandcastle."
-    : "Implemented by Sandcastle. ⚠️ The review step failed, so no agent has reviewed this PR.";
+  const reviewFailedNote = "⚠️ The review step failed, so no agent has reviewed this PR.";
+  let description: string;
+  if (prBody !== undefined) {
+    description = reviewed ? prBody : `${prBody}\n\n${reviewFailedNote}`;
+  } else {
+    description = reviewed ? "Implemented and reviewed by Sandcastle." : `Implemented by Sandcastle. ${reviewFailedNote}`;
+  }
   const docsNote = docsFailed
     ? "\n\n⚠️ The documentation step failed, so this PR may leave `CONTEXT.md`, `README.md` or the guides out of date."
     : "";
   // PR_MARKER is how the follow-up sweep (lib/follow-up.mts) tells a PR the
   // host published from a collaborator's on a matching branch (#77).
-  const body = `${PR_MARKER}\nCloses #${issue.number}\n\n${reviewNote}${docsNote}`;
+  const body = `${PR_MARKER}\nCloses #${issue.number}\n\n${description}${docsNote}`;
   // A retry after a create that GitHub carried out but answered with an error
   // finds that PR rather than open a second one: openPullRequest looks for an
   // open PR from the branch first.
@@ -130,6 +142,15 @@ function developerFailureComment(failure: string, branch: string): string {
 // GitHub refuses a comment over 65,536 characters; this leaves room for the
 // design comment's own lines around the note.
 const DESIGN_NOTE_LIMIT = 60_000;
+
+// GitHub refuses a PR body over 65,536 characters too; this leaves room for
+// the marker, `Closes #n` and the warnings publish() adds around the
+// reviewer's sections (#335).
+export const PR_BODY_LIMIT = 60_000;
+
+// The headings the reviewer's pr-body.md must hold, the ones docs/PROCESS.md
+// ("The PR description") asks every PR description for (#335).
+const PR_BODY_HEADINGS = ["Why", "What changed", "Verification"] as const;
 
 // What stands in for <!-- in a posted design note. Every host marker starts
 // with <!--, and markerComments finds the host's comments by substring, so a
@@ -460,6 +481,7 @@ async function buildMarkedIssue(
     ({ commits, prUrl: undefined, publishFailed: false, outcome, detail });
   const log = (line: string) => host.log(`  #${issue.number} ${line}`);
   const designNotePath = `.sandcastle/work/${issue.number}/design.md`;
+  const prBodyPath = `.sandcastle/work/${issue.number}/pr-body.md`;
 
   function developerPromptArgs(role: DeveloperRole): sandcastle.PromptArgs {
     switch (role) {
@@ -571,6 +593,42 @@ async function buildMarkedIssue(
     }
   }
 
+  // The reviewer's PR description (#335): its Why, What changed and
+  // Verification sections, for publish() to put under the marker and
+  // `Closes #n`. Read inside the sandbox, as postDesignNote reads the design
+  // note, since an agent wrote it. It's published word for word (the squash
+  // commit, the Release's notes, the release blog), so anything it can't be
+  // trusted with as it is returns undefined, for publish()'s generic body,
+  // and the log says why: a missing description never blocks publishing.
+  async function reviewerPrBody(): Promise<string | undefined> {
+    let read: { stdout: string; exitCode: number };
+    try {
+      read = await sandbox.exec(`cat ${prBodyPath} 2>/dev/null`);
+    } catch (error) {
+      log(`reading the reviewer's PR body failed, so the PR gets the generic body: ${error}`);
+      return undefined;
+    }
+    const prBody = read.exitCode === 0 ? read.stdout.replace(/\r\n?/g, "\n").trim() : "";
+    const missing = PR_BODY_HEADINGS.filter((heading) => !new RegExp(`^## ${heading}[ \t]*$`, "m").test(prBody));
+    let problem: string | undefined;
+    if (prBody === "") {
+      problem = `is missing or empty at ${prBodyPath}`;
+    } else if (missing.length > 0) {
+      problem = `lacks the ${missing.map((heading) => `"## ${heading}"`).join(", ")} heading${missing.length > 1 ? "s" : ""}`;
+    } else if (prBody.length > PR_BODY_LIMIT) {
+      problem = `is ${prBody.length} characters, more than the ${PR_BODY_LIMIT} a PR body can hold`;
+    } else if (host.publicError(prBody) !== prBody) {
+      // publicError also strips colour codes and URL credentials. Any change
+      // means the file isn't safe to publish as written, so it isn't.
+      problem = "holds a secret, a token shape or other text that isn't safe to publish";
+    }
+    if (problem !== undefined) {
+      log(`the reviewer's PR body ${problem}, so the PR gets the generic body`);
+      return undefined;
+    }
+    return prBody;
+  }
+
   // Run the scribe. Returns false when the run threw or used up its
   // iterations without signalling completion. Unlike a developer run, that
   // isn't a failed build attempt: the code is gated, so the PR still
@@ -677,8 +735,11 @@ async function buildMarkedIssue(
   try {
     // The worktree is named after the branch, so it may still hold an earlier
     // round's design note, and every role follows the note when it exists:
-    // only this build's architect may have written it (#230).
+    // only this build's architect may have written it (#230). The PR body
+    // likewise, so an earlier round's description never goes out with this
+    // round's change (#335).
     await sandbox.exec(`rm -f ${designNotePath}`);
+    await sandbox.exec(`rm -f ${prBodyPath}`);
     const developers: DeveloperRole[] = [
       ...(issue.roles.includes("architect") ? ["architect" as const] : []),
       "tester",
@@ -762,8 +823,9 @@ async function buildMarkedIssue(
     // fast-forward origin's branch (an agent rewrote a commit an earlier round
     // pushed) or any other git or gh failure. Whatever still fails needs a
     // person, so the issue gets git's or gh's error rather than only the run log.
+    const prBody = await reviewerPrBody();
     try {
-      const prUrl = await host.publish(issue, branch, gated, reviewed, docsFailed);
+      const prUrl = await host.publish(issue, branch, gated, reviewed, docsFailed, prBody);
       return { commits, prUrl, publishFailed: false, outcome: "published", detail: prUrl };
     } catch (error) {
       console.error(`  ✗ #${issue.number}: publishing ${branch} failed: ${error}`);

@@ -9,6 +9,7 @@ import {
   latestDesignNote,
   isGitHubServerError,
   isWorkflowPushRejection,
+  PR_BODY_LIMIT,
   publicErrorText,
   publish,
   UncountedStopError,
@@ -44,6 +45,9 @@ const sampleSecretMatch: SecretMatch = {
   kind: { type: "pattern", shape: "sk-ant-" },
 };
 
+// A pr-body.md with the three headings the reviewer must write (#335).
+const validPrBody = "## Why\n\nBecause.\n\n## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests.";
+
 // A host whose sandbox records each role run and gate run in `steps`, and
 // answers the gate with the queued exit codes in order. A role in `failing`
 // throws, and one in `unfinished` ends without signalling completion. A role
@@ -61,6 +65,7 @@ function host(
     publishError,
     designNote,
     designFile = "",
+    prBodyFile = validPrBody,
     latestMain = base,
     containsMain = true,
     mergeExitCode = 0,
@@ -82,6 +87,12 @@ function host(
     // the architect has run, read back and posted as the issue's design
     // comment (see DESIGN_MARKER in lib/config.mts).
     designFile?: string;
+    // The content .sandcastle/work/{n}/pr-body.md holds in the sandbox once
+    // the reviewer has run: its Why, What changed and Verification sections,
+    // read back before publish() is called (#335). A valid one by default, as
+    // a reviewer that finished writes, so a test that pins the log isn't
+    // handed the fallback's line.
+    prBodyFile?: string;
     // The commit latestMain() resolves origin/main to just before checkpoint
     // 2, whether the branch already contains it, how `git merge` of it and
     // `git merge --abort` exit, and an error latestMain() throws instead (a
@@ -164,6 +175,9 @@ function host(
       }
       if (command.includes(".sandcastle/work/")) {
         workCommands.push({ command, rolesRun: runs.length });
+        if (command.includes("pr-body.md")) {
+          return { stdout: prBodyFile, stderr: "", exitCode: 0 };
+        }
         return { stdout: designFile, stderr: "", exitCode: 0 };
       }
       steps.push(`gate: ${command}`);
@@ -180,6 +194,10 @@ function host(
   const buildingCalls: number[] = [];
   const designNoteCalls: number[] = [];
   const publishCalls: { reviewed: boolean; docsFailed: boolean }[] = [];
+  // The prBody argument buildMarkedIssue passed to host.publish, one entry
+  // per call, kept apart from publishCalls so existing assertions on that
+  // shape don't have to change (#335).
+  const publishedPrBodies: (string | undefined)[] = [];
   const startFromMainCalls: { issueNumber: number; branch: string; base: string }[] = [];
   const handBackWorkflowChangeCalls: { issueNumber: number; branch: string; detail: string; change: { head: string; files: string[] } }[] = [];
   const buildHost: BuildHost = {
@@ -226,10 +244,11 @@ function host(
       scanned.push(commit);
       return leaksSecret;
     },
-    publish: async (_issue, publishedBranch, commit, reviewed, docsFailed) => {
+    publish: async (_issue, publishedBranch, commit, reviewed, docsFailed, prBody) => {
       if (publishError) throw new Error(publishError);
       pushed.push({ branch: publishedBranch, commit });
       publishCalls.push({ reviewed, docsFailed });
+      publishedPrBodies.push(prBody);
       steps.push(`publish${reviewed ? "" : " unreviewed"}${docsFailed ? " docs-failed" : ""}`);
       return "https://github.com/o/r/pull/1";
     },
@@ -247,7 +266,7 @@ function host(
   };
   return {
     steps, runs, logs, comments, recordBuildFailureCalls, buildHost, aheadBranches, aheadBases, scanned, scannedBases, pushed, head,
-    order, buildingCalls, designNoteCalls, publishCalls, workCommands, startFromMainCalls, handBackWorkflowChangeCalls,
+    order, buildingCalls, designNoteCalls, publishCalls, publishedPrBodies, workCommands, startFromMainCalls, handBackWorkflowChangeCalls,
     mainChecks,
   };
 }
@@ -1115,6 +1134,68 @@ describe("buildIssue optional roles", () => {
   });
 });
 
+// #335: every PR Sandcastle opens had the same generic body, however the
+// branch changed. The reviewer now writes .sandcastle/work/{n}/pr-body.md
+// with its Why, What changed and Verification sections; buildMarkedIssue
+// reads it from the sandbox (never the host's filesystem, since an agent
+// wrote it) before publishing, and falls back to the generic body, logging
+// why, when the file can't be used as it is.
+describe("buildIssue reading the reviewer's PR body", () => {
+  it("reads .sandcastle/work/{n}/pr-body.md through the sandbox, and passes its content to host.publish", async () => {
+    const { workCommands, publishedPrBodies, buildHost } = host([0, 0], { prBodyFile: validPrBody });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    // Only the sandbox stub, not a host filesystem reader, could have
+    // produced this: there's no other route to the file's content.
+    assert.ok(
+      workCommands.some((entry) => entry.command === `cat .sandcastle/work/${issue.number}/pr-body.md 2>/dev/null`),
+      JSON.stringify(workCommands),
+    );
+    assert.equal(publishedPrBodies.at(-1), validPrBody);
+  });
+
+  for (const [scenario, prBodyFile] of [
+    ["missing or empty", ""],
+    ["missing the Why heading", "## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests."],
+    ["missing the What changed heading", "## Why\n\nBecause.\n\n## Verification\n\nRan the tests."],
+    ["missing the Verification heading", "## Why\n\nBecause.\n\n## What changed\n\nAdded X."],
+    ["too long for a PR body", `${validPrBody}\n\n${"x".repeat(PR_BODY_LIMIT)}`],
+  ] as const) {
+    it(`falls back to the generic PR body, and logs why, when the file is ${scenario}`, async () => {
+      const { logs, publishedPrBodies, buildHost } = host([0, 0], { prBodyFile });
+
+      await buildIssue(issue, branch, base, buildHost);
+
+      assert.equal(publishedPrBodies.at(-1), undefined);
+      assert.ok(logs.some((line) => /PR body/i.test(line)), logs.join("\n"));
+    });
+  }
+
+  it("falls back to the generic PR body, and logs why, when the file holds a token-shaped string or sandbox secret", async () => {
+    const { logs, publishedPrBodies, buildHost } = host([0, 0], {
+      prBodyFile: `${validPrBody}\n\nUses the token ghp_abc.`,
+    });
+    buildHost.publicError = (text) => publicErrorText(String(text), (cleaned) => cleaned.includes("ghp_"));
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(publishedPrBodies.at(-1), undefined);
+    assert.ok(logs.some((line) => /PR body/i.test(line)), logs.join("\n"));
+  });
+
+  it("removes an earlier round's pr-body.md before any role runs, so its description never goes out with this round's change", async () => {
+    const { workCommands, buildHost } = host([0, 0], { prBodyFile: validPrBody });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(
+      workCommands.some((entry) => entry.command === `rm -f .sandcastle/work/${issue.number}/pr-body.md` && entry.rolesRun === 0),
+      JSON.stringify(workCommands),
+    );
+  });
+});
+
 describe("buildIssue marking the issue as building", () => {
   it("marks the issue as building before the first role runs", async () => {
     const { order, buildingCalls, buildHost } = host([0, 0]);
@@ -1300,7 +1381,7 @@ describe("publish", () => {
     const { push, calls } = flaky(2, serverError);
     const { delays, wait } = recordedWaits();
 
-    const prUrl = await publish(issue, branch, "a".repeat(40), true, false, push, () => "https://github.com/o/r/pull/1", wait);
+    const prUrl = await publish(issue, branch, "a".repeat(40), true, false, undefined, push, () => "https://github.com/o/r/pull/1", wait);
 
     assert.equal(prUrl, "https://github.com/o/r/pull/1");
     assert.equal(calls(), 3);
@@ -1318,7 +1399,7 @@ describe("publish", () => {
     };
     const { wait } = recordedWaits();
 
-    const prUrl = await publish(issue, branch, "a".repeat(40), true, false, push, createPullRequest, wait);
+    const prUrl = await publish(issue, branch, "a".repeat(40), true, false, undefined, push, createPullRequest, wait);
 
     assert.equal(prUrl, "https://github.com/o/r/pull/2");
     assert.equal(pushCalls(), 1);
@@ -1330,7 +1411,7 @@ describe("publish", () => {
     const { wait } = recordedWaits();
 
     await assert.rejects(
-      () => publish(issue, branch, "a".repeat(40), true, false, push, neverCreatePr, wait),
+      () => publish(issue, branch, "a".repeat(40), true, false, undefined, push, neverCreatePr, wait),
       (error: unknown) => error instanceof Error && error.message === nonFastForward,
     );
     assert.equal(calls(), 1);
@@ -1340,7 +1421,7 @@ describe("publish", () => {
     const { push, calls } = flaky(Infinity, serverError);
     const { wait } = recordedWaits();
 
-    await assert.rejects(() => publish(issue, branch, "a".repeat(40), true, false, push, neverCreatePr, wait));
+    await assert.rejects(() => publish(issue, branch, "a".repeat(40), true, false, undefined, push, neverCreatePr, wait));
     assert.equal(calls(), PUBLISH_RETRY_ATTEMPTS);
   });
 
@@ -1353,7 +1434,7 @@ describe("publish", () => {
       return "https://github.com/o/r/pull/1";
     };
 
-    await publish(issue, branch, "a".repeat(40), true, true, () => {}, createPullRequest, async () => {});
+    await publish(issue, branch, "a".repeat(40), true, true, undefined, () => {}, createPullRequest, async () => {});
 
     assert.match(body, /documentation step failed/i);
   });
@@ -1365,7 +1446,7 @@ describe("publish", () => {
       return "https://github.com/o/r/pull/1";
     };
 
-    await publish(issue, branch, "a".repeat(40), true, false, () => {}, createPullRequest, async () => {});
+    await publish(issue, branch, "a".repeat(40), true, false, undefined, () => {}, createPullRequest, async () => {});
 
     assert.doesNotMatch(body, /documentation/i);
   });
@@ -1380,9 +1461,56 @@ describe("publish", () => {
       return "https://github.com/o/r/pull/1";
     };
 
-    await publish(issue, branch, "a".repeat(40), true, false, () => {}, createPullRequest, async () => {});
+    await publish(issue, branch, "a".repeat(40), true, false, undefined, () => {}, createPullRequest, async () => {});
 
     assert.ok(body.includes(PR_MARKER), body);
+  });
+
+  // #335: every PR Sandcastle opens had the same generic body. The reviewer
+  // now writes a pr-body.md with Why, What changed and Verification
+  // sections, read and validated before publish() is called, so a valid
+  // `prBody` replaces the generic note entirely.
+  const prBody = "## Why\n\nThe old body carried no account of the change.\n\n## What changed\n\n" +
+    "Reads pr-body.md and uses it as the PR body.\n\n## Verification\n\nAdded tests in build.test.mts; ran `pnpm run check:sandcastle`.";
+
+  async function publishedBody(reviewed: boolean, docsFailed: boolean, body: string | undefined): Promise<string> {
+    let captured = "";
+    const createPullRequest = (_branch: string, _title: string, prText: string): string => {
+      captured = prText;
+      return "https://github.com/o/r/pull/1";
+    };
+    await publish(issue, branch, "a".repeat(40), reviewed, docsFailed, body, () => {}, createPullRequest, async () => {});
+    return captured;
+  }
+
+  it("publishes the marker, Closes #n, then the file's Why, What changed and Verification sections when a valid PR body is given", async () => {
+    const body = await publishedBody(true, false, prBody);
+
+    assert.equal(body, `${PR_MARKER}\nCloses #${issue.number}\n\n${prBody}`);
+  });
+
+  it("places the review-failed warning after the reviewer's sections when the review failed and a PR body is given", async () => {
+    const body = await publishedBody(false, false, prBody);
+
+    assert.ok(body.startsWith(`${PR_MARKER}\nCloses #${issue.number}\n\n${prBody}`), body);
+    assert.match(body, /review step failed/i);
+    assert.ok(body.indexOf(prBody) < body.indexOf("review step failed"), "the warning must come after the sections");
+  });
+
+  it("places the documentation-step-failed warning after the reviewer's sections when docsFailed is true and a PR body is given", async () => {
+    const body = await publishedBody(true, true, prBody);
+
+    assert.ok(body.startsWith(`${PR_MARKER}\nCloses #${issue.number}\n\n${prBody}`), body);
+    assert.match(body, /documentation step failed/i);
+    assert.ok(body.indexOf(prBody) < body.indexOf("documentation step failed"), "the warning must come after the sections");
+  });
+
+  it("places both warnings after the reviewer's sections when both the review and the documentation step failed", async () => {
+    const body = await publishedBody(false, true, prBody);
+
+    const sectionsEnd = body.indexOf(prBody) + prBody.length;
+    assert.ok(/review step failed/i.test(body.slice(sectionsEnd)), body);
+    assert.ok(/documentation step failed/i.test(body.slice(sectionsEnd)), body);
   });
 });
 
