@@ -1,5 +1,6 @@
 @using Domain.Constants
 @using UI.Components.Features.Authentication
+@using UI.Components.Features.Palettes
 @using UI.Components.Features.Themes
 
 <header
@@ -22,6 +23,7 @@
 			@Links(DesktopLinkClass)
 			<LoginDisplay/>
 			<ThemeControl/>
+			<PaletteMenu/>
 		</nav>
 
 		<details class="group ml-auto md:hidden">
@@ -35,6 +37,7 @@
 				<LoginDisplay/>
 				<div class="flex flex-col gap-3 border-t border-slate-200 px-3 pt-3 dark:border-slate-800">
 					<ThemeControl Mobile="true"/>
+					<PaletteMenu Mobile="true"/>
 				</div>
 			</div>
 		</details>

@@ -35,12 +35,17 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
 scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
 Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, an Admin page only an **Admin** can
-open, the light/dark **Theme**, and their tests.
+open, the light/dark **Theme**, the accent-color **Palette**, and their tests.
 
 The **Theme** is chosen from a Light, Dark and System group in the nav, on desktop and in the mobile menu. Each button
 posts to `/theme`, which stores the choice in a `theme` cookie and returns to the same page, so it works without
 JavaScript. The server reads the cookie as it renders and writes `data-theme` on `<html>`, so the first paint already
 uses the chosen Theme. System, the default, deletes the cookie and follows the OS preference.
+
+The **Palette** is chosen from a menu of 17 Tailwind hues, from Red to Rose, opened from a swatch button in the nav on desktop and shown
+as a Palette section in the mobile menu. Each tile posts to `/palette`, which stores the hue in a `palette` cookie and returns to the
+same page, again without JavaScript. The server writes `data-palette` on `<html>`, and a CSS rule for each hue swaps the accent color.
+Blue, the default, renders no attribute.
 
 ## Releases
 
@@ -207,12 +212,6 @@ CLAUDE.md, .claude/              -- Claude Code instructions, rules and skills
 .github/scripts/                 -- Release blog post generator, backfill and pytest tests
 .github/copilot-instructions.md  -- Copilot PR review checklist, generated from the code-review skill
 ```
-
-## Roadmap
-
-All of the following are *planned* and don't exist yet:
-
-- *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
 
 ## Contributing
 
