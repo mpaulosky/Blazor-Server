@@ -37,7 +37,15 @@ public class NavMenuTests : BunitContext
 		INode[] content =
 			[.. brand.ChildNodes.Where(node => node is IElement || !string.IsNullOrWhiteSpace(node.TextContent))];
 		content.Should().HaveCount(2);
-		content[0].Should().Be(letterTile);
+
+		// AngleSharp's INode declares a structural `bool Equals(INode)` rather than overriding
+		// IEquatable<INode>, so FluentAssertions' Be() (which dispatches through
+		// EqualityComparer<T>.Default) can't reach it and falls back to reference equality between
+		// bUnit's wrapper and the raw node - always false even for the same tile. Assert the tile's
+		// own attributes instead of comparing node identity.
+		IElement firstChild = content[0].Should().BeAssignableTo<IElement>().Subject;
+		firstChild.GetAttribute("aria-hidden").Should().Be("true");
+		firstChild.TextContent.Trim().Should().Be(ApplicationConstants.AppName[..1]);
 		content[1].TextContent.Trim().Should().Be(ApplicationConstants.AppName);
 	}
 
