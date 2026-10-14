@@ -7,9 +7,9 @@
 // Project Name :  UI.Tests.Unit
 // =============================================
 
-using UI.Components.Features.Authentication;
+using UI.Security;
 
-namespace UI.Tests.Unit.Components.Features.Authentication;
+namespace UI.Tests.Unit.Security;
 
 public class LocalReturnUrlTests
 {
@@ -56,7 +56,7 @@ public class LocalReturnUrlTests
 		// Arrange
 
 		// Act
-		string result = LocalReturnUrl.OrRoot("/caf\u00e9?q=\u00fc");
+		string result = LocalReturnUrl.OrRoot("/café?q=ü");
 
 		// Assert
 		result.Should().Be("/caf%C3%A9?q=%C3%BC");
