@@ -19,6 +19,13 @@ namespace UI.Tests.Unit.Components.Pages;
 
 public class ErrorTests : BunitContext
 {
+	private readonly IHostEnvironment _environment = Substitute.For<IHostEnvironment>();
+
+	public ErrorTests()
+	{
+		Services.AddSingleton(_environment);
+	}
+
 	[Fact]
 	public void Render_ShowsStatusCodeEyebrow()
 	{
@@ -100,9 +107,7 @@ public class ErrorTests : BunitContext
 	public void Render_InDevelopment_ShowsDevelopmentModeCard()
 	{
 		// Arrange
-		IHostEnvironment environment = Substitute.For<IHostEnvironment>();
-		environment.EnvironmentName.Returns(Environments.Development);
-		Services.AddSingleton(environment);
+		_environment.EnvironmentName.Returns(Environments.Development);
 
 		// Act
 		IRenderedComponent<Error> cut = Render<Error>();
@@ -115,9 +120,7 @@ public class ErrorTests : BunitContext
 	public void Render_InProduction_DoesNotShowDevelopmentModeCard()
 	{
 		// Arrange
-		IHostEnvironment environment = Substitute.For<IHostEnvironment>();
-		environment.EnvironmentName.Returns(Environments.Production);
-		Services.AddSingleton(environment);
+		_environment.EnvironmentName.Returns(Environments.Production);
 
 		// Act
 		IRenderedComponent<Error> cut = Render<Error>();

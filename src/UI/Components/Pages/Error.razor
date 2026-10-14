@@ -1,7 +1,7 @@
 @page "/Error"
 @using System.Diagnostics
-@using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Hosting
+@inject IHostEnvironment HostEnvironment
 
 <PageTitle>Error</PageTitle>
 
@@ -18,7 +18,7 @@
 	}
 </Card>
 
-@if (IsDevelopment)
+@if (HostEnvironment.IsDevelopment())
 {
 	<Card>
 		<Title>Development Mode</Title>
@@ -41,15 +41,11 @@
 @code {
 	[CascadingParameter] private HttpContext? HttpContext { get; set; }
 
-	[Inject] private IServiceProvider ServiceProvider { get; set; } = default!;
-
 	private string? RequestId { get; set; }
 	private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
-	private bool IsDevelopment { get; set; }
 
 	protected override void OnInitialized()
 	{
 		RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
-		IsDevelopment = ServiceProvider.GetService<IHostEnvironment>()?.IsDevelopment() ?? false;
 	}
 }
