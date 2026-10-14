@@ -34,6 +34,9 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 	[GeneratedRegex("<body([^>]*)>")]
 	private static partial Regex BodyTagPattern();
 
+	[GeneratedRegex(@"\s+")]
+	private static partial Regex WhitespacePattern();
+
 	private async Task<Uri> GetStylesheetUriAsync()
 	{
 		HttpResponseMessage homeResponse =
@@ -120,8 +123,12 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 		string css = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
 		// Assert
-		css.Should().Contain(".dark\\:bg-slate-950:where([data-theme=dark]");
-		css.Replace(" ", string.Empty, StringComparison.Ordinal).Should().Contain("@media(prefers-color-scheme:dark)");
+		// Only Release builds pass --minify, so whitespace is stripped before matching. Both rules are matched whole:
+		// an explicit data-theme=dark turns dark on, and the OS preference applies only without data-theme=light.
+		string compactCss = WhitespacePattern().Replace(css, string.Empty);
+		compactCss.Should().Contain(".dark\\:bg-slate-950:where([data-theme=dark],[data-theme=dark]*)");
+		compactCss.Should().Contain(
+			"@media(prefers-color-scheme:dark){.dark\\:bg-slate-950:where(:not([data-theme=light],[data-theme=light]*))");
 	}
 
 	[Fact]

@@ -66,6 +66,7 @@ public class AppTailwindCssTests
 		css.Should().Contain("@custom-variant dark");
 		css.Should().Contain("[data-theme=dark]");
 		css.Should().Contain("@media (prefers-color-scheme: dark)");
+		css.Should().Contain(":not([data-theme=light], [data-theme=light] *)");
 	}
 
 	[Fact]
