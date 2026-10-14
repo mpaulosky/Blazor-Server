@@ -138,6 +138,7 @@ import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import {
   handBackReport,
   humanThreadReport,
+  intakeStopExitCode,
   intakeStopReport,
   outcomeReport,
   renderSummary,
@@ -451,6 +452,14 @@ try {
   });
   writeRunReport(summary, handBacks);
   console.log(`\nRun report: ${REPORT_DIR}/summary.md`);
+
+  // Unlike a hand-back, an intake stop means the host couldn't run a role at
+  // all, so the run ends red once the report is written (#320). A crash still
+  // exits 1 on its uncaught error, whatever this sets.
+  for (const { reason, firstError } of intakeStopReport.items()) {
+    console.error(`\n✗ Intake stopped: ${reason}. First error: ${firstError}`);
+  }
+  process.exitCode = intakeStopExitCode(intakeStopReport.items());
 }
 
 console.log("\nAll done.");

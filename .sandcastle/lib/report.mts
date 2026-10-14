@@ -183,7 +183,7 @@ export const intakeStopReport = new IntakeStopReport();
 // issues were left silently unjudged (#320), so the run must end red even
 // when nothing else failed, a hand-back included.
 export function intakeStopExitCode(stops: readonly IntakeStopEntry[]): number {
-  throw new Error("Not implemented");
+  return stops.length > 0 ? 1 : 0;
 }
 
 // How the run ended, so the summary tells a hand-back from a crash
@@ -207,8 +207,8 @@ export type SummaryInput = {
 // $GITHUB_STEP_SUMMARY. See the design note at .sandcastle/work/81/design.md
 // for the exact shape: queue and ending sentence, a table of every touched
 // issue and PR with its outcome (plus one row per hand-back), the hand-backs
-// themselves with links, the PRs waiting on a person, and a token-usage table
-// by role with a total row.
+// themselves with links, the PRs waiting on a person, any round where intake
+// stopped (#320), and a token-usage table by role with a total row.
 export function renderSummary(input: SummaryInput): string {
   const { repo } = input;
   const link = (target: ReportTarget): string =>
@@ -230,6 +230,7 @@ export function renderSummary(input: SummaryInput): string {
     "",
     ...waitingLines(input.waitingPrs, input.humanThreads, link),
     "",
+    ...intakeStopLines(input.stops, link),
     "### Token usage by role",
     "",
     ...usageLines(input.usage),
@@ -304,6 +305,21 @@ function waitingLines(
         .map((thread) => `  - [thread by ${cell(thread.author ?? "a deleted account")}](${thread.url})`),
     ];
   });
+}
+
+// Only a run whose intake stopped gets the section, since it's the reason the
+// run ends red (#320); a run with no stop has nothing to say here.
+function intakeStopLines(stops: readonly IntakeStopEntry[], link: (target: ReportTarget) => string): string[] {
+  if (stops.length === 0) return [];
+  return [
+    "### Intake stops",
+    "",
+    ...stops.flatMap(({ reason, unjudged, firstError }) => [
+      `- ${cell(reason)}. First error: ${cell(firstError)}`,
+      `  - Left unjudged: ${unjudged.length > 0 ? unjudged.map((number) => link({ kind: "issue", number })).join(", ") : "none"}`,
+    ]),
+    "",
+  ];
 }
 
 function usageLines(usage: ReadonlyMap<string, IterationUsage>): string[] {
