@@ -105,4 +105,28 @@ public class UiTests
 			"Card, PageHeader, StatTile, Badge and Button are expected in UI.Components.Shared; an empty result " +
 			"would let a typo in the namespace above pass this rule vacuously");
 	}
+
+	[Fact]
+	public void UiAssembly_Security_DependsOnNoFeatureSlice()
+	{
+		// Arrange
+		Assembly uiAssembly = typeof(App).Assembly;
+		const string securityNamespace = "UI.Security";
+		const string featuresNamespace = "UI.Components.Features";
+
+		// Act
+		IReadOnlyList<string> featureDependencies =
+			SharedDependencyRule.FindFeatureDependencies(uiAssembly, securityNamespace, featuresNamespace);
+		IEnumerable<Type> securityTypes = Types.InAssembly(uiAssembly)
+			.That()
+			.ResideInNamespace(securityNamespace)
+			.GetTypes();
+
+		// Assert
+		featureDependencies.Should().BeEmpty(
+			"UI.Security holds cross-cutting code only, and never depends on a feature slice (ADR 0007)");
+		securityTypes.Should().NotBeEmpty(
+			"LocalReturnUrl is expected in UI.Security; an empty result would let a typo in the namespace above " +
+			"pass this rule vacuously");
+	}
 }

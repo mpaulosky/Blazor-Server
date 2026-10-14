@@ -9,11 +9,11 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace UI.Components.Features.Authentication;
+namespace UI.Security;
 
 /// <summary>
-///   Resolves a visitor-supplied <c>returnUrl</c> to a path safe to redirect to, so the login endpoint can't be
-///   made to redirect somewhere other than this app.
+///   Resolves a visitor-supplied <c>returnUrl</c> to a path safe to redirect to, so an endpoint can't be made to
+///   redirect somewhere other than this app.
 /// </summary>
 public static class LocalReturnUrl
 {

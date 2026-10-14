@@ -7,9 +7,9 @@
 // Project Name :  UI.Tests.Unit
 // =============================================
 
-using UI.Components.Features.Authentication;
+using UI.Security;
 
-namespace UI.Tests.Unit.Components.Features.Authentication;
+namespace UI.Tests.Unit.Security;
 
 public class LocalReturnUrlTests
 {
