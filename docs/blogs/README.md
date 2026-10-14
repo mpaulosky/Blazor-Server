@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [fix(ui): Send a stale Log out home instead of a 400](2026-10-14-pr-345-fix-ui-send-a-stale-log-out-home-instead-of-a-400.md) | release,automation |
 | 2026-10-14 | [feat(aspire): Serve WebApp over HTTPS from the AppHost's https profile](2026-10-14-pr-343-feat-aspire-serve-webapp-over-https-from-the-apphost-s-https-profile.md) | release,automation |
 | 2026-10-14 | [feat(ui): Turn Home into the Template showcase](2026-10-14-pr-341-feat-ui-turn-home-into-the-template-showcase.md) | release,automation |
 | 2026-10-14 | [feat(sandcastle): Write PR descriptions with Why, What changed and Verification](2026-10-14-pr-339-feat-sandcastle-write-pr-descriptions-with-why-what-changed-and-verification.md) | release,automation |
