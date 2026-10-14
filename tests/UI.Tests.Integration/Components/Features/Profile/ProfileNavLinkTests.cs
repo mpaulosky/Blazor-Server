@@ -38,8 +38,9 @@ public class ProfileNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().Contain("href=\"profile\"");
-		html.Should().Contain("Profile");
+		string nav = NavMarkup(html);
+		nav.Should().Contain("href=\"profile\"");
+		nav.Should().Contain("Profile");
 	}
 
 	[Fact]
@@ -55,10 +56,15 @@ public class ProfileNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
+		NavMarkup(html).Should().NotContain("href=\"profile\"");
+	}
 
-		// Home's hero now links to "profile" for every visitor (issue #315's Log in button), so the href alone no
-		// longer tells the nav's Profile link apart from the hero's. The nav's link is the only place that renders
-		// the capitalized word "Profile" (the hero says "Log in" for a Visitor), so that is what distinguishes them.
-		html.Should().NotContain("Profile");
+	// Home's hero links to "profile" for a Visitor and a User alike (its Log in and Your profile buttons), so these
+	// tests look only at the markup before <main>, where the layout renders the nav.
+	private static string NavMarkup(string html)
+	{
+		int mainStart = html.IndexOf("<main", StringComparison.Ordinal);
+
+		return mainStart >= 0 ? html[..mainStart] : throw new InvalidOperationException("No <main> element.");
 	}
 }
