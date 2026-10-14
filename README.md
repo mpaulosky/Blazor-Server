@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.148](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.148) | 2026-10-14 | feat(ui): Restyle the page shell, nav, footer and error bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-337-feat-ui-restyle-the-page-shell-nav-footer-and-error-bar.md) |
 | [v0.0.147](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.147) | 2026-10-14 | feat(ui): Restyle the Profile and Admin pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-331-feat-ui-restyle-the-profile-and-admin-pages.md) |
 | [v0.0.146](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.146) | 2026-10-14 | feat(ui): Restyle the Access Denied, Not Found and Error pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-333-feat-ui-restyle-the-access-denied-not-found-and-error-pages.md) |
 | [v0.0.145](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.145) | 2026-10-14 | feat(ui): Restyle the reconnect modal | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-330-feat-ui-restyle-the-reconnect-modal.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.141](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.141) | 2026-10-14 | fix(sandcastle): End a run red when intake stops for repeated failures | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-321-fix-sandcastle-end-a-run-red-when-intake-stops-for-repeated-failures.md) |
 | [v0.0.140](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.140) | 2026-10-14 | ci(sandcastle): Build the sandbox image before running Sandcastle | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-319-ci-sandcastle-build-the-sandbox-image-before-running-sandcastle.md) |
 | [v0.0.139](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.139) | 2026-10-14 | docs(ui): Add the UI restyle spec and its coding-standard lines | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-310-docs-ui-add-the-ui-restyle-spec-and-its-coding-standard-lines.md) |
-| [v0.0.138](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.138) | 2026-10-13 | ci(sandcastle): Trigger Sandcastle automatically from GitHub Actions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-301-ci-sandcastle-trigger-sandcastle-automatically-from-github-actions.md) |
 
 <!-- RELEASES_END -->
 
