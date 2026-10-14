@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.160](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.160) | 2026-10-14 | feat(ui): Add the Palettes slice, its cookie, data-palette and the hue rules | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-376-feat-ui-add-the-palettes-slice-its-cookie-data-palette-and-the-hue-rules.md) |
 | [v0.0.159](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.159) | 2026-10-14 | fix(sandcastle): Unshallow the checkout so the secret scan reads only a PR's commits | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-373-fix-sandcastle-unshallow-the-checkout-so-the-secret-scan-reads-only-a-pr-s-commits.md) |
 | [v0.0.158](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.158) | 2026-10-14 | feat(ui): Add the Themes slice, its cookie and data-theme | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-372-feat-ui-add-the-themes-slice-its-cookie-and-data-theme.md) |
 | [v0.0.157](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.157) | 2026-10-14 | refactor(ui): Move LocalReturnUrl to a cross-cutting UI.Security | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-370-refactor-ui-move-localreturnurl-to-a-cross-cutting-ui-security.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.153](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.153) | 2026-10-14 | feat(ui): Generate build-time BuildInfo and the Release label function | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) |
 | [v0.0.152](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.152) | 2026-10-14 | fix(ui): Send a stale Log out home instead of a 400 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-345-fix-ui-send-a-stale-log-out-home-instead-of-a-400.md) |
 | [v0.0.151](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.151) | 2026-10-14 | feat(aspire): Serve WebApp over HTTPS from the AppHost's https profile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-343-feat-aspire-serve-webapp-over-https-from-the-apphost-s-https-profile.md) |
-| [v0.0.150](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.150) | 2026-10-14 | feat(ui): Turn Home into the Template showcase | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-341-feat-ui-turn-home-into-the-template-showcase.md) |
 
 <!-- RELEASES_END -->
 
