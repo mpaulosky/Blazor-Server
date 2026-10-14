@@ -1,0 +1,90 @@
+@* ============================================
+   Copyright (c) 2026. All rights reserved.
+   File Name :     ThemeControl.razor
+   Company :       mpaulosky
+   Author :        Teqslamer
+   Solution Name : Blazor-Server
+   Project Name :  UI
+   ============================================= *@
+
+@using Domain.Constants
+
+@inject NavigationManager Navigation
+
+<form
+	method="post"
+	action="@(ThemeEndpoints.Path[1..])"
+	data-enhance
+	role="group"
+	aria-label="Theme"
+	class="@FormClass">
+	<AntiforgeryToken/>
+	<input type="hidden" name="returnUrl" value="@ReturnUrl"/>
+	@Button(Theme.Light, "light", "Light", SunIcon)
+	@Button(Theme.Dark, "dark", "Dark", MoonIcon)
+	@Button(Theme.System, "system", "System", MonitorIcon)
+</form>
+
+@code {
+	/// <summary>
+	///   Lays the control out for the <c>&lt;details&gt;</c> mobile menu instead of the desktop nav.
+	/// </summary>
+	[Parameter]
+	public bool Mobile { get; set; }
+
+	[CascadingParameter]
+	private HttpContext? HttpContext { get; set; }
+
+	private const string DesktopFormClass = "flex rounded-full border border-slate-200 p-0.5 dark:border-slate-700";
+
+	private const string MobileFormClass = "grid grid-cols-3 rounded-full border border-slate-200 p-0.5 dark:border-slate-700";
+
+	private const string ButtonClass =
+		"flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500";
+
+	private const string CurrentButtonClass = "bg-accent-600 text-white";
+
+	private const string OtherButtonClass = "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800";
+
+	private string FormClass => Mobile ? MobileFormClass : DesktopFormClass;
+
+	private string ReturnUrl => new Uri(Navigation.Uri).PathAndQuery;
+
+	private Theme CurrentTheme =>
+		Theme.FromCookie(HttpContext?.Request.Cookies[ApplicationConstants.ThemeCookie]);
+
+	private RenderFragment Button(Theme theme, string value, string name, RenderFragment icon)
+	{
+		bool isCurrent = (theme == CurrentTheme);
+
+		// aria-pressed takes the strings "true" and "false": Blazor would render a bool as a bare attribute, or drop it.
+		return
+			@<button
+				type="submit"
+				name="theme"
+				value="@value"
+				aria-pressed="@(isCurrent ? "true" : "false")"
+				title="@(Mobile ? null : name)"
+				class="@ButtonClass @(isCurrent ? CurrentButtonClass : OtherButtonClass)">
+				@icon
+				<span class="@(Mobile ? null : "sr-only")">@name</span>
+			</button>;
+	}
+
+	private static RenderFragment SunIcon =>
+		@<svg aria-hidden="true" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<circle cx="12" cy="12" r="4"/>
+			<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+		</svg>;
+
+	private static RenderFragment MoonIcon =>
+		@<svg aria-hidden="true" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>
+		</svg>;
+
+	private static RenderFragment MonitorIcon =>
+		@<svg aria-hidden="true" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<rect x="2" y="4" width="20" height="14" rx="2"/>
+			<path d="M8 20h8M12 16v4"/>
+		</svg>;
+}

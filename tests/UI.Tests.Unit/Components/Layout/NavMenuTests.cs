@@ -17,6 +17,8 @@ namespace UI.Tests.Unit.Components.Layout;
 
 public class NavMenuTests : BunitContext
 {
+	private const string ThemeFormSelector = "form[role='group'][aria-label='Theme']";
+
 	[Fact]
 	public void Render_BrandLink_IsBaseRelativeAndShowsAriaHiddenLetterTileBeforeAppName()
 	{
@@ -142,6 +144,38 @@ public class NavMenuTests : BunitContext
 		// is active without an explicit navigation.
 		IElement homeLink = cut.Find("nav").QuerySelectorAll("a").Single(link => link.TextContent.Trim() == "Home");
 		homeLink.ClassList.Should().Contain(["bg-accent-50", "text-accent-700"]);
+	}
+
+	[Fact]
+	public void Render_DesktopNav_RendersThemeControlNotInMobileLayout()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		// The form is found in the rendered nav rather than through FindComponents<ThemeControl>(), because bUnit parses
+		// each found component's markup into a document of its own, which no element of the nav ever contains.
+		IElement nav = cut.Find("nav");
+		IElement themeForm = nav.QuerySelectorAll(ThemeFormSelector).Should().ContainSingle().Subject;
+		themeForm.ClassList.Should().NotContain("grid-cols-3");
+	}
+
+	[Fact]
+	public void Render_MobileMenu_RendersThemeControlInMobileLayout()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		IElement details = cut.Find("details");
+		IElement themeForm = details.QuerySelectorAll(ThemeFormSelector).Should().ContainSingle().Subject;
+		themeForm.ClassList.Should().Contain("grid-cols-3");
 	}
 
 	private static void AssertLink(IElement container, string text, string expectedHref)
