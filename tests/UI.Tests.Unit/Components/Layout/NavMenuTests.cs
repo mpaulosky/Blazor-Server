@@ -30,7 +30,7 @@ public class NavMenuTests : BunitContext
 		IElement letterTile = cut.Find("span[aria-hidden='true']");
 		letterTile.TextContent.Trim().Should().Be(ApplicationConstants.AppName[..1]);
 
-		IElement brand = (IElement)letterTile.ParentElement!;
+		IElement brand = letterTile.ParentElement.Should().BeAssignableTo<IElement>().Subject;
 		brand.TagName.Should().Be("A");
 		brand.GetAttribute("href").Should().BeEmpty();
 
@@ -38,19 +38,18 @@ public class NavMenuTests : BunitContext
 			[.. brand.ChildNodes.Where(node => node is IElement || !string.IsNullOrWhiteSpace(node.TextContent))];
 		content.Should().HaveCount(2);
 
-		// AngleSharp's INode declares a structural `bool Equals(INode)` rather than overriding
-		// IEquatable<INode>, so FluentAssertions' Be() (which dispatches through
-		// EqualityComparer<T>.Default) can't reach it and falls back to reference equality between
-		// bUnit's wrapper and the raw node - always false even for the same tile. Assert the tile's
-		// own attributes instead of comparing node identity.
-		IElement firstChild = content[0].Should().BeAssignableTo<IElement>().Subject;
-		firstChild.GetAttribute("aria-hidden").Should().Be("true");
-		firstChild.TextContent.Trim().Should().Be(ApplicationConstants.AppName[..1]);
+		// cut.Find returns bUnit's wrapper around the tile while ChildNodes holds the raw node, so the two never compare
+		// equal; the first child is checked by the tile's own attribute and text instead.
+		content[0].Should().BeAssignableTo<IElement>()
+			.Which.GetAttribute("aria-hidden").Should().Be("true");
+		content[0].TextContent.Trim().Should().Be(ApplicationConstants.AppName[..1]);
 		content[1].TextContent.Trim().Should().Be(ApplicationConstants.AppName);
 	}
 
-	[Fact]
-	public void Render_Visitor_DesktopNavAndMobileMenuEachListOnlyHomeBaseRelative()
+	[Theory]
+	[InlineData("nav")]
+	[InlineData("details")]
+	public void Render_Visitor_MenuListsOnlyHomeBaseRelative(string menuSelector)
 	{
 		// Arrange
 		AddAuthorization().SetNotAuthorized();
@@ -59,16 +58,16 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
-		AssertLink(cut.Find("nav"), "Home", "");
-		AssertLinkAbsent(cut.Find("nav"), "Profile");
-		AssertLinkAbsent(cut.Find("nav"), "Admin");
-		AssertLink(cut.Find("details"), "Home", "");
-		AssertLinkAbsent(cut.Find("details"), "Profile");
-		AssertLinkAbsent(cut.Find("details"), "Admin");
+		IElement menu = cut.Find(menuSelector);
+		AssertLink(menu, "Home", "");
+		AssertLinkAbsent(menu, "Profile");
+		AssertLinkAbsent(menu, "Admin");
 	}
 
-	[Fact]
-	public void Render_User_DesktopNavAndMobileMenuEachAddProfileBaseRelativeButNotAdmin()
+	[Theory]
+	[InlineData("nav")]
+	[InlineData("details")]
+	public void Render_User_MenuAddsProfileBaseRelativeButNotAdmin(string menuSelector)
 	{
 		// Arrange
 		AddAuthorization().SetAuthorized("test-user");
@@ -77,16 +76,16 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
-		AssertLink(cut.Find("nav"), "Home", "");
-		AssertLink(cut.Find("nav"), "Profile", "profile");
-		AssertLinkAbsent(cut.Find("nav"), "Admin");
-		AssertLink(cut.Find("details"), "Home", "");
-		AssertLink(cut.Find("details"), "Profile", "profile");
-		AssertLinkAbsent(cut.Find("details"), "Admin");
+		IElement menu = cut.Find(menuSelector);
+		AssertLink(menu, "Home", "");
+		AssertLink(menu, "Profile", "profile");
+		AssertLinkAbsent(menu, "Admin");
 	}
 
-	[Fact]
-	public void Render_Admin_DesktopNavAndMobileMenuEachAddAdminBaseRelative()
+	[Theory]
+	[InlineData("nav")]
+	[InlineData("details")]
+	public void Render_Admin_MenuAddsAdminBaseRelative(string menuSelector)
 	{
 		// Arrange
 		AddAuthorization().SetAuthorized("test-user").SetPolicies(ApplicationConstants.AdminPolicy);
@@ -95,12 +94,10 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
-		AssertLink(cut.Find("nav"), "Home", "");
-		AssertLink(cut.Find("nav"), "Profile", "profile");
-		AssertLink(cut.Find("nav"), "Admin", "admin");
-		AssertLink(cut.Find("details"), "Home", "");
-		AssertLink(cut.Find("details"), "Profile", "profile");
-		AssertLink(cut.Find("details"), "Admin", "admin");
+		IElement menu = cut.Find(menuSelector);
+		AssertLink(menu, "Home", "");
+		AssertLink(menu, "Profile", "profile");
+		AssertLink(menu, "Admin", "admin");
 	}
 
 	[Fact]
