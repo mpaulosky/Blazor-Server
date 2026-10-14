@@ -14,6 +14,7 @@ using ServiceDefaults;
 using UI.Components;
 using UI.Components.Features.Authentication;
 using UI.Components.Features.Palettes;
+using UI.Components.Features.Themes;
 using UI.Components.Layout;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -33,6 +34,7 @@ builder.Services.AddSingleton(new BuildInfo(BuildInfoConstants.Release, BuildInf
 
 builder.Services.AddAuthenticationFeature(builder.Configuration);
 builder.Services.AddPaletteFeature();
+builder.Services.AddThemeFeature();
 builder.Services.AddCascadingAuthenticationState();
 
 WebApplication app = builder.Build();
@@ -70,6 +72,7 @@ app.MapDefaultEndpoints();
 app.MapStaticAssets();
 app.MapAuthenticationEndpoints();
 app.MapPaletteEndpoints();
+app.MapThemeEndpoints();
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();
 

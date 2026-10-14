@@ -1,7 +1,8 @@
 @using Domain.Constants
 @using UI.Components.Features.Palettes
+@using UI.Components.Features.Themes
 <!DOCTYPE html>
-<html lang="en" class="scheme-light dark:scheme-dark" data-palette="@DataPalette">
+<html lang="en" class="scheme-light dark:scheme-dark" data-theme="@DataTheme" data-palette="@DataPalette">
 
 <head>
 	<meta charset="utf-8"/>
@@ -24,11 +25,17 @@
 </html>
 
 @code {
+	[CascadingParameter] private HttpContext? HttpContext { get; set; }
 
-	[CascadingParameter]
-	private HttpContext? HttpContext { get; set; }
+	// Null for System, and for the default Palette, so Blazor omits the attribute instead of rendering it empty.
+	private string? DataTheme { get; set; }
 
-	private string? DataPalette =>
-		Palette.FromCookie(HttpContext?.Request.Cookies[ApplicationConstants.PaletteCookie]).ToDataPalette();
+	private string? DataPalette { get; set; }
 
+	protected override void OnInitialized()
+	{
+		IRequestCookieCollection? cookies = HttpContext?.Request.Cookies;
+		DataTheme = Theme.FromCookie(cookies?[ApplicationConstants.ThemeCookie]).ToDataTheme();
+		DataPalette = Palette.FromCookie(cookies?[ApplicationConstants.PaletteCookie]).ToDataPalette();
+	}
 }
