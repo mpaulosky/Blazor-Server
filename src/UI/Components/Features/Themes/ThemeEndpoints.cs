@@ -60,7 +60,12 @@ public static class ThemeEndpoints
 		IAntiforgery antiforgery, SetThemeHandler handler)
 	{
 		bool tokenIsValid = await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false);
-		IFormCollection form = await context.Request.ReadFormAsync(context.RequestAborted).ConfigureAwait(false);
+
+		// ReadFormAsync throws on a body that isn't a form, and only a crafted post sends one; it then has no valid token
+		// either, so an empty form sends it home like any other failed token instead of to the error page.
+		IFormCollection form = context.Request.HasFormContentType
+			? await context.Request.ReadFormAsync(context.RequestAborted).ConfigureAwait(false)
+			: FormCollection.Empty;
 		string returnUrl = LocalReturnUrl.OrRoot(form["returnUrl"]);
 
 		if (!tokenIsValid)

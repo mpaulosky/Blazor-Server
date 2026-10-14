@@ -111,7 +111,7 @@ public partial class ThemeEndpointTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-		response.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+		(response.Content.Headers.ContentType?.MediaType).Should().Be("application/problem+json");
 		using JsonDocument document = JsonDocument.Parse(body);
 		document.RootElement.GetProperty("code").GetString().Should().Be("Theme.Unknown");
 		response.Headers.Contains("Set-Cookie").Should().BeFalse();
@@ -136,7 +136,10 @@ public partial class ThemeEndpointTests : IClassFixture<UiWebApplicationFactory>
 	public async Task PostTheme_InvalidAntiforgeryToken_RedirectsToReturnUrlWithoutSettingCookie()
 	{
 		// Arrange
+		// Scraping first gives the client the antiforgery cookie, so the post fails on the token itself rather than on
+		// a missing cookie, which PostTheme_MissingAntiforgeryToken already covers.
 		using HttpClient client = CreateNonRedirectingClient();
+		_ = await ScrapeAntiforgeryTokenAsync(client);
 
 		// Act
 		HttpResponseMessage response = await PostThemeAsync(client, "not-a-valid-token", "dark", "/profile");
@@ -144,6 +147,25 @@ public partial class ThemeEndpointTests : IClassFixture<UiWebApplicationFactory>
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.Found);
 		response.Headers.Location.Should().Be(new Uri("/profile", UriKind.Relative));
+		response.Headers.Contains("Set-Cookie").Should().BeFalse();
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("application/json")]
+	public async Task PostTheme_NoFormContent_RedirectsToRootWithoutSettingCookie(string? mediaType)
+	{
+		// Arrange
+		using HttpClient client = CreateNonRedirectingClient();
+		using HttpContent? content = mediaType is null ? null : new StringContent("{}", null, mediaType);
+
+		// Act
+		HttpResponseMessage response = await client.PostAsync(new Uri(ThemeEndpoints.Path, UriKind.Relative), content,
+			TestContext.Current.CancellationToken);
+
+		// Assert
+		response.StatusCode.Should().Be(HttpStatusCode.Found);
+		response.Headers.Location.Should().Be(new Uri("/", UriKind.Relative));
 		response.Headers.Contains("Set-Cookie").Should().BeFalse();
 	}
 
