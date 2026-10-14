@@ -230,11 +230,18 @@ A new `Footer.razor` in `Components/Layout/`, rendered after `<main>`. A floatin
 ### Error bar
 
 From [How each page, the Home showcase copy, the reconnect modal and the error bar use the restyle](https://github.com/mpaulosky/Blazor-Server/issues/309).
-`#blazor-error-ui` in `MainLayout.razor` becomes a floating amber bar:
-`fixed inset-x-4 bottom-4 z-50 flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shadow-lg dark:border-amber-500/30 dark:bg-amber-950/80 dark:text-amber-200`.
+`#blazor-error-ui` in `MainLayout.razor` becomes a floating amber bar.
 
-- It keeps `hidden`, `data-nosnippet`, and the `reload` and `dismiss` classes Blazor looks for.
-- **Reload:** a link styled like a Secondary button, in amber::
+- **Root:** `#blazor-error-ui` keeps `hidden` and `data-nosnippet`, and carries the position and colours:
+
+  ```text
+  hidden fixed inset-x-4 bottom-4 z-50 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shadow-lg dark:border-amber-500/30 dark:bg-amber-950/80 dark:text-amber-200
+  ```
+
+- **Row:** an inner `<div class="flex items-center gap-4">` holds the message, Reload and Dismiss. The flex row can't sit on the root: Blazor shows the bar by setting
+  `style.display = 'block'` on it, which overrides both `hidden` and any `flex` class.
+- It keeps the `reload` and `dismiss` classes Blazor looks for, on elements inside the root.
+- **Reload:** a link styled like a Secondary button, in amber:
 
   ```text
   ml-auto rounded-xl border border-amber-300 px-3 py-1 font-semibold hover:bg-amber-100 dark:border-amber-500/40 dark:hover:bg-amber-900/40
@@ -249,8 +256,9 @@ From the same ticket. `ReconnectModal.razor` is fully restyled:
 
 - **Dialog:** a Section-size card (the Card's Section classes on the `<dialog>` itself, since `<dialog>` must stay the root Blazor looks up by id), plus
   `backdrop:bg-slate-950/50` and a centred `max-w-sm` width, in light and dark.
-- **Buttons:** Retry and Resume use `Button` with `Kind="ButtonKind.Primary"`, keeping their ids (`components-reconnect-button`, `components-resume-button`) and their
-  `components-*-visible` classes.
+- **Buttons:** Retry and Resume stay plain `<button>` elements in `ReconnectModal.razor`, with the Primary button's classes written inline, and keep their ids
+  (`components-reconnect-button`, `components-resume-button`) and their `components-*-visible` classes. They don't use the shared `Button`: CSS isolation scopes the
+  visibility rules to elements in `ReconnectModal`'s own markup, so a `<button>` rendered inside `Button` would never be hidden and both would show in every state.
 - **Spinner:** the rejoining animation's rings use `border-accent-500`, and the animation runs only under `motion-safe:`.
 - `ReconnectModal.razor.css` shrinks to what utilities can't express: the visibility rules keyed to the `components-reconnect-*` classes Blazor sets at runtime, and the
   keyframes. It holds no colour, font, spacing or border value.
@@ -286,8 +294,9 @@ A **Template** showcase that a Generated App replaces. The copy stays inline in 
 ### Profile
 
 - **PageHeader:** eyebrow `User`, title `Profile`, lead "The claims Auth0 sent for your sign-in."
-- **"Your claims"**, a Section card holding the table pattern, headed Claim type and Value. Claim types use `font-mono text-xs break-all` and values use `break-words`, so
-  the table doesn't scroll sideways on a phone. The wrapper keeps `overflow-x-auto` as a fallback.
+- **"Your claims"**, a Section card holding the table pattern, headed Claim type and Value. Claim types use `font-mono text-xs break-all` and values use `wrap-anywhere`, so
+  the table doesn't scroll sideways on a phone. `break-words` isn't enough: it doesn't shrink a cell's min-content width, and Auth0 sends long unbroken values (`picture`,
+  `sid`, `sub`). The wrapper keeps `overflow-x-auto` as a fallback.
 
 ### Admin
 
