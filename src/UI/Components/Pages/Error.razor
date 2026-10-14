@@ -1,30 +1,42 @@
 @page "/Error"
 @using System.Diagnostics
+@using Microsoft.Extensions.Hosting
+@inject IHostEnvironment HostEnvironment
 
 <PageTitle>Error</PageTitle>
 
-<h1 class="text-2xl font-bold text-red-600">Error.</h1>
-<h2 class="mt-1 text-lg text-red-600">An error occurred while processing your request.</h2>
+<Card Size="CardSize.Hero">
+	<PageHeader Title="Something went wrong" Lead="Something went wrong on our side.">
+		<Eyebrow>500</Eyebrow>
+		<ChildContent>
+			<Button Href="">Back to home</Button>
+		</ChildContent>
+	</PageHeader>
+	@if (ShowRequestId)
+	{
+		<Badge Class="font-mono">@RequestId</Badge>
+	}
+</Card>
 
-@if (ShowRequestId)
+@if (HostEnvironment.IsDevelopment())
 {
-	<p class="mt-4 text-gray-700">
-		<strong>Request ID:</strong> <code>@RequestId</code>
-	</p>
+	<Card>
+		<Title>Development Mode</Title>
+		<ChildContent>
+			<p class="text-slate-600 dark:text-slate-300">
+				Swapping to <strong>Development</strong> environment will display more detailed information about the error that
+				occurred.
+			</p>
+			<p class="mt-2 text-slate-600 dark:text-slate-300">
+				<strong>The Development environment shouldn't be enabled for deployed applications.</strong>
+				It can result in displaying sensitive information from exceptions to end users.
+				For local debugging, enable the <strong>Development</strong> environment by setting the
+				<strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
+				and restarting the app.
+			</p>
+		</ChildContent>
+	</Card>
 }
-
-<h3 class="mt-6 text-base font-semibold text-gray-900">Development Mode</h3>
-<p class="mt-2 text-gray-700">
-	Swapping to <strong>Development</strong> environment will display more detailed information about the error that
-	occurred.
-</p>
-<p class="mt-2 text-gray-700">
-	<strong>The Development environment shouldn't be enabled for deployed applications.</strong>
-	It can result in displaying sensitive information from exceptions to end users.
-	For local debugging, enable the <strong>Development</strong> environment by setting the
-	<strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
-	and restarting the app.
-</p>
 
 @code {
 	[CascadingParameter] private HttpContext? HttpContext { get; set; }
@@ -32,6 +44,8 @@
 	private string? RequestId { get; set; }
 	private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
 
-	protected override void OnInitialized() =>
+	protected override void OnInitialized()
+	{
 		RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+	}
 }

@@ -24,7 +24,8 @@ public class NavigationTests(WebAppFixture fixture)
 		await page.GotoAsync(new Uri(fixture.BaseAddress, "/unknown-route").ToString());
 
 		// Act
-		await page.GetByRole(AriaRole.Link, new() { Name = "Home" }).ClickAsync();
+		await page.GetByRole(AriaRole.Navigation).GetByRole(AriaRole.Link, new() { Name = "Home", Exact = true })
+			.ClickAsync();
 
 		// Assert
 		await Expect(page).ToHaveURLAsync(new Uri(fixture.BaseAddress, "/").ToString());
