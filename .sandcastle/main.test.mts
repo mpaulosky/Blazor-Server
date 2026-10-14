@@ -319,6 +319,24 @@ describe("main.mts's reportRepo wiring", () => {
   });
 });
 
+// #320: a run whose intake stopped (a repeated failure, such as the missing
+// Docker image in the first automatic runs) must end red, whatever hand-backs
+// it also made, rather than exit 0 and leave the queue stuck with no signal.
+describe("main.mts's intake-stop exit code", () => {
+  it("sets the exit code from intakeStopExitCode(intakeStopReport.items()) after writing the run report", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const writeReportCall = mainMts.indexOf("writeRunReport(");
+    const exitCodeAssignment = mainMts.indexOf("process.exitCode", writeReportCall);
+
+    assert.notEqual(writeReportCall, -1, "main.mts doesn't call writeRunReport(");
+    assert.notEqual(exitCodeAssignment, -1, "main.mts never sets process.exitCode");
+    assert.ok(exitCodeAssignment > writeReportCall, "main.mts doesn't set process.exitCode after writeRunReport(");
+    const assignment = mainMts.slice(exitCodeAssignment, mainMts.indexOf(";", exitCodeAssignment));
+    assert.match(assignment, /intakeStopExitCode\(/, "main.mts doesn't derive the exit code from intakeStopExitCode(");
+    assert.match(assignment, /intakeStopReport\.items\(\)/, "main.mts doesn't pass intakeStopReport.items() to the exit-code decision");
+  });
+});
+
 // #147: SANDCASTLE_BUDGET_MINUTES reaches the sandbox like every other key in
 // this file, and the host reads the budget from its own environment instead,
 // so it must stay commented out, as SANDCASTLE_ISSUE and SANDCASTLE_LABEL do.

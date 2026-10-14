@@ -4,6 +4,8 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [fix(sandcastle): End a run red when intake stops for repeated failures](2026-10-14-pr-321-fix-sandcastle-end-a-run-red-when-intake-stops-for-repeated-failures.md) | release,automation |
+| 2026-10-14 | [ci(sandcastle): Build the sandbox image before running Sandcastle](2026-10-14-pr-319-ci-sandcastle-build-the-sandbox-image-before-running-sandcastle.md) | release,automation |
 | 2026-10-14 | [docs(ui): Add the UI restyle spec and its coding-standard lines](2026-10-14-pr-310-docs-ui-add-the-ui-restyle-spec-and-its-coding-standard-lines.md) | release,automation |
 | 2026-10-13 | [ci(sandcastle): Trigger Sandcastle automatically from GitHub Actions](2026-10-13-pr-301-ci-sandcastle-trigger-sandcastle-automatically-from-github-actions.md) | release,automation |
 | 2026-10-13 | [test(auth): Run the Auth0 options validation without starting the app](2026-10-13-pr-298-test-auth-run-the-auth0-options-validation-without-starting-the-app.md) | release,automation |

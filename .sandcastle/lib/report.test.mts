@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   handBacksJson,
+  intakeStopExitCode,
+  IntakeStopReport,
   OutcomeReport,
   REPORT_DIR,
   renderSummary,
@@ -11,6 +13,7 @@ import {
   writeRunReport,
   type HandBackEntry,
   type HumanThreadEntry,
+  type IntakeStopEntry,
   type OutcomeEntry,
   type ReportFs,
   type SummaryInput,
@@ -91,6 +94,42 @@ describe("WaitingPrReport", () => {
   });
 });
 
+// AC: "When intake stops ... the stop is recorded with its reason, the
+// unjudged issue numbers and the first error's message (tested)," for both
+// of intakeRound's two limits.
+describe("IntakeStopReport", () => {
+  it("returns every stop recorded, in order", () => {
+    const report = new IntakeStopReport();
+
+    report.record({ reason: "8 intake runs in a row failed", unjudged: [1, 2], firstError: "the sandbox didn't start" });
+    report.record({ reason: "GitHub refused every verdict in 2 batches in a row", unjudged: [3], firstError: "gh: HTTP 401" });
+
+    assert.deepEqual(report.items(), [
+      { reason: "8 intake runs in a row failed", unjudged: [1, 2], firstError: "the sandbox didn't start" },
+      { reason: "GitHub refused every verdict in 2 batches in a row", unjudged: [3], firstError: "gh: HTTP 401" },
+    ]);
+  });
+
+  it("starts empty", () => {
+    assert.deepEqual(new IntakeStopReport().items(), []);
+  });
+});
+
+// AC: "The host exits with code 1 after writing the run report when a stop
+// was recorded, and with code 0 when there were none, whatever the
+// hand-backs (tested)." intakeStopExitCode is the pure decision main.mts's
+// finally applies after writeRunReport; it never sees the hand-backs report
+// at all, so what main.mts hands back can't flip it.
+describe("intakeStopExitCode", () => {
+  it("is 0 when intake recorded no stop this run", () => {
+    assert.equal(intakeStopExitCode([]), 0);
+  });
+
+  it("is 1 when intake recorded any stop this run, whatever else happened", () => {
+    assert.equal(intakeStopExitCode([{ reason: "8 intake runs in a row failed", unjudged: [1], firstError: "boom" }]), 1);
+  });
+});
+
 // AC: "After a run, .sandcastle/logs/summary.md lists every touched issue and
 // PR with its outcome, the hand-backs with links, PRs waiting on human
 // threads, and a token-usage table by role."
@@ -126,6 +165,7 @@ describe("renderSummary", () => {
       ["planner", usage(1, 2, 3, 4)],
       ["backend", usage(5, 6, 7, 8)],
     ]),
+    stops: [],
   };
 
   it("names the queue and says the run finished", () => {
@@ -205,6 +245,27 @@ describe("renderSummary", () => {
     assert.match(section, /\*\*Total\*\*[^\n]*6[^\n]*8[^\n]*10[^\n]*12/);
   });
 
+  // AC: "renderSummary lists each recorded stop under its own heading, and
+  // omits the heading when there are none (tested)."
+  it("lists each recorded intake stop under its own heading, with its reason, unjudged issues and first error, and omits the heading when there are none", () => {
+    const stops: IntakeStopEntry[] = [
+      { reason: "8 intake runs in a row failed", unjudged: [81, 82, 83], firstError: "the sandbox didn't start" },
+    ];
+
+    const withStops = renderSummary({ ...fullInput, stops });
+
+    assert.match(withStops, /### Intake stops/);
+    const section = withStops.slice(withStops.indexOf("### Intake stops"));
+    assert.match(section, /8 intake runs in a row failed/);
+    assert.match(section, /#81/);
+    assert.match(section, /#82/);
+    assert.match(section, /#83/);
+    assert.match(section, /the sandbox didn't start/);
+
+    const withoutStops = renderSummary({ ...fullInput, stops: [] });
+    assert.ok(!withoutStops.includes("### Intake stops"));
+  });
+
   it("says nothing was touched, there were no hand-backs or waiting PRs, and no role ran, when every list is empty", () => {
     const summary = renderSummary({
       queue: "issue #1",
@@ -215,11 +276,13 @@ describe("renderSummary", () => {
       waitingPrs: [],
       humanThreads: [],
       usage: new Map(),
+      stops: [],
     });
 
     assert.match(summary, /Nothing was touched\./);
     assert.match(summary, /No role ran\./);
     assert.equal((summary.match(/None\./g) ?? []).length, 2);
+    assert.ok(!summary.includes("### Intake stops"));
   });
 
   it("leaves a target unlinked when the repository isn't known", () => {

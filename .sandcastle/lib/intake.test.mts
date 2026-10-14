@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
-import { BUILDING_LABEL, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, SANDCASTLE_LABELS, UMBRELLA_MARKER } from "./config.mts";
+import { BUILDING_LABEL, INTAKE_BATCH_SIZE, INTAKE_FAILED_RUNS_LIMIT, INTAKE_REFUSED_BATCHES_LIMIT, SANDCASTLE_LABELS, UMBRELLA_MARKER } from "./config.mts";
 import type { OpenPullRequest, SandcastleIssue } from "./github.mts";
 import { UncountedStopError } from "./errors.mts";
 import {
@@ -17,7 +17,7 @@ import {
   type SplitGitHub,
 } from "./intake.mts";
 import { bodyBlockers } from "./gate.mts";
-import { HandBackReport } from "./report.mts";
+import { HandBackReport, IntakeStopReport } from "./report.mts";
 
 const issue = (number: number, labels: string[] = ["Sandcastle"]): SandcastleIssue => ({
   number,
@@ -1033,6 +1033,36 @@ describe("intakeRound", () => {
     );
   });
 
+  // AC: "When intake stops after INTAKE_FAILED_RUNS_LIMIT failed runs in a
+  // row, the stop is recorded with its reason, the unjudged issue numbers
+  // and the first error's message (tested)." (#320: a repeated failure, such
+  // as the missing Docker image in the first automatic runs, must no longer
+  // end the job green.)
+  it("records a stop with its reason, the unjudged issues and the first error's message after INTAKE_FAILED_RUNS_LIMIT failed runs in a row", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE * 3 }, (_, i) => issue(i + 1));
+    const stops = new IntakeStopReport();
+
+    await intakeRound(
+      issues,
+      [],
+      async () => {
+        throw new Error("the sandbox didn't start");
+      },
+      recordingGh().run,
+      "o/r",
+      new HandBackReport(),
+      () => {},
+      () => {},
+      stops,
+    );
+
+    assert.equal(stops.items().length, 1, JSON.stringify(stops.items()));
+    const [stop] = stops.items();
+    assert.equal(stop!.reason, `${INTAKE_FAILED_RUNS_LIMIT} intake runs in a row failed`);
+    assert.equal(stop!.firstError, "the sandbox didn't start");
+    assert.deepEqual([...stop!.unjudged].sort((a, b) => a - b), issues.map((i) => i.number));
+  });
+
   // applyVerdicts handles a failure on one issue itself; when it fails on
   // every verdict in two batches in a row, GitHub is refusing the host
   // (#229), so each later batch would cost a run for nothing.
@@ -1058,6 +1088,34 @@ describe("intakeRound", () => {
 
     assert.equal(runs, 2);
     assert.ok(warnings.some((warning) => /GitHub refused every verdict/.test(warning) && /later round or run/.test(warning)), warnings.join("\n"));
+  });
+
+  // AC: "When intake stops after INTAKE_REFUSED_BATCHES_LIMIT refused
+  // batches in a row, the stop is recorded the same way (tested)."
+  it("records a stop with its reason, the unjudged issues and the first error's message after GitHub refuses every verdict in INTAKE_REFUSED_BATCHES_LIMIT batches in a row", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE * 3 }, (_, i) => issue(i + 1));
+    const stops = new IntakeStopReport();
+
+    await intakeRound(
+      issues,
+      [],
+      async (promptArgs) => {
+        const sent: number[] = JSON.parse(promptArgs.ISSUES_JSON).map((i: { number: number }) => i.number);
+        return sent.map((number) => verdict(number, { reason: "clear and checkable" }));
+      },
+      recordingGh(["Sandcastle"], () => new Error("gh: HTTP 401")).run,
+      "o/r",
+      new HandBackReport(),
+      () => {},
+      () => {},
+      stops,
+    );
+
+    assert.equal(stops.items().length, 1, JSON.stringify(stops.items()));
+    const [stop] = stops.items();
+    assert.equal(stop!.reason, `GitHub refused every verdict in ${INTAKE_REFUSED_BATCHES_LIMIT} batches in a row`);
+    assert.equal(stop!.firstError, "gh: HTTP 401");
+    assert.deepEqual([...stop!.unjudged].sort((a, b) => a - b), issues.map((i) => i.number));
   });
 
   // One refused edit can be the issue's own (closed or transferred since the
@@ -1225,6 +1283,36 @@ describe("intakeRound", () => {
       (error) => error === stop,
     );
     assert.equal(runs, 1);
+  });
+
+  // AC: "An UncountedStopError (usage limit or time budget) still ends the
+  // run as stopped with exit code 0, as today (tested)." It isn't a stop
+  // intake records, even mid-streak, so intakeStopExitCode stays 0.
+  it("records no stop when an UncountedStopError ends the round after some failed runs", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE * 3 }, (_, i) => issue(i + 1));
+    const stops = new IntakeStopReport();
+    const stop = new UncountedStopError("usage limit");
+    let runs = 0;
+
+    await assert.rejects(
+      intakeRound(
+        issues,
+        [],
+        async () => {
+          runs += 1;
+          throw runs < INTAKE_FAILED_RUNS_LIMIT ? new Error("the sandbox didn't start") : stop;
+        },
+        recordingGh().run,
+        "o/r",
+        new HandBackReport(),
+        () => {},
+        () => {},
+        stops,
+      ),
+      (error) => error === stop,
+    );
+    assert.equal(runs, INTAKE_FAILED_RUNS_LIMIT);
+    assert.deepEqual(stops.items(), []);
   });
 
   it("doesn't judge an issue whose PR is open", async () => {

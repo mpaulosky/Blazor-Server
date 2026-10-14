@@ -334,7 +334,8 @@ the `Sandcastle` label, and a `Sandcastle` issue that depends on it lists it as 
 
 **Notification: the run ends red.** The PAT is the human's own, so GitHub never notifies them about Sandcastle's labels or comments. The host records every hand-back (`needs-info` or
 `needs-human`) it applies in the run, and after all work is done a final workflow step fails the job when that list is non-empty. GitHub Actions then emails the person who triggered
-the run, and scheduled runs notify the workflow's creator. A crash fails an earlier step, and the job summary tells a hand-back from a crash.
+the run, and scheduled runs notify the workflow's creator. A crash fails an earlier step, and the job summary tells a hand-back from a crash. So does a round where intake stops
+after too many failed runs or refused batches in a row (#320): the host couldn't run a role at all, so it lists each stop in the report and exits 1 once the report is written.
 
 Who gets the email for the other triggers was checked against the runs GitHub attributed in this repository on 2026-10-13 (each run's `triggering_actor`):
 
