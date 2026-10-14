@@ -10,6 +10,7 @@
 using Domain.Abstractions;
 
 using FluentValidation;
+using FluentValidation.Results;
 
 namespace UI.Components.Features.Palettes;
 
@@ -42,6 +43,16 @@ public sealed class SetPaletteHandler
 	/// </returns>
 	public Result<Palette> Handle(SetPaletteCommand command)
 	{
-		throw new NotImplementedException();
+		ArgumentNullException.ThrowIfNull(command);
+
+		ValidationResult validation = _validator.Validate(command);
+		if (!validation.IsValid)
+		{
+			ValidationFailure error = validation.Errors[0];
+
+			return Result.Fail<Palette>(error.ErrorMessage, ResultErrorCode.Validation, error.ErrorCode);
+		}
+
+		return Result.Ok(Palette.FromCookie(command.Value));
 	}
 }

@@ -16,11 +16,18 @@ namespace UI.Components.Features.Palettes;
 /// </summary>
 public sealed class SetPaletteCommandValidator : AbstractValidator<SetPaletteCommand>
 {
+	private static readonly HashSet<string> s_hueNames =
+		Enum.GetValues<Palette>().Select(palette => palette.ToCookieValue()).ToHashSet(StringComparer.Ordinal);
+
 	/// <summary>
 	///   Initializes a new instance of <see cref="SetPaletteCommandValidator" />.
 	/// </summary>
 	public SetPaletteCommandValidator()
 	{
-		throw new NotImplementedException();
+		// The message doesn't echo the posted value, so a crafted one isn't reflected back in the 400.
+		RuleFor(command => command.Value)
+			.Must(value => value is not null && s_hueNames.Contains(value))
+			.WithErrorCode("Palette.Unknown")
+			.WithMessage("The Palette must be one of the Tailwind hues.");
 	}
 }

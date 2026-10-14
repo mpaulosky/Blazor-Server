@@ -96,6 +96,27 @@ public partial class PaletteEndpointTests : IClassFixture<UiWebApplicationFactor
 	}
 
 	[Fact]
+	public async Task PostPalette_ValidTokenAndNonLocalReturnUrl_RedirectsToRoot()
+	{
+		// Arrange
+		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
+		using FormUrlEncodedContent content = new([
+			new KeyValuePair<string?, string?>("__RequestVerificationToken", await ScrapeAntiforgeryTokenAsync(client)),
+			new KeyValuePair<string?, string?>("palette", "rose"),
+			new KeyValuePair<string?, string?>("returnUrl", "https://evil.example/"),
+		]);
+
+		// Act
+		HttpResponseMessage response =
+			await client.PostAsync(new Uri(PaletteEndpoints.Path, UriKind.Relative), content, TestContext.Current.CancellationToken);
+
+		// Assert
+		response.StatusCode.Should().Be(HttpStatusCode.Found);
+		response.Headers.Location.Should().Be(new Uri("/", UriKind.Relative));
+	}
+
+	[Fact]
 	public async Task PostPalette_UnknownValue_ReturnsProblemDetailsWithPaletteUnknownCode()
 	{
 		// Arrange
