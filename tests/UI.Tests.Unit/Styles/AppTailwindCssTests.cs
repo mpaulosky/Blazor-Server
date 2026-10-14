@@ -13,11 +13,11 @@ namespace UI.Tests.Unit.Styles;
 
 public partial class AppTailwindCssTests
 {
-	private static readonly string[] s_shiftedTo600_700_800 = ["orange", "emerald", "teal", "cyan", "sky"];
+	private static readonly string[] HuesWithAccent500AtStop600 = ["orange", "emerald", "teal", "cyan", "sky"];
 
-	private static readonly string[] s_shiftedTo700_700_800 = ["amber", "yellow", "lime", "green"];
+	private static readonly string[] HuesWithAccent500AtStop700 = ["amber", "yellow", "lime", "green"];
 
-	private static readonly int[] s_accentStops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+	private static readonly int[] AccentStops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
 	[GeneratedRegex(":root\\[data-palette=\"(?<hue>[a-z]+)\"\\]\\s*\\{(?<body>[^}]*)\\}")]
 	private static partial Regex DataPaletteRulePattern();
@@ -31,7 +31,7 @@ public partial class AppTailwindCssTests
 	// shift only accent-500, accent-600 and accent-700, so white button text and the light-mode focus ring keep AA.
 	private static int ExpectedSourceStop(string hue, int destStop)
 	{
-		if (s_shiftedTo600_700_800.Contains(hue))
+		if (HuesWithAccent500AtStop600.Contains(hue))
 		{
 			return destStop switch
 			{
@@ -42,7 +42,7 @@ public partial class AppTailwindCssTests
 			};
 		}
 
-		if (s_shiftedTo700_700_800.Contains(hue))
+		if (HuesWithAccent500AtStop700.Contains(hue))
 		{
 			return destStop switch
 			{
@@ -146,7 +146,7 @@ public partial class AppTailwindCssTests
 		// Assert
 		ruleBody.Should().NotBeEmpty($"app.tailwind.css should have a :root[data-palette=\"{hue}\"] rule");
 
-		foreach (int stop in s_accentStops)
+		foreach (int stop in AccentStops)
 		{
 			int sourceStop = ExpectedSourceStop(hue, stop);
 			ruleBody.Should().Contain($"--color-accent-{stop}: var(--color-{hue}-{sourceStop});");

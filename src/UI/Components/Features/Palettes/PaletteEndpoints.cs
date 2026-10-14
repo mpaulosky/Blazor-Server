@@ -76,14 +76,14 @@ public static class PaletteEndpoints
 		}
 
 		context.Response.Cookies.Append(ApplicationConstants.PaletteCookie, result.Value.ToCookieValue(),
-			CookieOptions());
+			PaletteCookieOptions());
 
 		return TypedResults.LocalRedirect(returnUrl);
 	}
 
 	// A display preference, so it's essential and needs no consent. Each choice re-issues the cookie, so the year runs
 	// from the visitor's last choice.
-	private static CookieOptions CookieOptions()
+	private static CookieOptions PaletteCookieOptions()
 	{
 		return new CookieOptions
 		{

@@ -16,7 +16,7 @@ namespace UI.Components.Features.Palettes;
 /// </summary>
 public sealed class SetPaletteCommandValidator : AbstractValidator<SetPaletteCommand>
 {
-	private static readonly HashSet<string> s_hueNames =
+	private static readonly HashSet<string> HueNames =
 		Enum.GetValues<Palette>().Select(palette => palette.ToCookieValue()).ToHashSet(StringComparer.Ordinal);
 
 	/// <summary>
@@ -26,7 +26,7 @@ public sealed class SetPaletteCommandValidator : AbstractValidator<SetPaletteCom
 	{
 		// The message doesn't echo the posted value, so a crafted one isn't reflected back in the 400.
 		RuleFor(command => command.Value)
-			.Must(value => value is not null && s_hueNames.Contains(value))
+			.Must(value => value is not null && HueNames.Contains(value))
 			.WithErrorCode("Palette.Unknown")
 			.WithMessage("The Palette must be one of the Tailwind hues.");
 	}
