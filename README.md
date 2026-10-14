@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.156](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.156) | 2026-10-14 | docs(ui): Add the Theme and Palette spec and ADR 0007 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-368-docs-ui-add-the-theme-and-palette-spec-and-adr-0007.md) |
 | [v0.0.155](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.155) | 2026-10-14 | feat(ui): Show the Release and commit in the footer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) |
 | [v0.0.154](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.154) | 2026-10-14 | fix(sandcastle): Keep the parent's conventional prefix on split child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-359-fix-sandcastle-keep-the-parent-s-conventional-prefix-on-split-child-issues.md) |
 | [v0.0.153](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.153) | 2026-10-14 | feat(ui): Generate build-time BuildInfo and the Release label function | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.149](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.149) | 2026-10-14 | feat(sandcastle): Write PR descriptions with Why, What changed and Verification | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-339-feat-sandcastle-write-pr-descriptions-with-why-what-changed-and-verification.md) |
 | [v0.0.148](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.148) | 2026-10-14 | feat(ui): Restyle the page shell, nav, footer and error bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-337-feat-ui-restyle-the-page-shell-nav-footer-and-error-bar.md) |
 | [v0.0.147](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.147) | 2026-10-14 | feat(ui): Restyle the Profile and Admin pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-331-feat-ui-restyle-the-profile-and-admin-pages.md) |
-| [v0.0.146](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.146) | 2026-10-14 | feat(ui): Restyle the Access Denied, Not Found and Error pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-333-feat-ui-restyle-the-access-denied-not-found-and-error-pages.md) |
 
 <!-- RELEASES_END -->
 

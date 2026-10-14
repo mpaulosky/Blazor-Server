@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [docs(ui): Add the Theme and Palette spec and ADR 0007](2026-10-14-pr-368-docs-ui-add-the-theme-and-palette-spec-and-adr-0007.md) | release,automation |
 | 2026-10-14 | [feat(ui): Show the Release and commit in the footer](2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) | release,automation |
 | 2026-10-14 | [fix(sandcastle): Keep the parent's conventional prefix on split child issues](2026-10-14-pr-359-fix-sandcastle-keep-the-parent-s-conventional-prefix-on-split-child-issues.md) | release,automation |
 | 2026-10-14 | [feat(ui): Generate build-time BuildInfo and the Release label function](2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) | release,automation |
