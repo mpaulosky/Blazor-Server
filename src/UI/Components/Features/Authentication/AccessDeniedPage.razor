@@ -4,9 +4,14 @@
 
 <PageTitle>Access denied</PageTitle>
 
-<h1>Access denied</h1>
-
-<p>You don't have permission to access this page.</p>
+<Card Size="CardSize.Hero">
+	<PageHeader Title="Access denied" Lead="You don't have permission to access this page.">
+		<Eyebrow>403</Eyebrow>
+		<ChildContent>
+			<Button Href="">Back to home</Button>
+		</ChildContent>
+	</PageHeader>
+</Card>
 
 @code {
 	[CascadingParameter]
