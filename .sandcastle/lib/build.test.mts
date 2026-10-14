@@ -1193,7 +1193,7 @@ describe("buildIssue reading the reviewer's PR body", () => {
 
   it("falls back to the generic PR body, and logs why, when the file holds a token-shaped string or sandbox secret", async () => {
     const { logs, publishedPrBodies, buildHost } = host([0, 0], {
-      prBodyFile: `${validPrBody}\n\nUses ghp_abc.`,
+      prBodyFile: `${validPrBody}\n\nUses the token ghp_abc.`,
     });
     buildHost.publicError = (text) => publicErrorText(String(text), (cleaned) => cleaned.includes("ghp_"));
 
