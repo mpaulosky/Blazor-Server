@@ -34,6 +34,17 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 	[GeneratedRegex("<body([^>]*)>")]
 	private static partial Regex BodyTagPattern();
 
+	private async Task<Uri> GetStylesheetUriAsync()
+	{
+		HttpResponseMessage homeResponse =
+			await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
+		string html = await homeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+		Match match = StylesheetHrefPattern().Match(html);
+		match.Success.Should().BeTrue();
+
+		return new Uri("/" + match.Groups[1].Value, UriKind.Relative);
+	}
+
 	[Fact]
 	public async Task GetHome_ReturnsOkWithStylesheetLink()
 	{
@@ -86,12 +97,7 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 	public async Task GetStylesheet_ReturnsCssContainingHomeOnlyUtility()
 	{
 		// Arrange
-		HttpResponseMessage homeResponse =
-			await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
-		string html = await homeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-		Match match = StylesheetHrefPattern().Match(html);
-		match.Success.Should().BeTrue();
-		Uri requestUri = new("/" + match.Groups[1].Value, UriKind.Relative);
+		Uri requestUri = await GetStylesheetUriAsync();
 
 		// Act
 		HttpResponseMessage response = await _client.GetAsync(requestUri, TestContext.Current.CancellationToken);
@@ -107,12 +113,7 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 	public async Task GetStylesheet_CompilesDarkUtilityUnderDataThemeAttributeAndPrefersColorScheme()
 	{
 		// Arrange
-		HttpResponseMessage homeResponse =
-			await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
-		string html = await homeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-		Match match = StylesheetHrefPattern().Match(html);
-		match.Success.Should().BeTrue();
-		Uri requestUri = new("/" + match.Groups[1].Value, UriKind.Relative);
+		Uri requestUri = await GetStylesheetUriAsync();
 
 		// Act
 		HttpResponseMessage response = await _client.GetAsync(requestUri, TestContext.Current.CancellationToken);
