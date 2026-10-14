@@ -56,7 +56,7 @@ public class LocalReturnUrlTests
 		// Arrange
 
 		// Act
-		string result = LocalReturnUrl.OrRoot("/café?q=ü");
+		string result = LocalReturnUrl.OrRoot("/caf\u00e9?q=\u00fc");
 
 		// Assert
 		result.Should().Be("/caf%C3%A9?q=%C3%BC");
