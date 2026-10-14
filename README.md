@@ -53,6 +53,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.162](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.162) | 2026-10-14 | feat(ui): Add the Palette menu to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md) |
 | [v0.0.161](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.161) | 2026-10-14 | feat(ui): Add the Theme control to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md) |
 | [v0.0.160](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.160) | 2026-10-14 | feat(ui): Add the Palettes slice, its cookie, data-palette and the hue rules | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-376-feat-ui-add-the-palettes-slice-its-cookie-data-palette-and-the-hue-rules.md) |
 | [v0.0.159](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.159) | 2026-10-14 | fix(sandcastle): Unshallow the checkout so the secret scan reads only a PR's commits | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-373-fix-sandcastle-unshallow-the-checkout-so-the-secret-scan-reads-only-a-pr-s-commits.md) |
@@ -62,7 +63,6 @@ Blue, the default, renders no attribute.
 | [v0.0.155](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.155) | 2026-10-14 | feat(ui): Show the Release and commit in the footer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) |
 | [v0.0.154](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.154) | 2026-10-14 | fix(sandcastle): Keep the parent's conventional prefix on split child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-359-fix-sandcastle-keep-the-parent-s-conventional-prefix-on-split-child-issues.md) |
 | [v0.0.153](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.153) | 2026-10-14 | feat(ui): Generate build-time BuildInfo and the Release label function | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) |
-| [v0.0.152](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.152) | 2026-10-14 | fix(ui): Send a stale Log out home instead of a 400 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-345-fix-ui-send-a-stale-log-out-home-instead-of-a-400.md) |
 
 <!-- RELEASES_END -->
 
