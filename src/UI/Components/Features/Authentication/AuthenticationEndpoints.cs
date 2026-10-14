@@ -70,14 +70,15 @@ public static class AuthenticationEndpoints
 		return TypedResults.StatusCode(StatusCodes.Status405MethodNotAllowed);
 	}
 
-	// The endpoint binds no form, so minimal APIs don't validate the antiforgery token for it; it does so itself. Every
-	// POST needs a valid token, so a stale tab whose session has ended gets 400 rather than a sign-out.
-	private static async Task<Results<SignOutHttpResult, BadRequest>> LogoutAsync(HttpContext context,
+	// The endpoint binds no form, so minimal APIs don't validate the antiforgery token for it; it does so itself. A
+	// token that fails, most often from a stale tab whose session has since ended or changed hands, sends the caller
+	// home without signing anyone out: Home then shows who, if anyone, is still signed in.
+	private static async Task<Results<SignOutHttpResult, RedirectHttpResult>> LogoutAsync(HttpContext context,
 		IAntiforgery antiforgery)
 	{
 		if (!await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false))
 		{
-			return TypedResults.BadRequest();
+			return TypedResults.LocalRedirect("/");
 		}
 
 		// Signing out of the Auth0 scheme redirects to Auth0's logout endpoint, which ends the Auth0 session too and

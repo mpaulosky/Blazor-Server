@@ -145,4 +145,20 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 		response.StatusCode.Should().Be(HttpStatusCode.NotFound);
 		html.Should().Contain("Page not found");
 	}
+
+	[Fact]
+	public async Task PostUnknownRoute_KeepsStatusWithoutRenderingNotFoundPage()
+	{
+		// Arrange
+
+		// Act
+		HttpResponseMessage response = await _client.PostAsync(new Uri("/this-page-does-not-exist", UriKind.Relative),
+			content: null, TestContext.Current.CancellationToken);
+		string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+		// Assert
+		// No route takes a POST here, so routing answers 405; what matters is that it isn't the NotFound page's 400.
+		response.StatusCode.Should().Be(HttpStatusCode.MethodNotAllowed);
+		body.Should().BeEmpty();
+	}
 }

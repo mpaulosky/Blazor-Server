@@ -7,6 +7,8 @@
 // Project Name :  UI
 // =============================================
 
+using Microsoft.AspNetCore.Diagnostics;
+
 using ServiceDefaults;
 
 using UI.Components;
@@ -36,6 +38,19 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+// Re-execution keeps the request's method, and a POST to the NotFound page fails that page's antiforgery check, which
+// would replace the original status with a 400 and a message meant for developers. Only GET and HEAD get the page.
+app.Use((context, next) =>
+{
+	if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))
+	{
+		context.Features.Get<IStatusCodePagesFeature>()?.Enabled = false;
+	}
+
+	return next(context);
+});
+
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
