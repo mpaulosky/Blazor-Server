@@ -1,3 +1,4 @@
+/* Only what utilities can't express: the visibility rules keyed to the classes Blazor sets at runtime, and the animations. */
 .components-reconnect-first-attempt-visible,
 .components-reconnect-repeated-attempt-visible,
 .components-reconnect-failed-visible,
@@ -20,13 +21,6 @@
 }
 
 #components-reconnect-modal {
-	background-color: white;
-	width: 20rem;
-	margin: 20vh auto;
-	padding: 2rem;
-	border: 0;
-	border-radius: 0.5rem;
-	box-shadow: 0 3px 6px 2px rgba(0, 0, 0, 0.3);
 	opacity: 0;
 	transition: display 0.5s allow-discrete, overlay 0.5s allow-discrete;
 	animation: components-reconnect-modal-fadeOutOpacity 0.5s both;
@@ -38,7 +32,6 @@
 }
 
 #components-reconnect-modal::backdrop {
-	background-color: rgba(0, 0, 0, 0.4);
 	animation: components-reconnect-modal-fadeInOpacity 0.5s ease-in-out;
 	opacity: 1;
 }
@@ -73,46 +66,15 @@
 	}
 }
 
-.components-reconnect-container {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 1rem;
-}
-
-#components-reconnect-modal p {
-	margin: 0;
-	text-align: center;
-}
-
-#components-reconnect-modal button {
-	border: 0;
-	background-color: #6b9ed2;
-	color: white;
-	padding: 4px 24px;
-	border-radius: 4px;
-}
-
-#components-reconnect-modal button:hover {
-	background-color: #3b6ea2;
-}
-
-#components-reconnect-modal button:active {
-	background-color: #6b9ed2;
-}
-
-.components-rejoining-animation {
-	position: relative;
-	width: 80px;
-	height: 80px;
-}
-
+/*
+	CSS isolation renames the keyframes, so a utility can't name them: the rings get the name here, and the duration from
+	the markup's motion-safe:[animation-duration:1.5s]. With no duration the animation never runs under reduced motion.
+	These unlayered rules beat any utility, so the markup mustn't set these four properties.
+*/
 .components-rejoining-animation div {
-	position: absolute;
-	border: 3px solid #0087ff;
-	opacity: 1;
-	border-radius: 50%;
-	animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+	animation-name: components-rejoining-animation;
+	animation-timing-function: cubic-bezier(0, 0.2, 0.8, 1);
+	animation-iteration-count: infinite;
 }
 
 .components-rejoining-animation div:nth-child(2) {
