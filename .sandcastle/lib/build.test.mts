@@ -1156,6 +1156,7 @@ describe("buildIssue reading the reviewer's PR body", () => {
 
   for (const [scenario, prBodyFile] of [
     ["missing or empty", ""],
+    ["missing the Why heading", "## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests."],
     ["missing the What changed heading", "## Why\n\nBecause.\n\n## Verification\n\nRan the tests."],
     ["missing the Verification heading", "## Why\n\nBecause.\n\n## What changed\n\nAdded X."],
   ] as const) {
