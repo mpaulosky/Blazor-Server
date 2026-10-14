@@ -1,0 +1,26 @@
+@namespace UI.Components.Shared
+
+@code {
+	[Parameter]
+	public RenderFragment? Eyebrow { get; set; }
+
+	[Parameter, EditorRequired]
+	public required string Title { get; set; }
+
+	[Parameter]
+	public string? Lead { get; set; }
+
+	[Parameter]
+	public RenderFragment? ChildContent { get; set; }
+
+	[Parameter]
+	public string? Class { get; set; }
+
+	[Parameter(CaptureUnmatchedValues = true)]
+	public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+	protected override void OnInitialized()
+	{
+		throw new NotImplementedException();
+	}
+}

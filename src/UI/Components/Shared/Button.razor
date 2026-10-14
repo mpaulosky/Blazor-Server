@@ -1,0 +1,26 @@
+@namespace UI.Components.Shared
+
+@code {
+	[Parameter]
+	public ButtonKind Kind { get; set; } = ButtonKind.Primary;
+
+	[Parameter]
+	public string? Href { get; set; }
+
+	[Parameter]
+	public string Type { get; set; } = "button";
+
+	[Parameter]
+	public RenderFragment? ChildContent { get; set; }
+
+	[Parameter]
+	public string? Class { get; set; }
+
+	[Parameter(CaptureUnmatchedValues = true)]
+	public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+	protected override void OnInitialized()
+	{
+		throw new NotImplementedException();
+	}
+}
