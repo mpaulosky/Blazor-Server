@@ -318,6 +318,93 @@ describe("applyVerdicts for a well-formed split verdict", () => {
   });
 });
 
+// #351: a split's children are model text, so the host gives each one the
+// parent's conventional-commit prefix itself, deterministically, rather than
+// relying on the model to copy it from the parent.
+describe("applyVerdicts for a split verdict's child titles", () => {
+  const withTitle = (number: number, title: string): SandcastleIssue => ({ ...issue(number), title });
+
+  it("gives each child the parent title's conventional prefix when its drafted title has none", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const parent = withTitle(20, "feat(ui): Show the running Release and commit in the footer");
+    const children = [
+      child("Generate build-time BuildInfo and the Release label function", "BuildInfo carries the commit SHA."),
+      child("Show the Release and commit in the footer", "The footer shows the Release label."),
+    ];
+
+    applyVerdicts([parent], [splitVerdict(20, children)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.deepEqual(created.map((call) => call.args[0]), [
+      "feat(ui): Generate build-time BuildInfo and the Release label function",
+      "feat(ui): Show the Release and commit in the footer",
+    ]);
+  });
+
+  it("posts a drafted child title unchanged when it already starts with a conventional prefix", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const parent = withTitle(21, "feat(ui): Show the running Release and commit in the footer");
+    const children = [child("fix(ui): Correct the footer's commit link", "The footer links to the right commit.")];
+
+    applyVerdicts([parent], [splitVerdict(21, children)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.deepEqual(created.map((call) => call.args[0]), ["fix(ui): Correct the footer's commit link"]);
+  });
+
+  it("passes on the parent prefix's breaking-change marker as written", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const parent = withTitle(22, "feat(ui)!: Replace the footer layout");
+    const children = [child("Remove the old footer component", "The old component no longer renders.")];
+
+    applyVerdicts([parent], [splitVerdict(22, children)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.deepEqual(created.map((call) => call.args[0]), ["feat(ui)!: Remove the old footer component"]);
+  });
+
+  it("passes on a scopeless parent prefix as written", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const parent = withTitle(23, "chore: Tidy up the release tooling");
+    const children = [child("Remove the unused release script", "The old script is deleted.")];
+
+    applyVerdicts([parent], [splitVerdict(23, children)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.deepEqual(created.map((call) => call.args[0]), ["chore: Remove the unused release script"]);
+  });
+
+  it("leaves the drafted child titles unchanged when the parent title has no conventional prefix", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const parent = withTitle(24, "Show the running Release and commit in the footer");
+    const children = [child("Generate build-time BuildInfo", "BuildInfo carries the commit SHA.")];
+
+    applyVerdicts([parent], [splitVerdict(24, children)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const created = split.calls.filter((call) => call.fn === "createChild");
+    assert.deepEqual(created.map((call) => call.args[0]), ["Generate build-time BuildInfo"]);
+  });
+
+  it("lists the children in the umbrella comment by the titles actually posted", () => {
+    const gh = recordingGh();
+    const split = recordingSplitGithub();
+    const parent = withTitle(25, "feat(ui): Show the running Release and commit in the footer");
+    const children = [child("Generate build-time BuildInfo", "BuildInfo carries the commit SHA.")];
+
+    applyVerdicts([parent], [splitVerdict(25, children)], gh.run, "o/r", new HandBackReport(), undefined, split.github);
+
+    const comment = split.calls.find((call) => call.fn === "comment");
+    assert.ok(comment, `no umbrella comment was posted: ${JSON.stringify(split.calls)}`);
+    const body = comment!.args[1] as string;
+    assert.match(body, /#101 feat\(ui\): Generate build-time BuildInfo\b/);
+  });
+});
+
 // A split verdict with no children, or whose drafted children include one
 // with no acceptance criteria, can't be applied: the host asks a human to
 // split the issue instead, rather than create an umbrella with missing or
