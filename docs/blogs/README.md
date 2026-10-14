@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [feat(ui): Restyle the Profile and Admin pages](2026-10-14-pr-331-feat-ui-restyle-the-profile-and-admin-pages.md) | release,automation |
 | 2026-10-14 | [feat(ui): Restyle the Access Denied, Not Found and Error pages](2026-10-14-pr-333-feat-ui-restyle-the-access-denied-not-found-and-error-pages.md) | release,automation |
 | 2026-10-14 | [feat(ui): Restyle the reconnect modal](2026-10-14-pr-330-feat-ui-restyle-the-reconnect-modal.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the shared Card, PageHeader, StatTile, Badge and Button components](2026-10-14-pr-326-feat-ui-add-the-shared-card-pageheader-stattile-badge-and-button-components.md) | release,automation |

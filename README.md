@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.147](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.147) | 2026-10-14 | feat(ui): Restyle the Profile and Admin pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-331-feat-ui-restyle-the-profile-and-admin-pages.md) |
 | [v0.0.146](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.146) | 2026-10-14 | feat(ui): Restyle the Access Denied, Not Found and Error pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-333-feat-ui-restyle-the-access-denied-not-found-and-error-pages.md) |
 | [v0.0.145](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.145) | 2026-10-14 | feat(ui): Restyle the reconnect modal | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-330-feat-ui-restyle-the-reconnect-modal.md) |
 | [v0.0.144](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.144) | 2026-10-14 | feat(ui): Add the shared Card, PageHeader, StatTile, Badge and Button components | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-326-feat-ui-add-the-shared-card-pageheader-stattile-badge-and-button-components.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.140](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.140) | 2026-10-14 | ci(sandcastle): Build the sandbox image before running Sandcastle | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-319-ci-sandcastle-build-the-sandbox-image-before-running-sandcastle.md) |
 | [v0.0.139](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.139) | 2026-10-14 | docs(ui): Add the UI restyle spec and its coding-standard lines | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-310-docs-ui-add-the-ui-restyle-spec-and-its-coding-standard-lines.md) |
 | [v0.0.138](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.138) | 2026-10-13 | ci(sandcastle): Trigger Sandcastle automatically from GitHub Actions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-301-ci-sandcastle-trigger-sandcastle-automatically-from-github-actions.md) |
-| [v0.0.137](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.137) | 2026-10-13 | test(auth): Run the Auth0 options validation without starting the app | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-298-test-auth-run-the-auth0-options-validation-without-starting-the-app.md) |
 
 <!-- RELEASES_END -->
 
