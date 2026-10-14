@@ -138,6 +138,7 @@ import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import {
   handBackReport,
   humanThreadReport,
+  intakeStopReport,
   outcomeReport,
   renderSummary,
   REPORT_DIR,
@@ -446,6 +447,7 @@ try {
     waitingPrs: waitingPrReport.items(),
     humanThreads,
     usage: usageReport.totals(),
+    stops: intakeStopReport.items(),
   });
   writeRunReport(summary, handBacks);
   console.log(`\nRun report: ${REPORT_DIR}/summary.md`);

@@ -152,6 +152,40 @@ export class HumanThreadReport {
 // The one report every follow-up pass this run makes records into.
 export const humanThreadReport = new HumanThreadReport();
 
+// One round where intake (lib/intake.mts#intakeRound) stopped rather than
+// judge every issue: it hit INTAKE_FAILED_RUNS_LIMIT failed runs or
+// INTAKE_REFUSED_BATCHES_LIMIT refused batches in a row, so the issues it
+// hadn't judged yet are left with no verdict and nothing told the owner
+// (#320, the first automatic runs ending green on a missing Docker image).
+// `unjudged` are the issue numbers intake never gave a verdict to this
+// round; `firstError` is the message of the first error in the streak that
+// stopped it.
+export type IntakeStopEntry = { reason: string; unjudged: readonly number[]; firstError: string };
+
+// Every intake stop this run recorded, so the run report and the exit code
+// (see intakeStopExitCode) both see it.
+export class IntakeStopReport {
+  private readonly entries: IntakeStopEntry[] = [];
+
+  record(entry: IntakeStopEntry): void {
+    this.entries.push(entry);
+  }
+
+  items(): readonly IntakeStopEntry[] {
+    return this.entries;
+  }
+}
+
+// The one report every intake stop this run makes records into.
+export const intakeStopReport = new IntakeStopReport();
+
+// Whether main.mts must exit non-zero: any recorded intake stop means some
+// issues were left silently unjudged (#320), so the run must end red even
+// when nothing else failed, a hand-back included.
+export function intakeStopExitCode(stops: readonly IntakeStopEntry[]): number {
+  throw new Error("Not implemented");
+}
+
 // How the run ended, so the summary tells a hand-back from a crash
 // ("Notification: the run ends red" in docs/plans/sandcastle-workflow.md).
 export type RunEnding = { kind: "finished" } | { kind: "stopped"; reason: string } | { kind: "crashed" };
@@ -166,6 +200,7 @@ export type SummaryInput = {
   waitingPrs: readonly WaitingPrEntry[];
   humanThreads: readonly HumanThreadEntry[];
   usage: ReadonlyMap<string, IterationUsage>;
+  stops: readonly IntakeStopEntry[];
 };
 
 // The run's report as Markdown, for .sandcastle/logs/summary.md and (when set)

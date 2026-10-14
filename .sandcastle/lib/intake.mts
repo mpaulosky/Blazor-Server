@@ -45,7 +45,7 @@ import {
 } from "./github.mts";
 import { intakePromptArgs } from "./prompts.mts";
 import { activeQueueScope } from "./queue.mts";
-import { handBackReport, type HandBackReport } from "./report.mts";
+import { handBackReport, intakeStopReport, type HandBackReport, type IntakeStopReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
 // Lenient where a slip is harmless, because one verdict that fails the schema
@@ -604,6 +604,11 @@ function handBackComment(lead: string, reason: string, questions: readonly strin
 // refused every verdict in INTAKE_REFUSED_BATCHES_LIMIT batches in a row,
 // since each later batch would then cost a run for nothing. An UncountedStopError (a usage limit or time budget) still
 // ends the run.
+//
+// Either stop is recorded in `stops` (lib/report.mts#IntakeStopReport) with
+// its reason, the issue numbers intake never judged this round, and the
+// first error's message in the streak that stopped it, so a run that can't
+// do its work ends red instead of silently exiting 0 (#320).
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
   openPrs: readonly OpenPullRequest[],
@@ -613,6 +618,7 @@ export async function intakeRound(
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
   warn: (message: string) => void = console.error,
+  stops: IntakeStopReport = intakeStopReport,
 ): Promise<void> {
   const refs = (batch: readonly SandcastleIssue[]) => batch.map((issue) => `#${issue.number}`).join(", ");
   let failedInARow = 0;
