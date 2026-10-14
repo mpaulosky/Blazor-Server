@@ -1,6 +1,7 @@
 @using Domain.Constants
 
 @inject TimeProvider TimeProvider
+@inject BuildInfo BuildInfo
 
 <footer
 	class="flex flex-col gap-2 rounded-3xl border border-slate-200 bg-white/70 px-6 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
@@ -8,8 +9,41 @@
 		@ApplicationConstants.AppName
 	</span>
 	<span>© @Year · Built with .NET, Blazor and Tailwind CSS</span>
+	<span class="flex flex-wrap items-center gap-x-4 gap-y-1">
+		<span>
+			Release:
+			@if (ReleaseLabel.Link.Length > 0)
+			{
+				<a href="@ReleaseLabel.Link" target="_blank" rel="noopener noreferrer"
+					class="text-accent-700 hover:underline dark:text-accent-300">@ReleaseLabel.Text</a>
+			}
+			else
+			{
+				@ReleaseLabel.Text
+			}
+		</span>
+		@if (CommitLabel.Text.Length > 0)
+		{
+			<span>
+				Last Commit:
+				@if (CommitLabel.Link.Length > 0)
+				{
+					<a href="@CommitLabel.Link" target="_blank" rel="noopener noreferrer"
+						class="text-accent-700 hover:underline dark:text-accent-300">@CommitLabel.Text</a>
+				}
+				else
+				{
+					@CommitLabel.Text
+				}
+			</span>
+		}
+	</span>
 </footer>
 
 @code {
 	private int Year => TimeProvider.GetUtcNow().Year;
+
+	private ReleaseLabel ReleaseLabel => ReleaseLabel.FromDescribe(BuildInfo.Release, BuildInfo.RepositoryUrl);
+
+	private CommitLabel CommitLabel => CommitLabel.FromCommit(BuildInfo.Commit, BuildInfo.RepositoryUrl);
 }

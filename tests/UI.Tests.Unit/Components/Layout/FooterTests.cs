@@ -28,6 +28,7 @@ public class FooterTests : BunitContext
 	{
 		// Arrange
 		Services.AddSingleton<TimeProvider>(new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+		Services.AddSingleton(new BuildInfo(string.Empty, string.Empty, string.Empty));
 
 		// Act
 		IRenderedComponent<Footer> cut = Render<Footer>();
@@ -44,6 +45,7 @@ public class FooterTests : BunitContext
 	{
 		// Arrange
 		Services.AddSingleton<TimeProvider>(new FixedTimeProvider(new DateTimeOffset(year, 6, 15, 0, 0, 0, TimeSpan.Zero)));
+		Services.AddSingleton(new BuildInfo(string.Empty, string.Empty, string.Empty));
 
 		// Act
 		IRenderedComponent<Footer> cut = Render<Footer>();
