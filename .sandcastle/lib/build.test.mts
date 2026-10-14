@@ -1160,6 +1160,7 @@ describe("buildIssue reading the reviewer's PR body", () => {
     ["missing the Why heading", "## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests."],
     ["missing the What changed heading", "## Why\n\nBecause.\n\n## Verification\n\nRan the tests."],
     ["missing the Verification heading", "## Why\n\nBecause.\n\n## What changed\n\nAdded X."],
+    ["too long for a PR body", `${validPrBody}\n\n${"x".repeat(PR_BODY_LIMIT)}`],
   ] as const) {
     it(`falls back to the generic PR body, and logs why, when the file is ${scenario}`, async () => {
       const { logs, publishedPrBodies, buildHost } = host([0, 0], { prBodyFile });
@@ -1171,8 +1172,11 @@ describe("buildIssue reading the reviewer's PR body", () => {
     });
   }
 
-  it("falls back to the generic PR body, and logs why, when the file is too long for a PR body", async () => {
-    const { logs, publishedPrBodies, buildHost } = host([0, 0], { prBodyFile: `${validPrBody}\n\n${"x".repeat(PR_BODY_LIMIT)}` });
+  it("falls back to the generic PR body, and logs why, when the file holds a token-shaped string or sandbox secret", async () => {
+    const { logs, publishedPrBodies, buildHost } = host([0, 0], {
+      prBodyFile: `${validPrBody}\n\nUses the token ghp_abc.`,
+    });
+    buildHost.publicError = (text) => publicErrorText(String(text), (cleaned) => cleaned.includes("ghp_"));
 
     await buildIssue(issue, branch, base, buildHost);
 
@@ -1189,18 +1193,6 @@ describe("buildIssue reading the reviewer's PR body", () => {
       workCommands.some((entry) => entry.command === `rm -f .sandcastle/work/${issue.number}/pr-body.md` && entry.rolesRun === 0),
       JSON.stringify(workCommands),
     );
-  });
-
-  it("falls back to the generic PR body, and logs why, when the file holds a token-shaped string or sandbox secret", async () => {
-    const { logs, publishedPrBodies, buildHost } = host([0, 0], {
-      prBodyFile: `${validPrBody}\n\nUses the token ghp_abc.`,
-    });
-    buildHost.publicError = (text) => publicErrorText(String(text), (cleaned) => cleaned.includes("ghp_"));
-
-    await buildIssue(issue, branch, base, buildHost);
-
-    assert.equal(publishedPrBodies.at(-1), undefined);
-    assert.ok(logs.some((line) => /PR body/i.test(line)), logs.join("\n"));
   });
 });
 
