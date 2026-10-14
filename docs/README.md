@@ -35,12 +35,17 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
 scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
 Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, an Admin page only an **Admin** can
-open, the light/dark **Theme**, and their tests.
+open, the light/dark **Theme**, the accent-color **Palette**, and their tests.
 
 The **Theme** is chosen from a Light, Dark and System group in the nav, on desktop and in the mobile menu. Each button
 posts to `/theme`, which stores the choice in a `theme` cookie and returns to the same page, so it works without
 JavaScript. The server reads the cookie as it renders and writes `data-theme` on `<html>`, so the first paint already
 uses the chosen Theme. System, the default, deletes the cookie and follows the OS preference.
+
+The **Palette** is chosen from a menu of 17 Tailwind hues, from Red to Rose, opened from a swatch button in the nav on desktop and shown
+as a Palette section in the mobile menu. Each tile posts to `/palette`, which stores the hue in a `palette` cookie and returns to the
+same page, again without JavaScript. The server writes `data-palette` on `<html>`, and a CSS rule for each hue swaps the accent color.
+Blue, the default, renders no attribute.
 
 ## Releases
 
@@ -48,6 +53,7 @@ uses the chosen Theme. System, the default, deletes the cookie and follows the O
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.162](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.162) | 2026-10-14 | feat(ui): Add the Palette menu to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md) |
 | [v0.0.161](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.161) | 2026-10-14 | feat(ui): Add the Theme control to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md) |
 | [v0.0.160](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.160) | 2026-10-14 | feat(ui): Add the Palettes slice, its cookie, data-palette and the hue rules | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-376-feat-ui-add-the-palettes-slice-its-cookie-data-palette-and-the-hue-rules.md) |
 | [v0.0.159](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.159) | 2026-10-14 | fix(sandcastle): Unshallow the checkout so the secret scan reads only a PR's commits | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-373-fix-sandcastle-unshallow-the-checkout-so-the-secret-scan-reads-only-a-pr-s-commits.md) |
@@ -57,7 +63,6 @@ uses the chosen Theme. System, the default, deletes the cookie and follows the O
 | [v0.0.155](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.155) | 2026-10-14 | feat(ui): Show the Release and commit in the footer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) |
 | [v0.0.154](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.154) | 2026-10-14 | fix(sandcastle): Keep the parent's conventional prefix on split child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-359-fix-sandcastle-keep-the-parent-s-conventional-prefix-on-split-child-issues.md) |
 | [v0.0.153](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.153) | 2026-10-14 | feat(ui): Generate build-time BuildInfo and the Release label function | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) |
-| [v0.0.152](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.152) | 2026-10-14 | fix(ui): Send a stale Log out home instead of a 400 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-345-fix-ui-send-a-stale-log-out-home-instead-of-a-400.md) |
 
 <!-- RELEASES_END -->
 
@@ -207,12 +212,6 @@ CLAUDE.md, .claude/              -- Claude Code instructions, rules and skills
 .github/scripts/                 -- Release blog post generator, backfill and pytest tests
 .github/copilot-instructions.md  -- Copilot PR review checklist, generated from the code-review skill
 ```
-
-## Roadmap
-
-All of the following are *planned* and don't exist yet:
-
-- *Planned:* the accent-color **Palette**, chosen from the Generated App's menu.
 
 ## Contributing
 
