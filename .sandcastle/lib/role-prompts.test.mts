@@ -160,6 +160,29 @@ describe("review prompt", () => {
     assert.match(prompt, /git diff \{\{BASE_BRANCH\}\}\.\.\.\{\{BRANCH\}\}/);
     assert.match(prompt, /git log \{\{BASE_BRANCH\}\}\.\.\{\{BRANCH\}\}/);
   });
+
+  // #335: every PR Sandcastle opened carried the same generic body; the
+  // reviewer now drafts one with Why, What changed and Verification
+  // sections, written to pr-body.md before the reviewer signals completion,
+  // whichever of the two EXECUTION paths (changes made, or nothing to
+  // change) it took.
+  it("tells the reviewer to write pr-body.md with the Why, What changed and Verification headings", () => {
+    const prompt = read("review-prompt.md");
+
+    assert.match(prompt, /\.sandcastle\/work\/\{\{TASK_ID\}\}\/pr-body\.md/);
+    assert.match(prompt, /## Why/);
+    assert.match(prompt, /## What changed/);
+    assert.match(prompt, /## Verification/);
+  });
+
+  it("writes pr-body.md before signalling completion, on every path", () => {
+    const prompt = read("review-prompt.md");
+    const writeIndex = prompt.search(/pr-body\.md/);
+    const completeIndex = prompt.indexOf("<promise>COMPLETE</promise>");
+
+    assert.notEqual(writeIndex, -1, "expected an instruction to write pr-body.md");
+    assert.ok(writeIndex < completeIndex, "the instruction to write pr-body.md must come before the completion signal");
+  });
 });
 
 describe("every prompt", () => {
