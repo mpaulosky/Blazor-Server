@@ -37,4 +37,27 @@ public class ReleaseLabelTests
 		label.Text.Should().Be(expectedText);
 		label.Link.Should().Be(expectedLink);
 	}
+
+	// Refs #350: an empty RepositoryUrl (no git checkout) must not produce a same-origin link such as "/releases",
+	// and a remote ending in ".git" (an SSH remote Source Link rewrote to https, or an explicit ".git" origin)
+	// must not leave the suffix in the link.
+	[Theory]
+	[InlineData("v0.0.152-0-g5cc1da2", "", "v0.0.152", "")]
+	[InlineData("", "", "no release", "")]
+	[InlineData("v0.0.152-0-g5cc1da2", "https://github.com/mpaulosky/Blazor-Server.git", "v0.0.152",
+		"https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.152")]
+	[InlineData("", "https://github.com/mpaulosky/Blazor-Server.git", "no release",
+		"https://github.com/mpaulosky/Blazor-Server/releases")]
+	public void FromDescribe_EmptyOrGitSuffixedRepositoryUrl_ReturnsExpectedLink(string describeOutput,
+		string repositoryUrl, string expectedText, string expectedLink)
+	{
+		// Arrange
+
+		// Act
+		ReleaseLabel label = ReleaseLabel.FromDescribe(describeOutput, repositoryUrl);
+
+		// Assert
+		label.Text.Should().Be(expectedText);
+		label.Link.Should().Be(expectedLink);
+	}
 }
