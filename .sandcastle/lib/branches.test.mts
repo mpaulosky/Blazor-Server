@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { branchFor, discardClosedWork, isIssueBranch, parseHeads, prepareBranches, slugFor, type BranchRefs } from "./branches.mts";
+import { branchFor, discardClosedWork, fetchMain, isIssueBranch, parseHeads, prepareBranches, slugFor, type BranchRefs } from "./branches.mts";
 
 // The branch standard, from the script the pre-push hook and CI's Branch name check share.
 const checkBranchName = fileURLToPath(new URL("../../scripts/check-branch-name.sh", import.meta.url));
@@ -387,5 +387,36 @@ describe("prepareBranches", () => {
 
     assert.deepEqual(work.map((w) => w.branch), ["feature/7-old-title", "fix/8-something"]);
     assert.deepEqual(fetched, ["feature/7-old-title"]);
+  });
+});
+
+describe("fetchMain", () => {
+  // A stub git that answers --is-shallow-repository with `shallow` and
+  // records every call.
+  function stubGit(shallow: boolean) {
+    const calls: string[][] = [];
+    const run = (...args: string[]): string => {
+      calls.push(args);
+      if (args[0] === "rev-parse" && args[1] === "--is-shallow-repository") return shallow ? "true" : "false";
+      if (args[0] === "rev-parse") return "abc123";
+      return "";
+    };
+    return { calls, run };
+  }
+
+  it("unshallows a shallow checkout while fetching main, so main..<branch> lists only the branch's own commits", () => {
+    const { calls, run } = stubGit(true);
+
+    assert.equal(fetchMain(run), "abc123");
+    const fetch = calls.find((args) => args[0] === "fetch");
+    assert.deepEqual(fetch, ["fetch", "--quiet", "--unshallow", "origin", "+refs/heads/main:refs/remotes/origin/main"]);
+  });
+
+  it("fetches main without --unshallow in a full clone, where git would refuse it", () => {
+    const { calls, run } = stubGit(false);
+
+    assert.equal(fetchMain(run), "abc123");
+    const fetch = calls.find((args) => args[0] === "fetch");
+    assert.deepEqual(fetch, ["fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main"]);
   });
 });
