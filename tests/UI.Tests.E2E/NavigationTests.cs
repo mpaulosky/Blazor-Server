@@ -7,6 +7,8 @@
 // Project Name :  UI.Tests.E2E
 // =============================================
 
+using Domain.Constants;
+
 using UI.Tests.E2E.Fixtures;
 
 namespace UI.Tests.E2E;
@@ -28,6 +30,7 @@ public class NavigationTests(WebAppFixture fixture)
 
 		// Assert
 		await Expect(page).ToHaveURLAsync(new Uri(fixture.BaseAddress, "/").ToString());
-		await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Hello, world!" })).ToBeVisibleAsync();
+		await Expect(page.GetByRole(AriaRole.Heading, new() { Name = ApplicationConstants.AppName }))
+			.ToBeVisibleAsync();
 	}
 }

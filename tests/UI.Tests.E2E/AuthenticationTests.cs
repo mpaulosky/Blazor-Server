@@ -26,7 +26,9 @@ public class AuthenticationTests(WebAppFixture fixture)
 		await page.GotoAsync(fixture.BaseAddress.ToString());
 
 		// Assert
-		await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Log in" })).ToBeVisibleAsync();
+		// Home's hero also shows a "Log in" link (see HomePageTests), so this scopes to the nav's, which is what
+		// the rest of this class clicks.
+		await Expect(NavLogInLink(page)).ToBeVisibleAsync();
 	}
 
 	[Fact]
@@ -40,7 +42,7 @@ public class AuthenticationTests(WebAppFixture fixture)
 
 		// Act
 		IRequest request = await page.RunAndWaitForRequestAsync(
-			() => page.GetByRole(AriaRole.Link, new() { Name = "Log in" }).ClickAsync(),
+			() => NavLogInLink(page).ClickAsync(),
 			request => request.Url.Contains("/authentication/login?returnUrl=%2F", StringComparison.Ordinal));
 
 		// Assert
@@ -62,10 +64,13 @@ public class AuthenticationTests(WebAppFixture fixture)
 
 		// Act
 		IRequest request = await page.RunAndWaitForRequestAsync(
-			() => page.GetByRole(AriaRole.Link, new() { Name = "Log in" }).ClickAsync(),
+			() => NavLogInLink(page).ClickAsync(),
 			request => request.Url.StartsWith($"https://{fixture.Auth0Domain}/authorize", StringComparison.Ordinal));
 
 		// Assert
 		request.Url.Should().StartWith($"https://{fixture.Auth0Domain}/authorize");
 	}
+
+	private static ILocator NavLogInLink(IPage page) =>
+		page.Locator("nav").GetByRole(AriaRole.Link, new() { Name = "Log in" });
 }
