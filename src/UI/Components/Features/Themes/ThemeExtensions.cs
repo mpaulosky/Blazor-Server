@@ -28,7 +28,13 @@ public static class ThemeExtensions
 		/// <returns>The matching <see cref="Theme" />.</returns>
 		public static Theme FromCookie(string? value)
 		{
-			throw new NotImplementedException();
+			// Ordinal and case-sensitive: the endpoint only ever writes lowercase, so any other spelling was tampered with.
+			return value switch
+			{
+				"light" => Theme.Light,
+				"dark" => Theme.Dark,
+				_ => Theme.System,
+			};
 		}
 
 		/// <summary>
@@ -37,7 +43,12 @@ public static class ThemeExtensions
 		/// <returns><c>"light"</c>, <c>"dark"</c>, or <see langword="null" /> for System, so no attribute is rendered.</returns>
 		public string? ToDataTheme()
 		{
-			throw new NotImplementedException();
+			return theme switch
+			{
+				Theme.Light => "light",
+				Theme.Dark => "dark",
+				_ => null,
+			};
 		}
 	}
 #pragma warning restore CA1034 // Do not nest types

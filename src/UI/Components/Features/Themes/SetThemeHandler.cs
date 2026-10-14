@@ -10,6 +10,7 @@
 using Domain.Abstractions;
 
 using FluentValidation;
+using FluentValidation.Results;
 
 namespace UI.Components.Features.Themes;
 
@@ -18,6 +19,8 @@ namespace UI.Components.Features.Themes;
 /// </summary>
 public sealed class SetThemeHandler
 {
+	private readonly IValidator<SetThemeCommand> _validator;
+
 	/// <summary>
 	///   Initializes a new instance of <see cref="SetThemeHandler" />.
 	/// </summary>
@@ -26,7 +29,7 @@ public sealed class SetThemeHandler
 	{
 		ArgumentNullException.ThrowIfNull(validator);
 
-		throw new NotImplementedException();
+		_validator = validator;
 	}
 
 	/// <summary>
@@ -41,6 +44,16 @@ public sealed class SetThemeHandler
 	{
 		ArgumentNullException.ThrowIfNull(command);
 
-		throw new NotImplementedException();
+		ValidationResult validation = _validator.Validate(command);
+
+		if (!validation.IsValid)
+		{
+			ValidationFailure error = validation.Errors[0];
+
+			return Result.Fail<Theme>(error.ErrorMessage, ResultErrorCode.Validation, error.ErrorCode);
+		}
+
+		// The validator has narrowed the value to light, dark or system, and FromCookie maps system to System.
+		return Result.Ok(Theme.FromCookie(command.Value));
 	}
 }

@@ -7,6 +7,8 @@
 // Project Name :  UI
 // =============================================
 
+using FluentValidation;
+
 namespace UI.Components.Features.Themes;
 
 /// <summary>
@@ -23,6 +25,10 @@ public static class ThemeFeature
 	{
 		ArgumentNullException.ThrowIfNull(services);
 
-		throw new NotImplementedException();
+		// Both hold no state, so one instance serves every request.
+		services.AddSingleton<IValidator<SetThemeCommand>, SetThemeCommandValidator>();
+		services.AddSingleton<SetThemeHandler>();
+
+		return services;
 	}
 }
