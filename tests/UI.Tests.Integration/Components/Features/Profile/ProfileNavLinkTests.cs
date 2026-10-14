@@ -55,6 +55,10 @@ public class ProfileNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().NotContain("href=\"profile\"");
+
+		// Home's hero now links to "profile" for every visitor (issue #315's Log in button), so the href alone no
+		// longer tells the nav's Profile link apart from the hero's. The nav's link is the only place that renders
+		// the capitalized word "Profile" (the hero says "Log in" for a Visitor), so that is what distinguishes them.
+		html.Should().NotContain("Profile");
 	}
 }
