@@ -27,7 +27,9 @@ public class ReleaseDomainTermTests
 			"_Avoid_: Version, build, deploy");
 
 		// Act
-		string markdown = File.ReadAllText(path);
+		// Normalize line endings: a CRLF checkout (Windows with core.autocrlf=true) would otherwise fail the
+		// Contain check below even though the term is defined, because expectedEntry is joined with '\n'.
+		string markdown = File.ReadAllText(path).ReplaceLineEndings("\n");
 
 		// Assert
 		markdown.Should().Contain(expectedEntry);
