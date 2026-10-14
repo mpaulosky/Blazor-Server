@@ -26,7 +26,7 @@ matching files.
   `Add<Feature>Feature()` registration) lives in its own folder under `Components/Features/<Feature>/`; the layout is in
   `Components/Layout/`, and the app-wide Error and NotFound pages are in `Components/Pages/`. `Security/` holds
   cross-cutting code that isn't a component, such as `LocalReturnUrl`, and depends on no slice (see
-  `docs/adr/0007-cross-cutting-code-outside-the-slices.md`). It references only
+  `docs/adr/0007-cross-cutting-code-outside-the-slices.md`). `src/UI` references only
   `src/Domain` and `src/ServiceDefaults` (see `docs/adr/0005-feature-slices-live-in-the-ui-project.md` and its amendment,
   `docs/adr/0006-ui-references-servicedefaults.md`).
 - `src/AppHost/`: the Aspire AppHost (entry file `AppHost.cs`). It runs the UI as the resource
