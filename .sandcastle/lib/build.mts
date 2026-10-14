@@ -59,12 +59,20 @@ export { UncountedStopError };
 // doesn't stop the pipeline (see "When a role fails" in
 // docs/plans/sandcastle-workflow.md): the PR still publishes, with a note
 // that the documentation step failed.
+//
+// `prBody` is the reviewer's `pr-body.md` (its Why, What changed and
+// Verification sections), already read from the sandbox and validated by the
+// caller, or undefined to fall back to today's generic body (#335). A
+// review-failed or docs-failed warning is placed after the reviewer's
+// sections rather than folded into them, since the reviewer wrote them before
+// either was known.
 export async function publish(
   issue: SandcastleIssue,
   branch: string,
   commit: string,
   reviewed: boolean,
   docsFailed: boolean,
+  prBody: string | undefined = undefined,
   push: (branch: string, commit: string) => void = (pushBranch, pushCommit) =>
     void git("push", "--quiet", "origin", `${pushCommit}:refs/heads/${pushBranch}`),
   createPullRequest: (branch: string, title: string, body: string) => string = openPullRequest,
