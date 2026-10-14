@@ -9,6 +9,7 @@ import {
   latestDesignNote,
   isGitHubServerError,
   isWorkflowPushRejection,
+  PR_BODY_LIMIT,
   publicErrorText,
   publish,
   UncountedStopError,
@@ -61,7 +62,7 @@ function host(
     publishError,
     designNote,
     designFile = "",
-    prBodyFile = "",
+    prBodyFile = "## Why\n\nBecause.\n\n## What changed\n\nAdded X.\n\n## Verification\n\nRan the tests.",
     latestMain = base,
     containsMain = true,
     mergeExitCode = 0,
@@ -85,7 +86,9 @@ function host(
     designFile?: string;
     // The content .sandcastle/work/{n}/pr-body.md holds in the sandbox once
     // the reviewer has run: its Why, What changed and Verification sections,
-    // read back before publish() is called (#335).
+    // read back before publish() is called (#335). A valid one by default, as
+    // a reviewer that finished writes, so a test that pins the log isn't
+    // handed the fallback's line.
     prBodyFile?: string;
     // The commit latestMain() resolves origin/main to just before checkpoint
     // 2, whether the branch already contains it, how `git merge` of it and
@@ -1165,6 +1168,26 @@ describe("buildIssue reading the reviewer's PR body", () => {
       assert.ok(logs.some((line) => /PR body/i.test(line)), logs.join("\n"));
     });
   }
+
+  it("falls back to the generic PR body, and logs why, when the file is too long for a PR body", async () => {
+    const { logs, publishedPrBodies, buildHost } = host([0, 0], { prBodyFile: `${validPrBody}\n\n${"x".repeat(PR_BODY_LIMIT)}` });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.equal(publishedPrBodies.at(-1), undefined);
+    assert.ok(logs.some((line) => /PR body/i.test(line)), logs.join("\n"));
+  });
+
+  it("removes an earlier round's pr-body.md before any role runs, so its description never goes out with this round's change", async () => {
+    const { workCommands, buildHost } = host([0, 0], { prBodyFile: validPrBody });
+
+    await buildIssue(issue, branch, base, buildHost);
+
+    assert.ok(
+      workCommands.some((entry) => entry.command === `rm -f .sandcastle/work/${issue.number}/pr-body.md` && entry.rolesRun === 0),
+      JSON.stringify(workCommands),
+    );
+  });
 
   it("falls back to the generic PR body, and logs why, when the file holds a token-shaped string or sandbox secret", async () => {
     const { logs, publishedPrBodies, buildHost } = host([0, 0], {
