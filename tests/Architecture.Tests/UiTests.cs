@@ -80,4 +80,29 @@ public class UiTests
 			"the Authentication slice is expected to call into the Auth0 SDK; an empty result would let a typo in " +
 			"the namespace above pass that rule vacuously");
 	}
+
+	[Fact]
+	public void UiAssembly_SharedComponents_DependOnNoFeatureSlice()
+	{
+		// Arrange
+		Assembly uiAssembly = typeof(App).Assembly;
+		const string sharedNamespace = "UI.Components.Shared";
+		const string featuresNamespace = "UI.Components.Features";
+
+		// Act
+		IReadOnlyList<string> featureDependencies =
+			SharedDependencyRule.FindFeatureDependencies(uiAssembly, sharedNamespace, featuresNamespace);
+		IEnumerable<Type> sharedTypes = Types.InAssembly(uiAssembly)
+			.That()
+			.ResideInNamespace(sharedNamespace)
+			.GetTypes();
+
+		// Assert
+		featureDependencies.Should().BeEmpty(
+			"UI.Components.Shared holds UI building blocks only, and never depends on a feature slice " +
+			"(docs/plans/ui-restyle.md)");
+		sharedTypes.Should().NotBeEmpty(
+			"Card, PageHeader, StatTile, Badge and Button are expected in UI.Components.Shared; an empty result " +
+			"would let a typo in the namespace above pass this rule vacuously");
+	}
 }

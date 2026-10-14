@@ -1,0 +1,39 @@
+@namespace UI.Components.Shared
+
+@if (Href is not null)
+{
+	<a href="@Href" class="@KindClass @Class" @attributes="AdditionalAttributes">@ChildContent</a>
+}
+else
+{
+	<button type="@Type" class="@KindClass @Class" @attributes="AdditionalAttributes">@ChildContent</button>
+}
+
+@code {
+	[Parameter]
+	public ButtonKind Kind { get; set; } = ButtonKind.Primary;
+
+	[Parameter]
+	public string? Href { get; set; }
+
+	[Parameter]
+	public string Type { get; set; } = "button";
+
+	[Parameter]
+	public RenderFragment? ChildContent { get; set; }
+
+	[Parameter]
+	public string? Class { get; set; }
+
+	[Parameter(CaptureUnmatchedValues = true)]
+	public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+	private string KindClass => Kind switch
+	{
+		ButtonKind.Primary =>
+			"rounded-xl bg-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 motion-safe:transition",
+		ButtonKind.Secondary =>
+			"rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 dark:border-slate-700 dark:hover:bg-slate-800 motion-safe:transition",
+		_ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, "Unknown ButtonKind."),
+	};
+}
