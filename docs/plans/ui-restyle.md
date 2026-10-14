@@ -329,15 +329,15 @@ The Error page also shows:
 
 ## Implementation issues
 
-Filed with native "blocked by" links, so Sandcastle's blocker gate builds them in order. Issues 3 to 7 only need the components, so they can build in parallel.
+Filed with native "blocked by" links, so Sandcastle's blocker gate builds them in order. Every issue after the shared components needs only them, so they can build in parallel.
 The coding-standard lines this restyle needs landed with this spec.
 
-| # | Issue | Blocked by |
-| --- | --- | --- |
-| 1 | Tokens: the dark variant, the accent token, the `<html>` and `<body>` classes, and `ApplicationConstants.AppName` | this spec |
-| 2 | Shared components: Card, PageHeader, StatTile, Badge and Button, their bUnit tests, and the architecture rule | 1 |
-| 3 | Layout: page shell, nav with the mobile menu, `LoginDisplay`, footer and error bar | 2 |
-| 4 | Reconnect modal | 2 |
-| 5 | Home showcase | 2 |
-| 6 | Profile and Admin | 2 |
-| 7 | Access Denied, Not Found and Error | 2 |
+| Issue | Blocked by |
+| --- | --- |
+| [Add the dark variant, the accent token and the app name constant](https://github.com/mpaulosky/Blazor-Server/issues/311) | this spec ([#310](https://github.com/mpaulosky/Blazor-Server/pull/310)) |
+| [Add the shared Card, PageHeader, StatTile, Badge and Button components](https://github.com/mpaulosky/Blazor-Server/issues/312) | #311 |
+| [Restyle the page shell, nav, footer and error bar](https://github.com/mpaulosky/Blazor-Server/issues/313) | #312 |
+| [Restyle the reconnect modal](https://github.com/mpaulosky/Blazor-Server/issues/314) | #312 |
+| [Turn Home into the Template showcase](https://github.com/mpaulosky/Blazor-Server/issues/315) | #312 |
+| [Restyle the Profile and Admin pages](https://github.com/mpaulosky/Blazor-Server/issues/316) | #312 |
+| [Restyle the Access Denied, Not Found and Error pages](https://github.com/mpaulosky/Blazor-Server/issues/317) | #312 |
