@@ -90,19 +90,15 @@ public class UiTests
 		const string featuresNamespace = "UI.Components.Features";
 
 		// Act
-		NetArchTest.Rules.TestResult result = Types.InAssembly(uiAssembly)
-			.That()
-			.ResideInNamespace(sharedNamespace)
-			.ShouldNot()
-			.HaveDependencyOn(featuresNamespace)
-			.GetResult();
+		IReadOnlyList<string> featureDependencies =
+			SharedDependencyRule.FindFeatureDependencies(uiAssembly, sharedNamespace, featuresNamespace);
 		IEnumerable<Type> sharedTypes = Types.InAssembly(uiAssembly)
 			.That()
 			.ResideInNamespace(sharedNamespace)
 			.GetTypes();
 
 		// Assert
-		(result.FailingTypeNames ?? []).Should().BeEmpty(
+		featureDependencies.Should().BeEmpty(
 			"UI.Components.Shared holds UI building blocks only, and never depends on a feature slice " +
 			"(docs/plans/ui-restyle.md)");
 		sharedTypes.Should().NotBeEmpty(

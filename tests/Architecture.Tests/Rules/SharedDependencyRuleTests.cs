@@ -1,6 +1,6 @@
 // ============================================
 // Copyright (c) 2026. All rights reserved.
-// File Name :     SharedComponentBoundaryTests.cs
+// File Name :     SharedDependencyRuleTests.cs
 // Company :       mpaulosky
 // Author :        Teqslamer
 // Solution Name : Blazor-Server
@@ -11,30 +11,28 @@ using System.Reflection;
 
 using Architecture.Tests.Fixtures.Shared;
 
-namespace Architecture.Tests;
+namespace Architecture.Tests.Rules;
 
-public class SharedComponentBoundaryTests
+public class SharedDependencyRuleTests
 {
 	private const string FixturesSharedNamespace = "Architecture.Tests.Fixtures.Shared";
 	private const string FixturesFeaturesNamespace = "Architecture.Tests.Fixtures.Features";
 
 	[Fact]
-	public void SharedTypeReferencingAFeature_ArchitectureRule_FlagsTheViolation()
+	public void FindFeatureDependencies_SharedWidgetReferencesAlpha_ReturnsOnlySharedWidget()
 	{
 		// Arrange
 		Assembly fixturesAssembly = typeof(SharedWidget).Assembly;
 
 		// Act
-		NetArchTest.Rules.TestResult result = Types.InAssembly(fixturesAssembly)
-			.That()
-			.ResideInNamespace(FixturesSharedNamespace)
-			.ShouldNot()
-			.HaveDependencyOn(FixturesFeaturesNamespace)
-			.GetResult();
+		IReadOnlyList<string> failingTypeNames = SharedDependencyRule.FindFeatureDependencies(
+			fixturesAssembly,
+			FixturesSharedNamespace,
+			FixturesFeaturesNamespace);
 
 		// Assert
-		(result.FailingTypeNames ?? []).Should().Contain(typeof(SharedWidget).FullName,
-			"SharedWidget's fixture dependency on a Features fixture must be caught, proving the rule the UI assembly " +
+		failingTypeNames.Should().Equal([typeof(SharedWidget).FullName],
+			"SharedWidget's dependency on a Features fixture must be caught, proving the rule the UI assembly " +
 			"test relies on actually fails on a violation");
 	}
 }
