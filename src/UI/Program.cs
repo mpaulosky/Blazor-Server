@@ -13,6 +13,7 @@ using ServiceDefaults;
 
 using UI.Components;
 using UI.Components.Features.Authentication;
+using UI.Components.Features.Palettes;
 using UI.Components.Features.Themes;
 using UI.Components.Layout;
 
@@ -32,6 +33,7 @@ builder.Services.AddSingleton(new BuildInfo(BuildInfoConstants.Release, BuildInf
 	BuildInfoConstants.RepositoryUrl));
 
 builder.Services.AddAuthenticationFeature(builder.Configuration);
+builder.Services.AddPaletteFeature();
 builder.Services.AddThemeFeature();
 builder.Services.AddCascadingAuthenticationState();
 
@@ -69,6 +71,7 @@ app.UseAntiforgery();
 app.MapDefaultEndpoints();
 app.MapStaticAssets();
 app.MapAuthenticationEndpoints();
+app.MapPaletteEndpoints();
 app.MapThemeEndpoints();
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();
