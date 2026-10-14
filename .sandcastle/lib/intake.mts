@@ -165,8 +165,9 @@ const runIntake: IntakeRun = intakeRunner();
 // is ignored and logged.
 //
 // Returns how many verdicts GitHub took and refused, the first refusal's
-// error, and the issues left unjudged (no verdict, or a refused one), so
-// intakeRound can record which issues a stop leaves behind and why (#320).
+// error, and the issues settled (a verdict GitHub took, or one another run
+// gave first), so intakeRound can record which issues a stop leaves behind
+// and why (#320).
 export function applyVerdicts(
   issues: readonly SandcastleIssue[],
   verdicts: readonly IntakeVerdict[],
@@ -175,7 +176,7 @@ export function applyVerdicts(
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
   splitGithub: SplitGitHub = liveSplitGitHub,
-): { applied: number; failed: number; firstError: unknown; unjudged: number[] } {
+): { applied: number; failed: number; firstError: unknown; settled: number[] } {
   const sent = new Map(issues.map((issue) => [String(issue.number), issue]));
   const judged = new Set<string>();
   // Judged by this verdict or, since the queue was read, by another run.
@@ -231,8 +232,11 @@ export function applyVerdicts(
   for (const id of sent.keys()) {
     if (!judged.has(id)) log(`  ⚠ Intake gave no verdict on #${id}, so it's judged again in a later round or run.`);
   }
-  const unjudged = issues.filter((issue) => !settled.has(String(issue.number))).map((issue) => issue.number);
-  return { ...counts, firstError, unjudged };
+  return {
+    ...counts,
+    firstError,
+    settled: issues.filter((issue) => settled.has(String(issue.number))).map((issue) => issue.number),
+  };
 }
 
 // Adds the verdict's labels and posts its one comment, and returns the line
@@ -661,10 +665,8 @@ export async function intakeRound(
       return failure;
     }
     failedInARow = 0;
-    const { applied, failed, firstError, unjudged } = applyVerdicts(batch, verdicts, gh, repo, report, log);
-    for (const issue of batch) {
-      if (!unjudged.includes(issue.number)) settled.add(issue.number);
-    }
+    const { applied, failed, firstError, settled: settledInBatch } = applyVerdicts(batch, verdicts, gh, repo, report, log);
+    for (const number of settledInBatch) settled.add(number);
     // A batch counts only when GitHub refused more than one verdict in it: one
     // refused edit can be that issue's own, and narrowing makes single-issue
     // batches back to back. Any other run that answered resets the count.
