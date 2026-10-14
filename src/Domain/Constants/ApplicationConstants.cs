@@ -44,7 +44,7 @@ public static class ApplicationConstants
 	public const string Website = "WebApp";
 
 	/// <summary>
-	///   The Template's brand name. Not yet set to "Blazor Server" (see issue #311).
+	///   The app's brand name, shown in the nav, the footer and Home's heading. A Generated App changes it to rebrand.
 	/// </summary>
-	public const string AppName = "";
+	public const string AppName = "Blazor Server";
 }
