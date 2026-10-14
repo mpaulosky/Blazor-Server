@@ -62,6 +62,7 @@ public class CardTests : BunitContext
 		// Assert
 		cut.Find("section > div:first-child").TextContent.Should().Contain("Action");
 		cut.Find("section > div.mt-4").TextContent.Should().Contain("Body text");
+		cut.FindAll("h2").Should().BeEmpty();
 	}
 
 	[Fact]

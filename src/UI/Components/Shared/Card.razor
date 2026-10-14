@@ -4,8 +4,16 @@
 	@if (Title is not null || Actions is not null)
 	{
 		<div class="flex items-center justify-between gap-4">
-			<h2 class="text-xl font-bold">@Title</h2>
-			@Actions
+			@if (Title is not null)
+			{
+				<h2 class="text-xl font-bold">@Title</h2>
+			}
+			@if (Actions is not null)
+			{
+				<div class="@(Title is null ? "ml-auto" : null)">
+					@Actions
+				</div>
+			}
 		</div>
 		<div class="mt-4">
 			@ChildContent
