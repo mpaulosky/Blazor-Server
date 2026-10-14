@@ -26,6 +26,7 @@ import {
   type OptionalRole,
 } from "./config.mts";
 import { RunLimits } from "./limits.mts";
+import type { SecretMatch } from "./scan.mts";
 
 const issue = { number: 69, title: "Run the gate", body: "", labels: ["Sandcastle"], comments: [], roles: [] as OptionalRole[] };
 
@@ -35,6 +36,13 @@ const withRoles = (roles: OptionalRole[]) => ({ ...issue, roles });
 const branch = "feature/69-run-the-gate";
 // The commit fetchMain() resolved origin/main to.
 const base = "f".repeat(40);
+
+// A match host.leaksSecret can return: a line, so a test can check the log
+// and the report name its path and line number without naming the secret.
+const sampleSecretMatch: SecretMatch = {
+  location: { commit: "c".repeat(40), field: "line", path: "src/example.ts", line: 3 },
+  kind: { type: "pattern", shape: "sk-ant-" },
+};
 
 // A host whose sandbox records each role run and gate run in `steps`, and
 // answers the gate with the queued exit codes in order. A role in `failing`
@@ -64,7 +72,9 @@ function host(
     failing?: string[];
     failWith?: Record<string, Error>;
     unfinished?: string[];
-    leaksSecret?: boolean;
+    // `true` stands in for sampleSecretMatch; pass a SecretMatch directly to
+    // check what a test does with its location.
+    leaksSecret?: boolean | SecretMatch;
     worktreeProblems?: string[];
     publishError?: string;
     // What latestDesignNote returns for the architect's prompt: the body of
@@ -216,7 +226,7 @@ function host(
     leaksSecret: (scanBase, commit) => {
       scannedBases.push(scanBase);
       scanned.push(commit);
-      return leaksSecret;
+      return leaksSecret === false ? undefined : leaksSecret === true ? sampleSecretMatch : leaksSecret;
     },
     publish: async (_issue, publishedBranch, commit, reviewed, docsFailed) => {
       if (publishError) throw new Error(publishError);
@@ -582,6 +592,21 @@ describe("buildIssue publishing", () => {
     assert.equal(comments.length, 1);
     assert.match(comments[0]!.body, /holds one of the sandbox's secrets/);
     assert.match(comments[0]!.body, new RegExp(`\`${branch}\` wasn't pushed`));
+  });
+
+  it("logs the match's location, and adds it to the run report, without naming the secret itself or changing the public comment", async () => {
+    const { logs, comments, buildHost } = host([0, 0], { leaksSecret: sampleSecretMatch });
+
+    const result = await buildIssue(issue, branch, base, buildHost);
+
+    const logged = logs.join("\n");
+    assert.match(logged, /src\/example\.ts/);
+    assert.match(logged, /\b3\b/);
+    assert.match(result.detail ?? "", /src\/example\.ts/);
+    assert.match(result.detail ?? "", /\b3\b/);
+    // The public comment on the issue stays as it is: no path or line number (#324).
+    assert.equal(comments.length, 1);
+    assert.doesNotMatch(comments[0]!.body, /src\/example\.ts/);
   });
 
   it("comments on the issue, and closes the sandbox, when the push is rejected", async () => {

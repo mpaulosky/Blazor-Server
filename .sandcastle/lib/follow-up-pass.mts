@@ -61,7 +61,7 @@ import { followUpPromptArgs, gateFixerPromptArgs } from "./prompts.mts";
 import { ownerCheck, type IsOwner } from "./queue.mts";
 import { humanThreadReport, outcomeReport, type HumanThreadEntry, type OutcomeEntry, type OutcomeReport } from "./report.mts";
 import { containsSandboxSecret } from "./sandbox-env.mts";
-import { publishedText } from "./scan.mts";
+import type { SecretMatch } from "./scan.mts";
 import { git } from "./shell.mts";
 
 // Where the follow-up role writes its verdicts, relative to the worktree.
@@ -494,8 +494,12 @@ export type PassHost = {
   // lib/host-safety.mts's worktree-tamper check, as lib/build.mts#BuildHost
   // already exposes it.
   worktreeProblems(path: string): string[];
-  // lib/scan.mts#publishedText, checked with lib/sandbox-env.mts#containsSandboxSecret.
-  leaksSecret(base: string, commit: string): boolean;
+  // The first match (see lib/scan.mts#firstSecretMatch) in what the commits
+  // from `base` to `commit` publish, against one of the sandbox's secrets or
+  // a token shape, or undefined when nothing matches. Carries only where the
+  // match sits and what kind it is, never the matched text, so logging or
+  // reporting it never risks the secret itself (#324).
+  leaksSecret(base: string, commit: string): SecretMatch | undefined;
   // A plain push of the gated commit to the PR's branch, retried on a
   // GitHub server error the way lib/build.mts#publish's push is.
   push(branch: string, commit: string): Promise<void>;
@@ -559,7 +563,9 @@ export const livePassHost: PassHost = {
   unmarkBuilding: (issue) => releaseBuildingLabel(issue),
   createSandbox: (branch) => createCheckedSandbox(branch),
   worktreeProblems: (path) => worktreeLinkProblems(path, repoGitDir()),
-  leaksSecret: (base, commit) => containsSandboxSecret(publishedText(base, commit)),
+  leaksSecret: (_base, _commit) => {
+    throw new Error("Not implemented");
+  },
   push: (branch, commit) =>
     retryOnServerError(
       () => void git("push", "--quiet", "origin", `${commit}:refs/heads/${branch}`),

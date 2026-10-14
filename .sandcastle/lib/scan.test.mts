@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { addedLines, publishedText } from "./scan.mts";
+import { addedLines, firstSecretMatch, publishedText } from "./scan.mts";
 import { hostGitInvocation, runHostGit } from "./shell.mts";
 
 describe("addedLines", () => {
@@ -106,4 +106,108 @@ describe("publishedText", () => {
       rmSync(repo, { recursive: true, force: true });
     }
   });
+});
+
+describe("firstSecretMatch", () => {
+  // A repository with a `base` commit and one commit on top (`leak`), whose
+  // author, committer, message and added file a test can set, so a match
+  // sits in exactly one field.
+  const buildRepo = ({
+    authorName = "author",
+    authorEmail = "author@x",
+    committerName = "committer",
+    committerEmail = "committer@x",
+    message = "plain commit",
+    fileName = "notes.txt",
+    fileContent = "plain line\n",
+  }: {
+    authorName?: string;
+    authorEmail?: string;
+    committerName?: string;
+    committerEmail?: string;
+    message?: string;
+    fileName?: string;
+    fileContent?: string;
+  } = {}) => {
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), "sandcastle-scan-")));
+    const raw = (...args: string[]) =>
+      execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
+        cwd: repo,
+        encoding: "utf8",
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: authorName,
+          GIT_AUTHOR_EMAIL: authorEmail,
+          GIT_COMMITTER_NAME: committerName,
+          GIT_COMMITTER_EMAIL: committerEmail,
+        },
+      }).trim();
+    raw("init", "--quiet");
+    raw("commit", "--quiet", "--allow-empty", "-m", "base");
+    const base = raw("rev-parse", "HEAD");
+    writeFileSync(join(repo, fileName), fileContent);
+    raw("add", ".");
+    raw("commit", "--quiet", "-m", message);
+    const leak = raw("rev-parse", "HEAD");
+    const hostGit = (...args: string[]) => runHostGit(repo, hostGitInvocation(repo, join(repo, ".git"), args));
+    return { repo, base, leak, hostGit };
+  };
+
+  it("reports no match for a clean range", () => {
+    const { repo, base, leak, hostGit } = buildRepo();
+    try {
+      assert.equal(firstSecretMatch(base, leak, new Map([["ANTHROPIC_API_KEY", "unrelated-secret-value"]]), hostGit), undefined);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the commit, file path, line number and pattern kind for an added line shaped like a token", () => {
+    // Built at run time, so this test file isn't itself flagged as a leak.
+    const githubShaped = `${"gh"}p_${"A".repeat(36)}`;
+    const { repo, base, leak, hostGit } = buildRepo({ fileContent: `harmless line\n${githubShaped}\n` });
+    try {
+      const match = firstSecretMatch(base, leak, new Map(), hostGit);
+
+      assert.deepEqual(match, {
+        location: { commit: leak, field: "line", path: "notes.txt", line: 2 },
+        kind: { type: "pattern", shape: "gh*_" },
+      });
+      // Never the matched text itself (#324).
+      assert.ok(!JSON.stringify(match).includes(githubShaped));
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the commit, the message field and the env key for a sandbox secret in the commit message", () => {
+    const secretValue = "fake-secret-message-value";
+    const { repo, base, leak, hostGit } = buildRepo({ message: `uses ${secretValue} to connect` });
+    try {
+      const match = firstSecretMatch(base, leak, new Map([["ANTHROPIC_API_KEY", secretValue]]), hostGit);
+
+      assert.deepEqual(match, { location: { commit: leak, field: "message" }, kind: { type: "secret", envKey: "ANTHROPIC_API_KEY" } });
+      // Never the matched text itself (#324).
+      assert.ok(!JSON.stringify(match).includes(secretValue));
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  for (const field of ["author", "committer"] as const) {
+    it(`reports the commit, the ${field} field and the env key for a sandbox secret in the commit's ${field}`, () => {
+      const secretValue = `fake-secret-${field}-value`;
+      const { repo, base, leak, hostGit } = buildRepo(field === "author" ? { authorName: secretValue } : { committerName: secretValue });
+      try {
+        const match = firstSecretMatch(base, leak, new Map([["GH_TOKEN", secretValue]]), hostGit);
+
+        assert.deepEqual(match, { location: { commit: leak, field }, kind: { type: "secret", envKey: "GH_TOKEN" } });
+        // Never the matched text itself (#324).
+        assert.ok(!JSON.stringify(match).includes(secretValue));
+      } finally {
+        rmSync(repo, { recursive: true, force: true });
+      }
+    });
+  }
 });

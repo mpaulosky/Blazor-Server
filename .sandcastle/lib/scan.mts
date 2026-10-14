@@ -7,6 +7,7 @@
 // git runs with replace refs and grafts off (see hostGitInvocation), so the
 // scan reads the same commits git push sends, whatever an agent planted.
 
+import { secretKindIn, type SecretKind } from "./sandbox-env.mts";
 import { git } from "./shell.mts";
 
 // The added lines of `git log -p --cc -U0` output. A hunk starts at its "@@"
@@ -47,4 +48,34 @@ export function publishedText(base: string, commit: string, run: (...args: strin
   const paths = run("log", "--format=", "--name-only", "--cc", "--no-renames", range);
   const patch = run("log", "--format=", "-p", "--cc", "-U0", "--no-ext-diff", "--no-textconv", "--text", range);
   return [commits, paths, ...addedLines(patch)].join("\n");
+}
+
+// Where in a commit a match sits: its author or committer identity, its
+// message, a path it touches, or an added line (with the path and the line
+// number in the new file). Never the matched text itself (#324).
+export type MatchLocation =
+  | { readonly commit: string; readonly field: "author" | "committer" | "message" }
+  | { readonly commit: string; readonly field: "path"; readonly path: string }
+  | { readonly commit: string; readonly field: "line"; readonly path: string; readonly line: number };
+
+// A match a push would publish: where it sits, and what kind of thing it is
+// (lib/sandbox-env.mts#SecretKind). Carries nothing else, so logging or
+// reporting it is safe even though the push it stopped isn't.
+export type SecretMatch = { readonly location: MatchLocation; readonly kind: SecretKind };
+
+// The first match the commits from `base` to `commit` publish hold against
+// `secrets` (a sandbox value keyed by the .sandcastle/.env key it came from)
+// or a token shape, checked commit by commit (oldest first, as a reviewer
+// reading `git log -p base..commit` would see them), and within a commit in
+// the order a reviewer would look: its author, its committer, its message,
+// each path it touches, then each line it adds, top to bottom. Undefined
+// when nothing matches. Never reads removed lines or context, for the same
+// reason publishedText doesn't (see the top of this file).
+export function firstSecretMatch(
+  base: string,
+  commit: string,
+  secrets: ReadonlyMap<string, string>,
+  run: (...args: string[]) => string = git,
+): SecretMatch | undefined {
+  throw new Error("Not implemented");
 }

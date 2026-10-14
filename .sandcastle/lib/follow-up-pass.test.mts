@@ -28,6 +28,7 @@ import type { HeadCheck, ReviewThread, SandcastleIssue } from "./github.mts";
 import type { IsOwner } from "./queue.mts";
 import { OutcomeReport, type HumanThreadEntry } from "./report.mts";
 import { RunLimits } from "./limits.mts";
+import type { SecretMatch } from "./scan.mts";
 
 const ISSUE_NUMBER = 50;
 const PR_NUMBER = 7;
@@ -37,6 +38,13 @@ const HEAD = "c".repeat(40);
 // The commit the follow-up role makes in sandboxFake, unless a test says otherwise.
 const ROLE_COMMIT = "a".repeat(40);
 const HOST_LOGIN = "sandcastle-bot";
+
+// A match host.leaksSecret can return: a line, so a test can check the log
+// and the hand-back name its path and line number without naming the secret.
+const sampleSecretMatch: SecretMatch = {
+  location: { commit: "e".repeat(40), field: "line", path: "src/example.ts", line: 3 },
+  kind: { type: "pattern", shape: "sk-ant-" },
+};
 
 const issue: SandcastleIssue = { number: ISSUE_NUMBER, title: "Fix the widget", body: "", labels: ["Sandcastle"], comments: [] };
 
@@ -739,7 +747,9 @@ function passHostFake(
     markBuildingResult?: boolean;
     sandbox?: ReturnType<typeof sandboxFake>;
     pushError?: Error;
-    leaksSecret?: boolean;
+    // `true` stands in for sampleSecretMatch; pass a SecretMatch directly to
+    // check what a test does with its location.
+    leaksSecret?: boolean | SecretMatch;
     worktreeProblems?: string[];
     isOwnerFn?: IsOwner;
     hostLogin?: string;
@@ -800,7 +810,12 @@ function passHostFake(
       return sandbox.sandbox;
     },
     worktreeProblems: () => options.worktreeProblems ?? [],
-    leaksSecret: () => options.leaksSecret ?? false,
+    leaksSecret: () =>
+      options.leaksSecret === undefined || options.leaksSecret === false
+        ? undefined
+        : options.leaksSecret === true
+          ? sampleSecretMatch
+          : options.leaksSecret,
     push: async (branch, commit) => {
       calls.push.push({ branch, commit });
       if (options.pushError) throw options.pushError;
@@ -1264,6 +1279,22 @@ describe("runPass", () => {
     assert.equal(outcome.kind, "gave-up");
     assert.deepEqual(calls.push, []);
     assert.equal(calls.handBack.length, 1);
+  });
+
+  it("logs the match's location, and adds it to the hand-back's entry in the run report, without naming the secret itself or changing the PR comment", async () => {
+    const sandbox = sandboxFake({ followUpJson: JSON.stringify([{ threadId: "RT_bot", verdict: "fixed", reason: "Done.", commit: "a".repeat(7) }]) });
+    const { passHost, calls } = passHostFake({ threads: [botThread()], containsBase: true, sandbox, leaksSecret: sampleSecretMatch });
+
+    const outcome = await runPass(passTarget(), issue, BASE, passHost);
+
+    assert.equal(outcome.kind, "gave-up");
+    const logged = calls.log.join("\n");
+    assert.match(logged, /src\/example\.ts/);
+    assert.match(logged, /\b3\b/);
+    assert.equal(calls.handBack.length, 1);
+    // The run report shows the hand-back's reason (lib/report.mts#handBackLines); the PR comment never does (#324).
+    assert.match(calls.handBack[0]!.reason, /src\/example\.ts/);
+    assert.doesNotMatch(calls.handBack[0]!.body, /src\/example\.ts/);
   });
 });
 

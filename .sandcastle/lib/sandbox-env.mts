@@ -64,3 +64,18 @@ export function containsSandboxSecret(text: string): boolean {
   const envFile = existsSync(ENV_FILE) ? readFileSync(ENV_FILE, "utf8") : "";
   return containsSecret(text, sandboxEnv(envFile, process.env).values());
 }
+
+// What kind of thing a match is: one of the sandbox's secret values, naming
+// the .sandcastle/.env key it came from, or a token shape. Never carries the
+// matched text itself, so a caller can log or report a SecretKind without
+// ever touching the secret (#324).
+export type SecretKind = { readonly type: "secret"; readonly envKey: string } | { readonly type: "pattern"; readonly shape: "sk-ant-" | "gh*_" | "github_pat_" };
+
+// secretKindIn mirrors containsSecret's rules (a value shorter than
+// minimumSecretLength is too likely to be an ordinary word to look for), but
+// names which `secrets` key or which token shape matched instead of a
+// yes/no, so lib/scan.mts can report where a push was stopped without ever
+// handling the matched text.
+export function secretKindIn(text: string, secrets: ReadonlyMap<string, string>): SecretKind | undefined {
+  throw new Error("Not implemented");
+}
