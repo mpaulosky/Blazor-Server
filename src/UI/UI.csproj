@@ -84,27 +84,37 @@
 		DependsOnTargets="InitializeSourceControlInformation"
 		BeforeTargets="CoreCompile"
 		Condition="'$(DesignTimeBuild)' != 'true'">
+		<!-- cmd.exe (Windows) and /bin/sh (everywhere else) spell the null device differently; redirecting stderr
+		     there, rather than merely giving it low importance, keeps a git warning ("tag 'v1.2.3' is externally
+		     known as 'v1.2'") out of ConsoleOutput. Without this, a warning before the real output would land in
+		     the same property (Exec joins multi-line ConsoleOutput with ';'), splitting the Include below (line
+		     ~124) into two items and leaving BuildInfo.g.cs with an unterminated string literal. -->
+		<PropertyGroup>
+			<_BuildInfoNullDevice Condition="'$(OS)' == 'Windows_NT'">nul</_BuildInfoNullDevice>
+			<_BuildInfoNullDevice Condition="'$(OS)' != 'Windows_NT'">/dev/null</_BuildInfoNullDevice>
+		</PropertyGroup>
 		<Exec
-			Command="git describe --tags --long --match &quot;v[0-9]*&quot;"
+			Command="git describe --tags --long --match &quot;v[0-9]*&quot; 2&gt;$(_BuildInfoNullDevice)"
 			WorkingDirectory="$(MSBuildProjectDirectory)"
 			ConsoleToMSBuild="true"
 			IgnoreExitCode="true"
 			IgnoreStandardErrorWarningFormat="true"
 			StandardOutputImportance="low"
-			StandardErrorImportance="low"
 			EchoOff="true">
 			<Output TaskParameter="ExitCode" PropertyName="_BuildInfoDescribeExitCode" />
 			<Output TaskParameter="ConsoleOutput" PropertyName="_BuildInfoDescribeOutput" />
 		</Exec>
 
-		<!-- ConsoleOutput holds stderr too, so a failed describe ("fatal: No names found", "git: not found") counts
-		     as no Release. Each value is escaped for a C# string literal, and %09 keeps the indent MSBuild would trim. -->
+		<!-- A failed describe ("fatal: No names found", "git: not found") counts as no Release. Each value is
+		     escaped for a C# string literal, then through MSBuild::Escape so a character the Include below treats
+		     as special (;%$@'?) can't split the item list or trigger a property/item expansion; WriteLinesToFile
+		     unescapes it back on the way out. %09 keeps the indent MSBuild would trim. -->
 		<PropertyGroup>
 			<BuildInfoFile>$(IntermediateOutputPath)BuildInfo.g.cs</BuildInfoFile>
 			<_BuildInfoRelease Condition="'$(_BuildInfoDescribeExitCode)' == '0'">$(_BuildInfoDescribeOutput.Trim())</_BuildInfoRelease>
-			<_BuildInfoRelease>$([System.String]::Copy('$(_BuildInfoRelease)').Replace('\', '\\').Replace('&quot;', '\&quot;'))</_BuildInfoRelease>
-			<_BuildInfoCommit>$([System.String]::Copy('$(SourceRevisionId)').Replace('\', '\\').Replace('&quot;', '\&quot;'))</_BuildInfoCommit>
-			<_BuildInfoRepositoryUrl>$([System.String]::Copy('$(PrivateRepositoryUrl)').Replace('\', '\\').Replace('&quot;', '\&quot;'))</_BuildInfoRepositoryUrl>
+			<_BuildInfoRelease>$([MSBuild]::Escape($([System.String]::Copy('$(_BuildInfoRelease)').Replace('\', '\\').Replace('&quot;', '\&quot;'))))</_BuildInfoRelease>
+			<_BuildInfoCommit>$([MSBuild]::Escape($([System.String]::Copy('$(SourceRevisionId)').Replace('\', '\\').Replace('&quot;', '\&quot;'))))</_BuildInfoCommit>
+			<_BuildInfoRepositoryUrl>$([MSBuild]::Escape($([System.String]::Copy('$(PrivateRepositoryUrl)').Replace('\', '\\').Replace('&quot;', '\&quot;'))))</_BuildInfoRepositoryUrl>
 		</PropertyGroup>
 
 		<ItemGroup>
