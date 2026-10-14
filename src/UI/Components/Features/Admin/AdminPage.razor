@@ -1,11 +1,53 @@
 @page "/admin"
 @attribute [Authorize(Policy = ApplicationConstants.AdminPolicy)]
 
+@using System.Security.Claims
 @using Domain.Constants
 @using Microsoft.AspNetCore.Authorization
 
 <PageTitle>Admin</PageTitle>
 
-<h1 class="text-balance text-4xl font-bold tracking-tight text-gray-900">Admin</h1>
+<PageHeader Title="Admin" Lead="Only an Admin can see this page.">
+	<Eyebrow>Admin</Eyebrow>
+</PageHeader>
 
-<p class="mt-4 text-sm text-gray-600">Only an Admin can see this page.</p>
+<Card>
+	<Title>How this page is protected</Title>
+	<ChildContent>
+		<dl class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+			<StatTile Label="Policy" Value="@ApplicationConstants.AdminPolicy" />
+			<StatTile Label="Role" Value="@ApplicationConstants.AdminRole" />
+			<StatTile Label="Source" Value="Auth0 role claim" />
+		</dl>
+	</ChildContent>
+</Card>
+
+<Card>
+	<Title>Your roles</Title>
+	<ChildContent>
+		<div class="flex flex-wrap gap-2">
+			@foreach (string role in _roles)
+			{
+				<Badge Tone="BadgeTone.Accent">@role</Badge>
+			}
+		</div>
+	</ChildContent>
+</Card>
+
+@code {
+	[CascadingParameter]
+	private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+	private IReadOnlyList<string> _roles = [];
+
+	protected override async Task OnInitializedAsync()
+	{
+		if (AuthenticationStateTask is not null)
+		{
+			AuthenticationState authenticationState = await AuthenticationStateTask;
+			_roles = [.. authenticationState.User.Claims
+				.Where(claim => claim.Type == ClaimTypes.Role)
+				.Select(claim => claim.Value)];
+		}
+	}
+}

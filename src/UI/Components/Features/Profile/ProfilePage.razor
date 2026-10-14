@@ -6,25 +6,34 @@
 
 <PageTitle>Profile</PageTitle>
 
-<h1 class="text-balance text-4xl font-bold tracking-tight text-gray-900">Profile</h1>
+<PageHeader Title="Profile" Lead="The claims Auth0 sent for your sign-in.">
+	<Eyebrow>User</Eyebrow>
+</PageHeader>
 
-<table class="mt-4 min-w-full divide-y divide-gray-200">
-	<thead>
-		<tr>
-			<th class="py-2 text-left text-sm font-semibold text-gray-900">Claim type</th>
-			<th class="py-2 text-left text-sm font-semibold text-gray-900">Value</th>
-		</tr>
-	</thead>
-	<tbody class="divide-y divide-gray-200">
-		@foreach (Claim claim in _claims)
-		{
-			<tr>
-				<td class="py-2 text-sm text-gray-600">@claim.Type</td>
-				<td class="py-2 text-sm text-gray-600">@claim.Value</td>
-			</tr>
-		}
-	</tbody>
-</table>
+<Card>
+	<Title>Your claims</Title>
+	<ChildContent>
+		<div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+			<table class="min-w-full text-left text-sm">
+				<thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-950/50 dark:text-slate-400">
+					<tr>
+						<th class="px-4 py-3 font-medium">Claim type</th>
+						<th class="px-4 py-3 font-medium">Value</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+					@foreach (Claim claim in _claims)
+					{
+						<tr class="even:bg-slate-50/60 dark:even:bg-slate-950/30">
+							<td class="px-4 py-2.5 font-mono text-xs break-all">@claim.Type</td>
+							<td class="px-4 py-2.5 wrap-anywhere">@claim.Value</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</ChildContent>
+</Card>
 
 @code {
 	[CascadingParameter]
