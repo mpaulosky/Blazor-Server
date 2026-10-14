@@ -1,3 +1,12 @@
+// ============================================
+// Copyright (c) 2026. All rights reserved.
+// File Name :     CardSize.cs
+// Company :       mpaulosky
+// Author :        Teqslamer
+// Solution Name : Blazor-Server
+// Project Name :  UI
+// =============================================
+
 namespace UI.Components.Shared;
 
 /// <summary>
