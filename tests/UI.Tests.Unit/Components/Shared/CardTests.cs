@@ -42,7 +42,26 @@ public class CardTests : BunitContext
 		// Assert
 		IElement heading = cut.Find("h2");
 		heading.TextContent.Should().Be("Card title");
-		cut.Find("section").TextContent.Should().Contain("Action").And.Contain("Body text");
+		IHtmlCollection<IElement> rows = cut.Find("section").Children;
+		rows.Should().HaveCount(2);
+		rows[0].TextContent.Should().Contain("Card title").And.Contain("Action");
+		rows[1].ClassList.Should().Contain("mt-4");
+		rows[1].TextContent.Should().Contain("Body text");
+	}
+
+	[Fact]
+	public void Render_ActionsSetWithoutTitle_RendersTitleRow()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<Card> cut = Render<Card>(parameters => parameters
+			.Add(c => c.Actions, "<button>Action</button>")
+			.Add(c => c.ChildContent, "Body text"));
+
+		// Assert
+		cut.Find("section > div:first-child").TextContent.Should().Contain("Action");
+		cut.Find("section > div.mt-4").TextContent.Should().Contain("Body text");
 	}
 
 	[Fact]

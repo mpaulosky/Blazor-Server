@@ -55,6 +55,27 @@ public class PageHeaderTests : BunitContext
 		cut.FindAll(".bg-accent-100").Should().BeEmpty();
 	}
 
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void Render_Eyebrow_AddsTopMarginToHeadingOnlyAfterEyebrow(bool eyebrowSet)
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<PageHeader> cut = Render<PageHeader>(parameters =>
+		{
+			parameters.Add(c => c.Title, "Page title");
+			if (eyebrowSet)
+			{
+				parameters.Add(c => c.Eyebrow, "Eyebrow text");
+			}
+		});
+
+		// Assert
+		cut.Find("h1").ClassList.Contains("mt-4").Should().Be(eyebrowSet);
+	}
+
 	[Fact]
 	public void Render_LeadSet_RendersLeadParagraph()
 	{

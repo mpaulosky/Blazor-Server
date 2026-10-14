@@ -115,4 +115,37 @@ public class ButtonTests : BunitContext
 		// Assert
 		cut.Find("button").GetAttribute("data-enhance-nav").Should().Be("false");
 	}
+
+	[Fact]
+	public void Render_HrefSetWithClassParameter_AppearsAfterAnchorsOwnClasses()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<Button> cut = Render<Button>(parameters => parameters
+			.Add(c => c.Href, "profile")
+			.Add(c => c.ChildContent, "Your profile")
+			.Add(c => c.Class, "custom-class"));
+
+		// Assert
+		string classAttribute = cut.Find("a").GetAttribute("class") ?? string.Empty;
+		classAttribute.Should().Contain("custom-class");
+		classAttribute.IndexOf("bg-accent-600", StringComparison.Ordinal).Should()
+			.BeLessThan(classAttribute.IndexOf("custom-class", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void Render_HrefSetWithUnmatchedAttribute_ReachesAnchor()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<Button> cut = Render<Button>(parameters => parameters
+			.Add(c => c.Href, "profile")
+			.Add(c => c.ChildContent, "Your profile")
+			.AddUnmatched("data-enhance-nav", "false"));
+
+		// Assert
+		cut.Find("a").GetAttribute("data-enhance-nav").Should().Be("false");
+	}
 }
