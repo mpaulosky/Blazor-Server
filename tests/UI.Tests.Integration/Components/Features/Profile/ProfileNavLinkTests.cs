@@ -38,8 +38,9 @@ public class ProfileNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().Contain("href=\"profile\"");
-		html.Should().Contain("Profile");
+		string nav = NavMarkup(html);
+		nav.Should().Contain("href=\"profile\"");
+		nav.Should().Contain("Profile");
 	}
 
 	[Fact]
@@ -55,6 +56,15 @@ public class ProfileNavLinkTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		response.StatusCode.Should().Be(HttpStatusCode.OK);
-		html.Should().NotContain("href=\"profile\"");
+		NavMarkup(html).Should().NotContain("href=\"profile\"");
+	}
+
+	// Home's hero links to "profile" for a Visitor and a User alike (its Log in and Your profile buttons), so these
+	// tests look only at the markup before <main>, where the layout renders the nav.
+	private static string NavMarkup(string html)
+	{
+		int mainStart = html.IndexOf("<main", StringComparison.Ordinal);
+
+		return mainStart >= 0 ? html[..mainStart] : throw new InvalidOperationException("No <main> element.");
 	}
 }

@@ -1,7 +1,59 @@
 @page "/"
 
+@using Domain.Constants
+
 <PageTitle>Home</PageTitle>
 
-<h1 class="text-balance text-4xl font-bold tracking-tight text-gray-900">Hello, world!</h1>
+<Card Size="CardSize.Hero" Class="lg:grid-cols-[1.4fr_1fr] lg:items-center">
+	<PageHeader Title="@ApplicationConstants.AppName"
+	            Lead="A server-rendered Blazor Web App with Tailwind CSS theming and Auth0 sign-in, ready to become your app.">
+		<Eyebrow>Template</Eyebrow>
+		<ChildContent>
+			<AuthorizeView>
+				<NotAuthorized>
+					<Button Href="profile" data-enhance-nav="false">Log in</Button>
+				</NotAuthorized>
+				<Authorized>
+					<Button Href="profile" data-enhance-nav="false">Your profile</Button>
+				</Authorized>
+			</AuthorizeView>
+			<Button Kind="ButtonKind.Secondary" Href="https://github.com/mpaulosky/Blazor-Server">View on GitHub</Button>
+		</ChildContent>
+	</PageHeader>
+	<dl class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+		<StatTile Label="Stack" Value=".NET 10" />
+		<StatTile Label="UI" Value="Tailwind" />
+		<StatTile Label="Auth" Value="Auth0" />
+	</dl>
+</Card>
 
-<p class="mt-4 text-gray-600">Welcome to your new app.</p>
+<div class="grid gap-8 lg:grid-cols-[1.6fr_0.9fr]">
+	<Card>
+		<Title>What's inside</Title>
+		<Actions>
+			<Badge>Template</Badge>
+		</Actions>
+		<ChildContent>
+			<ul class="list-disc space-y-2 pl-5 text-slate-600 marker:text-accent-500 dark:text-slate-300">
+				<li><strong class="text-slate-900 dark:text-white">Domain:</strong> the Shared Kernel</li>
+				<li><strong class="text-slate-900 dark:text-white">UI:</strong> feature slices with pages, handlers and validators</li>
+				<li><strong class="text-slate-900 dark:text-white">AppHost:</strong> Aspire runs it locally with a dashboard</li>
+				<li><strong class="text-slate-900 dark:text-white">ServiceDefaults:</strong> OpenTelemetry and health checks</li>
+				<li><strong class="text-slate-900 dark:text-white">Tests:</strong> unit, bUnit, integration and Playwright E2E</li>
+			</ul>
+		</ChildContent>
+	</Card>
+	<Card>
+		<Title>Highlights</Title>
+		<ChildContent>
+			<div class="flex flex-wrap gap-2">
+				<Badge Tone="BadgeTone.Sky">Aspire</Badge>
+				<Badge Tone="BadgeTone.Violet">Blazor</Badge>
+				<Badge Tone="BadgeTone.Emerald">Tailwind CSS v4</Badge>
+				<Badge Tone="BadgeTone.Amber">Auth0</Badge>
+				<Badge Tone="BadgeTone.Sky">xUnit v3</Badge>
+				<Badge Tone="BadgeTone.Violet">Playwright</Badge>
+			</div>
+		</ChildContent>
+	</Card>
+</div>
