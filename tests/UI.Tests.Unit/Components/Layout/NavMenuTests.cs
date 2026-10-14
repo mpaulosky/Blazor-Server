@@ -56,7 +56,7 @@ public class NavMenuTests : BunitContext
 
 	[Theory]
 	[InlineData("nav")]
-	[InlineData("details")]
+	[InlineData(MobileMenuSelector)]
 	public void Render_Visitor_MenuListsOnlyHomeBaseRelative(string menuSelector)
 	{
 		// Arrange
@@ -74,7 +74,7 @@ public class NavMenuTests : BunitContext
 
 	[Theory]
 	[InlineData("nav")]
-	[InlineData("details")]
+	[InlineData(MobileMenuSelector)]
 	public void Render_User_MenuAddsProfileBaseRelativeButNotAdmin(string menuSelector)
 	{
 		// Arrange
@@ -92,7 +92,7 @@ public class NavMenuTests : BunitContext
 
 	[Theory]
 	[InlineData("nav")]
-	[InlineData("details")]
+	[InlineData(MobileMenuSelector)]
 	public void Render_Admin_MenuAddsAdminBaseRelative(string menuSelector)
 	{
 		// Arrange
