@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [feat(sandcastle): Say where the secret scan matched when it stops a push](2026-10-14-pr-327-feat-sandcastle-say-where-the-secret-scan-matched-when-it-stops-a-push.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the dark variant, the accent token and the app name constant](2026-10-14-pr-323-feat-ui-add-the-dark-variant-the-accent-token-and-the-app-name-constant.md) | release,automation |
 | 2026-10-14 | [fix(sandcastle): End a run red when intake stops for repeated failures](2026-10-14-pr-321-fix-sandcastle-end-a-run-red-when-intake-stops-for-repeated-failures.md) | release,automation |
 | 2026-10-14 | [ci(sandcastle): Build the sandbox image before running Sandcastle](2026-10-14-pr-319-ci-sandcastle-build-the-sandbox-image-before-running-sandcastle.md) | release,automation |
