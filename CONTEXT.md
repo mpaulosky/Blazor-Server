@@ -43,3 +43,8 @@ The set of building blocks every Generated App needs no matter what it does or w
 outcomes (success or failure, with a failure category) and the names the Template itself relies on (authorization
 policy, role, cookie names). It carries no business concepts and assumes no persistence technology.
 _Avoid_: Common, Core, Utilities
+
+**Release**:
+A published, versioned snapshot of the Generated App (`vX.Y.Z`), cut each time a change merges to `main`.
+The footer shows the Release the running build is, or the nearest Release before it.
+_Avoid_: Version, build, deploy
