@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.155](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.155) | 2026-10-14 | feat(ui): Show the Release and commit in the footer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) |
 | [v0.0.154](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.154) | 2026-10-14 | fix(sandcastle): Keep the parent's conventional prefix on split child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-359-fix-sandcastle-keep-the-parent-s-conventional-prefix-on-split-child-issues.md) |
 | [v0.0.153](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.153) | 2026-10-14 | feat(ui): Generate build-time BuildInfo and the Release label function | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) |
 | [v0.0.152](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.152) | 2026-10-14 | fix(ui): Send a stale Log out home instead of a 400 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-345-fix-ui-send-a-stale-log-out-home-instead-of-a-400.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.148](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.148) | 2026-10-14 | feat(ui): Restyle the page shell, nav, footer and error bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-337-feat-ui-restyle-the-page-shell-nav-footer-and-error-bar.md) |
 | [v0.0.147](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.147) | 2026-10-14 | feat(ui): Restyle the Profile and Admin pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-331-feat-ui-restyle-the-profile-and-admin-pages.md) |
 | [v0.0.146](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.146) | 2026-10-14 | feat(ui): Restyle the Access Denied, Not Found and Error pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-333-feat-ui-restyle-the-access-denied-not-found-and-error-pages.md) |
-| [v0.0.145](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.145) | 2026-10-14 | feat(ui): Restyle the reconnect modal | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-330-feat-ui-restyle-the-reconnect-modal.md) |
 
 <!-- RELEASES_END -->
 
