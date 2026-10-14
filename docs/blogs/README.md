@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [feat(ui): Add the Theme control to the nav](2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the Palettes slice, its cookie, data-palette and the hue rules](2026-10-14-pr-376-feat-ui-add-the-palettes-slice-its-cookie-data-palette-and-the-hue-rules.md) | release,automation |
 | 2026-10-14 | [fix(sandcastle): Unshallow the checkout so the secret scan reads only a PR's commits](2026-10-14-pr-373-fix-sandcastle-unshallow-the-checkout-so-the-secret-scan-reads-only-a-pr-s-commits.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the Themes slice, its cookie and data-theme](2026-10-14-pr-372-feat-ui-add-the-themes-slice-its-cookie-and-data-theme.md) | release,automation |
