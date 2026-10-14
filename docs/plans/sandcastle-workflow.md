@@ -86,7 +86,7 @@ issues the owner approved (see **Labels**).
 
 ### Early exit
 
-Before building the Docker image or calling Claude, the host checks whether there is any work: an open, un-judged issue for intake (not handed back), a ready unblocked issue for the build, or a
+Before calling Claude, the host checks whether there is any work: an open, un-judged issue for intake (not handed back), a ready unblocked issue for the build, or a
 settled PR for follow-up. With none, the run exits 0 at once. Scheduled and event triggers are therefore cheap when there's nothing to do.
 
 ## Phase 1: Follow-up sweep
@@ -354,7 +354,8 @@ Decided in [How and where Sandcastle is triggered automatically](https://github.
 [ADR 0002](../adr/0002-unattended-sandcastle-on-a-hosted-runner.md).
 
 **Workflow:** `.github/workflows/sandcastle.yml` on `ubuntu-24.04`. It always checks out `main` (never the event's ref) with `persist-credentials: false`, sets up pnpm and Node 22, runs
-`pnpm install --frozen-lockfile` to install the locked dependencies (including the `tsx` devDependency), and then runs `pnpm run sandcastle` (`tsx .sandcastle/main.mts`) with `GH_TOKEN` set to
+`pnpm install --frozen-lockfile` to install the locked dependencies (including the `tsx` devDependency), builds the sandbox image from `.sandcastle/Dockerfile`
+(`sandcastle docker build-image`, which names it after the checkout's folder, as the host expects), and then runs `pnpm run sandcastle` (`tsx .sandcastle/main.mts`) with `GH_TOKEN` set to
 `SANDCASTLE_GH_TOKEN`. The `gh` CLI reads `GH_TOKEN`, and the host's own git fetches and pushes authenticate through `gh auth setup-git`, a credential helper in the runner's global git
 config that reads `GH_TOKEN` from the host's environment. Nothing in the repository's `.git` holds the token, so the worktree and git metadata the sandbox mounts carry no credential. The
 step also passes `ANTHROPIC_API_KEY` when that secret is set and `CLAUDE_CODE_OAUTH_TOKEN` otherwise, and an earlier step fails the job with a clear message when `SANDCASTLE_GH_TOKEN` or
