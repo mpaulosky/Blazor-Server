@@ -1,5 +1,7 @@
+@using Domain.Constants
+@using UI.Components.Features.Themes
 <!DOCTYPE html>
-<html lang="en" class="scheme-light dark:scheme-dark">
+<html lang="en" class="scheme-light dark:scheme-dark" data-theme="@DataTheme">
 
 <head>
 	<meta charset="utf-8"/>
@@ -20,3 +22,17 @@
 </body>
 
 </html>
+
+@code {
+	[CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+	// Null for System, so Blazor omits the attribute instead of rendering data-theme="". Palette's data-palette joins
+	// here the same way once it has a cookie to read.
+	private string? DataTheme { get; set; }
+
+	protected override void OnInitialized()
+	{
+		string? cookieValue = HttpContext?.Request.Cookies[ApplicationConstants.ThemeCookie];
+		DataTheme = Theme.FromCookie(cookieValue).ToDataTheme();
+	}
+}
