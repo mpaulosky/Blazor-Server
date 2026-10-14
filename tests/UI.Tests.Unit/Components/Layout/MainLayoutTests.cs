@@ -62,4 +62,49 @@ public class MainLayoutTests : BunitContext
 		IElement errorUi = cut.Find("#blazor-error-ui");
 		errorUi.ClassList.Should().Contain("hidden");
 	}
+
+	[Fact]
+	public void Render_ErrorUi_KeepsDataNosnippetAndCarriesSpecAmberRootClassesWithNoFlexClass()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<MainLayout> cut =
+			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
+
+		// Assert
+		IElement errorUi = cut.Find("#blazor-error-ui");
+		errorUi.GetAttribute("data-nosnippet").Should().NotBeNull();
+		errorUi.ClassList.Should().Contain([
+			"hidden", "fixed", "inset-x-4", "bottom-4", "z-50", "rounded-2xl", "border", "border-amber-200",
+			"bg-amber-50", "px-5", "py-3", "text-sm", "text-amber-900", "shadow-lg", "dark:border-amber-500/30",
+			"dark:bg-amber-950/80", "dark:text-amber-200"
+		]);
+		// Blazor shows the bar with style.display = 'block' on the root, which overrides any flex class there,
+		// so the row that actually needs flex layout must sit on an inner element instead.
+		errorUi.ClassList.Should().NotContain("flex");
+	}
+
+	[Fact]
+	public void Render_ErrorUi_InnerRowHoldsMessageReloadLinkAndDismissButton()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<MainLayout> cut =
+			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
+
+		// Assert
+		IElement errorUi = cut.Find("#blazor-error-ui");
+		IElement? row = errorUi.QuerySelector("div.flex.items-center.gap-4");
+		row.Should().NotBeNull();
+		row!.TextContent.Should().NotBeNullOrWhiteSpace();
+
+		IElement? reload = row.QuerySelector("a.reload");
+		reload.Should().NotBeNull();
+
+		IElement? dismiss = row.QuerySelector("button.dismiss");
+		dismiss.Should().NotBeNull();
+		dismiss!.GetAttribute("aria-label").Should().Be("Dismiss");
+	}
 }
