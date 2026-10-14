@@ -54,6 +54,8 @@ This is a server-rendered Blazor Web App on .NET 10 and C# 14. `docs/CODING_STAN
 ## Styling
 
 - Style with Tailwind CSS v4 utility classes. Avoid inline `style` attributes and one-off CSS. Use `.razor.css` isolation only when utilities can't express the style.
+- Style light and dark with `dark:`, write accent colour as `accent-*` rather than a raw hue, and compose the building blocks in `Components/Shared/`
+  (`Card`, `PageHeader`, `StatTile`, `Badge`, `Button`) before writing new markup. `docs/plans/ui-restyle.md` has their class lists.
 
 ## Testing
 
