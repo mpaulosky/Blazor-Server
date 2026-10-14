@@ -29,13 +29,11 @@ public class HomePageTests : BunitContext
 		// Assert
 		IElement heading = cut.Find("h1");
 		heading.TextContent.Should().Be(ApplicationConstants.AppName);
-		IElement? eyebrow = heading.PreviousElementSibling;
-		eyebrow.Should().NotBeNull();
-		eyebrow!.TextContent.Trim().Should().Be("Template");
+		string? eyebrowText = heading.PreviousElementSibling?.TextContent.Trim();
+		eyebrowText.Should().Be("Template");
 		IElement header = heading.Closest("header") ?? throw new InvalidOperationException("No <header> ancestor.");
-		IElement? lead = header.QuerySelector("p");
-		lead.Should().NotBeNull();
-		lead!.TextContent.Trim().Should().Be(
+		string? leadText = header.QuerySelector("p")?.TextContent.Trim();
+		leadText.Should().Be(
 			"A server-rendered Blazor Web App with Tailwind CSS theming and Auth0 sign-in, ready to become your app.");
 	}
 
@@ -115,7 +113,7 @@ public class HomePageTests : BunitContext
 		IRenderedComponent<HomePage> cut = Render<HomePage>();
 
 		// Assert
-		IElement card = WhatsInsideCard(cut);
+		IElement card = CardWithHeading(cut, "What's inside");
 		IElement[] items = [.. card.QuerySelectorAll("li")];
 		items.Select(item => item.TextContent.Trim()).Should().Contain(expectedItemText);
 	}
@@ -130,7 +128,7 @@ public class HomePageTests : BunitContext
 		IRenderedComponent<HomePage> cut = Render<HomePage>();
 
 		// Assert
-		IElement card = WhatsInsideCard(cut);
+		IElement card = CardWithHeading(cut, "What's inside");
 		IElement badge = card.QuerySelectorAll("span").Single(span => span.TextContent.Trim() == "Template");
 		badge.ClassList.Should().Contain("border-slate-200");
 	}
@@ -155,8 +153,6 @@ public class HomePageTests : BunitContext
 		IElement badge = card.QuerySelectorAll("span").Single(span => span.TextContent.Trim() == label);
 		badge.ClassList.Should().Contain(expectedToneClass);
 	}
-
-	private static IElement WhatsInsideCard(IRenderedComponent<HomePage> cut) => CardWithHeading(cut, "What's inside");
 
 	private static IElement CardWithHeading(IRenderedComponent<HomePage> cut, string heading)
 	{
