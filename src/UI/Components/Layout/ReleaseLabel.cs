@@ -16,7 +16,10 @@ namespace UI.Components.Layout;
 ///   The human-readable Release label and the link it points to, shown in the footer.
 /// </summary>
 /// <param name="Text">The Release label, such as <c>"v0.0.152 +1"</c> or <c>"no release"</c>.</param>
-/// <param name="Link">The URL <see cref="Text" /> links to: a Release's tag page, or the releases list when there is no Release.</param>
+/// <param name="Link">
+///   The URL <see cref="Text" /> links to: a Release's tag page, or the releases list when there is no Release. Empty
+///   when there's no <c>https://</c> repository URL.
+/// </param>
 public sealed record ReleaseLabel(string Text, string Link)
 {
 	private const string NoRelease = "no release";
@@ -38,12 +41,7 @@ public sealed record ReleaseLabel(string Text, string Link)
 		ArgumentNullException.ThrowIfNull(describeOutput);
 		ArgumentNullException.ThrowIfNull(repositoryUrl);
 
-		// Source Link keeps a remote's ".git" suffix (an SSH remote rewritten to https, or an explicit ".git"
-		// origin); trimming only the trailing slash would leave it in the link. An empty repositoryUrl (no git
-		// checkout) leaves releases empty too, so the label below renders with no link rather than a same-origin
-		// path like "/releases".
-		string repository = repositoryUrl.TrimEnd('/');
-		repository = repository.EndsWith(".git", StringComparison.Ordinal) ? repository[..^".git".Length] : repository;
+		string repository = RepositoryLink.BaseFrom(repositoryUrl);
 		string releases = repository.Length == 0 ? string.Empty : $"{repository}/releases";
 
 		// "--long" always ends in "-<count>-g<sha>", so the tag is whatever comes before the last two hyphens.
