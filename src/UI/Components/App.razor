@@ -1,5 +1,7 @@
+@using Domain.Constants
+@using UI.Components.Features.Palettes
 <!DOCTYPE html>
-<html lang="en" class="scheme-light dark:scheme-dark">
+<html lang="en" class="scheme-light dark:scheme-dark" data-palette="@DataPalette">
 
 <head>
 	<meta charset="utf-8"/>
@@ -20,3 +22,13 @@
 </body>
 
 </html>
+
+@code {
+
+	[CascadingParameter]
+	private HttpContext? HttpContext { get; set; }
+
+	private string? DataPalette =>
+		Palette.FromCookie(HttpContext?.Request.Cookies[ApplicationConstants.PaletteCookie]).ToDataPalette();
+
+}
