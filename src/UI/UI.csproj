@@ -67,4 +67,78 @@
 		</ItemGroup>
 	</Target>
 
+	<!-- BuildInfo: stamps the Release and commit into the assembly as constants, so the app never runs git or calls
+	     GitHub at runtime. After InitializeSourceControlInformation, Source Link has set SourceRevisionId (the full
+	     SHA) and PrivateRepositoryUrl (the remote, normalized to https; RepositoryUrl is empty in this repo).
+	     The describe Exec ignores its exit code, so a missing git, a missing .git or a repo with no v* tags leaves
+	     the Release empty instead of failing the build; its stderr stays at low importance so -warnaserror can't
+	     promote it. No Inputs/Outputs: a new tag or commit changes no file the build could compare against.
+	     Skipped in design-time builds, which instead compile the file the last real build wrote, when there is one
+	     (an item, because items evaluate after the SDK's targets set IntermediateOutputPath and properties don't). -->
+	<ItemGroup Condition="'$(DesignTimeBuild)' == 'true' And Exists('$(IntermediateOutputPath)BuildInfo.g.cs')">
+		<Compile Include="$(IntermediateOutputPath)BuildInfo.g.cs" />
+	</ItemGroup>
+
+	<Target
+		Name="GenerateBuildInfo"
+		DependsOnTargets="InitializeSourceControlInformation"
+		BeforeTargets="CoreCompile"
+		Condition="'$(DesignTimeBuild)' != 'true'">
+		<!-- cmd.exe (Windows) and /bin/sh (everywhere else) spell the null device differently; redirecting stderr
+		     there, rather than merely giving it low importance, keeps a git warning ("tag 'v1.2.3' is externally
+		     known as 'v1.2'") out of ConsoleOutput. Without this, a warning before the real output would land in
+		     the same property (Exec joins multi-line ConsoleOutput with ';'), splitting the Include below (line
+		     ~124) into two items and leaving BuildInfo.g.cs with an unterminated string literal. -->
+		<PropertyGroup>
+			<_BuildInfoNullDevice Condition="'$(OS)' == 'Windows_NT'">nul</_BuildInfoNullDevice>
+			<_BuildInfoNullDevice Condition="'$(OS)' != 'Windows_NT'">/dev/null</_BuildInfoNullDevice>
+		</PropertyGroup>
+		<Exec
+			Command="git describe --tags --long --match &quot;v[0-9]*&quot; 2&gt;$(_BuildInfoNullDevice)"
+			WorkingDirectory="$(MSBuildProjectDirectory)"
+			ConsoleToMSBuild="true"
+			IgnoreExitCode="true"
+			IgnoreStandardErrorWarningFormat="true"
+			StandardOutputImportance="low"
+			EchoOff="true">
+			<Output TaskParameter="ExitCode" PropertyName="_BuildInfoDescribeExitCode" />
+			<Output TaskParameter="ConsoleOutput" PropertyName="_BuildInfoDescribeOutput" />
+		</Exec>
+
+		<!-- A failed describe ("fatal: No names found", "git: not found") counts as no Release. Each value is
+		     escaped for a C# string literal, then through MSBuild::Escape so a character the Include below treats
+		     as special (;%$@'?) can't split the item list or trigger a property/item expansion; WriteLinesToFile
+		     unescapes it back on the way out. %09 keeps the indent MSBuild would trim. -->
+		<PropertyGroup>
+			<BuildInfoFile>$(IntermediateOutputPath)BuildInfo.g.cs</BuildInfoFile>
+			<_BuildInfoRelease Condition="'$(_BuildInfoDescribeExitCode)' == '0'">$(_BuildInfoDescribeOutput.Trim())</_BuildInfoRelease>
+			<_BuildInfoRelease>$([MSBuild]::Escape($([System.String]::Copy('$(_BuildInfoRelease)').Replace('\', '\\').Replace('&quot;', '\&quot;'))))</_BuildInfoRelease>
+			<_BuildInfoCommit>$([MSBuild]::Escape($([System.String]::Copy('$(SourceRevisionId)').Replace('\', '\\').Replace('&quot;', '\&quot;'))))</_BuildInfoCommit>
+			<_BuildInfoRepositoryUrl>$([MSBuild]::Escape($([System.String]::Copy('$(PrivateRepositoryUrl)').Replace('\', '\\').Replace('&quot;', '\&quot;'))))</_BuildInfoRepositoryUrl>
+		</PropertyGroup>
+
+		<ItemGroup>
+			<_BuildInfoLine Include="// &lt;auto-generated /&gt;" />
+			<_BuildInfoLine Include="namespace UI.Components.Layout%3B" />
+			<_BuildInfoLine Include="internal static class BuildInfoConstants" />
+			<_BuildInfoLine Include="{" />
+			<_BuildInfoLine Include="%09internal const string Release = &quot;$(_BuildInfoRelease)&quot;%3B" />
+			<_BuildInfoLine Include="%09internal const string Commit = &quot;$(_BuildInfoCommit)&quot;%3B" />
+			<_BuildInfoLine Include="%09internal const string RepositoryUrl = &quot;$(_BuildInfoRepositoryUrl)&quot;%3B" />
+			<_BuildInfoLine Include="}" />
+		</ItemGroup>
+
+		<WriteLinesToFile
+			File="$(BuildInfoFile)"
+			Lines="@(_BuildInfoLine)"
+			Overwrite="true"
+			WriteOnlyWhenDifferent="true" />
+
+		<ItemGroup>
+			<Compile Remove="$(BuildInfoFile)" />
+			<Compile Include="$(BuildInfoFile)" />
+			<FileWrites Include="$(BuildInfoFile)" />
+		</ItemGroup>
+	</Target>
+
 </Project>

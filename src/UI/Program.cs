@@ -13,6 +13,7 @@ using ServiceDefaults;
 
 using UI.Components;
 using UI.Components.Features.Authentication;
+using UI.Components.Layout;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +25,10 @@ builder.Services.AddRazorComponents()
 // The Footer's year comes from TimeProvider, so tests can fix the clock. AddAuthentication also registers it, but
 // only as a side effect, so the app registers it in its own right.
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Stamped at compile time by UI.csproj's GenerateBuildInfo target; a singleton, so tests can register their own.
+builder.Services.AddSingleton(new BuildInfo(BuildInfoConstants.Release, BuildInfoConstants.Commit,
+	BuildInfoConstants.RepositoryUrl));
 
 builder.Services.AddAuthenticationFeature(builder.Configuration);
 builder.Services.AddCascadingAuthenticationState();
