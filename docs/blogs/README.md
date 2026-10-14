@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [feat(ui): Add the dark variant, the accent token and the app name constant](2026-10-14-pr-323-feat-ui-add-the-dark-variant-the-accent-token-and-the-app-name-constant.md) | release,automation |
 | 2026-10-14 | [fix(sandcastle): End a run red when intake stops for repeated failures](2026-10-14-pr-321-fix-sandcastle-end-a-run-red-when-intake-stops-for-repeated-failures.md) | release,automation |
 | 2026-10-14 | [ci(sandcastle): Build the sandbox image before running Sandcastle](2026-10-14-pr-319-ci-sandcastle-build-the-sandbox-image-before-running-sandcastle.md) | release,automation |
 | 2026-10-14 | [docs(ui): Add the UI restyle spec and its coding-standard lines](2026-10-14-pr-310-docs-ui-add-the-ui-restyle-spec-and-its-coding-standard-lines.md) | release,automation |
