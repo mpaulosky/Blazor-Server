@@ -49,10 +49,10 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 	}
 
 	[Fact]
-	public async Task PostLogout_SignedInUserWithoutAntiforgeryToken_ReturnsBadRequest()
+	public async Task PostLogout_SignedInUserWithoutAntiforgeryToken_RedirectsToRootWithoutSigningOut()
 	{
 		// Arrange
-		using HttpClient client = _factory.CreateClient();
+		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 		client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeaderName, "a-user");
 
 		// Act
@@ -60,7 +60,7 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 			content: null, TestContext.Current.CancellationToken);
 
 		// Assert
-		response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+		ShouldRedirectToRootWithoutSigningOut(response);
 	}
 
 	[Fact]
@@ -89,7 +89,7 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 	}
 
 	[Fact]
-	public async Task PostLogout_TokenFromEndedSession_ReturnsBadRequest()
+	public async Task PostLogout_TokenFromEndedSession_RedirectsToRootWithoutSigningOut()
 	{
 		// Arrange
 		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
@@ -106,7 +106,7 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 			TestContext.Current.CancellationToken);
 
 		// Assert
-		response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+		ShouldRedirectToRootWithoutSigningOut(response);
 	}
 
 	[Theory]
@@ -114,7 +114,7 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 	[InlineData("Sec-Fetch-Site", "same-origin")]
 	[InlineData("Origin", "http://localhost")]
 	[InlineData("Sec-Fetch-Site", "cross-site")]
-	public async Task PostLogout_CallerWithoutSessionOrToken_ReturnsBadRequest(string? header, string? value)
+	public async Task PostLogout_CallerWithoutSessionOrToken_RedirectsToRootWithoutSigningOut(string? header, string? value)
 	{
 		// Arrange
 		using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
@@ -128,7 +128,14 @@ public partial class LogoutEndpointTests : IClassFixture<UiWebApplicationFactory
 			content: null, TestContext.Current.CancellationToken);
 
 		// Assert
-		response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+		ShouldRedirectToRootWithoutSigningOut(response);
+	}
+
+	private static void ShouldRedirectToRootWithoutSigningOut(HttpResponseMessage response)
+	{
+		response.StatusCode.Should().Be(HttpStatusCode.Found);
+		response.Headers.Location.Should().Be(new Uri("/", UriKind.Relative));
+		response.Headers.Contains("Set-Cookie").Should().BeFalse();
 	}
 
 	private static async Task<string> ScrapeLogoutTokenAsync(HttpClient client)
