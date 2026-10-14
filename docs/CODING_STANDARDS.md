@@ -204,11 +204,13 @@ public class ThemeServiceTests
 
 Code is organized by feature, not by technical layer. Each slice holds everything one use case needs, from the UI down to data access.
 
-- Each feature lives in its own folder under `Features/`, for example `Features/Theme/` or `Features/Profile/`.
+- Each feature lives in its own folder under `Features/`, for example `Features/Themes/` or `Features/Profile/`.
+  Name the folder in the plural when a type in it has the singular name (the `Theme` type in `Features/Themes/`): a type named like its own namespace doesn't compile from a sibling namespace.
   Its folder holds the feature's components, request and response types, handler, validator, and endpoints.
 - Don't add top-level `Services/`, `Repositories/`, `Models/`, or `Controllers/` folders that collect code from many features.
-- Slices don't reference each other's internals. When two slices need the same logic, move it to `Shared/`, but only once a second slice actually needs it.
-- Keep `Shared/` small: cross-cutting concerns only, such as auth, layout, and theming infrastructure. Feature logic never goes there.
+- Slices don't reference each other's internals. When two slices need the same logic, move it out of the slice, but only once a second slice actually needs it:
+  a component to `Components/Shared/`, and other code to a top-level `src/UI/<Concern>/` folder, such as `src/UI/Security/` (see [ADR 0007](adr/0007-cross-cutting-code-outside-the-slices.md)).
+- Keep both small: cross-cutting concerns only. Feature logic never goes there, and neither depends on a slice.
 - Model requests and responses as `record`s, and name them after the use case (`GetProfileQuery`, `SetPaletteCommand`), not after the entity.
 - Handlers are ordinary classes registered in DI, with one handler per use case. Don't add a mediator library without an ADR.
 - Register each slice's services in an extension method inside the slice, such as `services.AddThemeFeature()`, so `Program.cs` stays a list of feature registrations.

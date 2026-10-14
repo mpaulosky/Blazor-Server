@@ -21,9 +21,9 @@ Orthogonal to Theme — Palette governs accent color only, while grays/backgroun
 _Avoid_: Theme, color scheme, skin
 
 **Theme**:
-The light/dark rendering mode.
-Chosen by the visitor at runtime via a toggle in the Generated App, persisted in a cookie (read during server-side prerender to avoid a flash of the wrong theme on first paint), and defaulting to the
-OS `prefers-color-scheme` on first visit.
+The light/dark rendering mode: Light, Dark, or System (follow the OS `prefers-color-scheme`).
+Chosen by the visitor at runtime from a control in the Generated App, persisted in a cookie (read during server-side prerender to avoid a flash of the wrong theme on first paint), and System until the
+visitor picks one. Choosing System again returns to following the OS.
 _Avoid_: Palette, mode, color scheme
 
 **Visitor**:
