@@ -152,6 +152,40 @@ export class HumanThreadReport {
 // The one report every follow-up pass this run makes records into.
 export const humanThreadReport = new HumanThreadReport();
 
+// One round where intake (lib/intake.mts#intakeRound) stopped rather than
+// judge every issue: it hit INTAKE_FAILED_RUNS_LIMIT failed runs or
+// INTAKE_REFUSED_BATCHES_LIMIT refused batches in a row, so the issues it
+// hadn't judged yet are left with no verdict and nothing told the owner
+// (#320, the first automatic runs ending green on a missing Docker image).
+// `unjudged` are the issue numbers intake never gave a verdict to this
+// round; `firstError` is the message of the first error in the streak that
+// stopped it.
+export type IntakeStopEntry = { reason: string; unjudged: readonly number[]; firstError: string };
+
+// Every intake stop this run recorded, so the run report and the exit code
+// (see intakeStopExitCode) both see it.
+export class IntakeStopReport {
+  private readonly entries: IntakeStopEntry[] = [];
+
+  record(entry: IntakeStopEntry): void {
+    this.entries.push(entry);
+  }
+
+  items(): readonly IntakeStopEntry[] {
+    return this.entries;
+  }
+}
+
+// The one report every intake stop this run makes records into.
+export const intakeStopReport = new IntakeStopReport();
+
+// Whether main.mts must exit non-zero: any recorded intake stop means some
+// issues were left silently unjudged (#320), so the run must end red even
+// when nothing else failed, a hand-back included.
+export function intakeStopExitCode(stops: readonly IntakeStopEntry[]): number {
+  return stops.length > 0 ? 1 : 0;
+}
+
 // How the run ended, so the summary tells a hand-back from a crash
 // ("Notification: the run ends red" in docs/plans/sandcastle-workflow.md).
 export type RunEnding = { kind: "finished" } | { kind: "stopped"; reason: string } | { kind: "crashed" };
@@ -166,14 +200,15 @@ export type SummaryInput = {
   waitingPrs: readonly WaitingPrEntry[];
   humanThreads: readonly HumanThreadEntry[];
   usage: ReadonlyMap<string, IterationUsage>;
+  stops: readonly IntakeStopEntry[];
 };
 
 // The run's report as Markdown, for .sandcastle/logs/summary.md and (when set)
 // $GITHUB_STEP_SUMMARY. See the design note at .sandcastle/work/81/design.md
 // for the exact shape: queue and ending sentence, a table of every touched
 // issue and PR with its outcome (plus one row per hand-back), the hand-backs
-// themselves with links, the PRs waiting on a person, and a token-usage table
-// by role with a total row.
+// themselves with links, the PRs waiting on a person, any round where intake
+// stopped (#320), and a token-usage table by role with a total row.
 export function renderSummary(input: SummaryInput): string {
   const { repo } = input;
   const link = (target: ReportTarget): string =>
@@ -195,6 +230,7 @@ export function renderSummary(input: SummaryInput): string {
     "",
     ...waitingLines(input.waitingPrs, input.humanThreads, link),
     "",
+    ...intakeStopLines(input.stops, link),
     "### Token usage by role",
     "",
     ...usageLines(input.usage),
@@ -269,6 +305,21 @@ function waitingLines(
         .map((thread) => `  - [thread by ${cell(thread.author ?? "a deleted account")}](${thread.url})`),
     ];
   });
+}
+
+// Only a run whose intake stopped gets the section, since it's the reason the
+// run ends red (#320); a run with no stop has nothing to say here.
+function intakeStopLines(stops: readonly IntakeStopEntry[], link: (target: ReportTarget) => string): string[] {
+  if (stops.length === 0) return [];
+  return [
+    "### Intake stops",
+    "",
+    ...stops.flatMap(({ reason, unjudged, firstError }) => [
+      `- ${cell(reason)}. First error: ${cell(firstError)}`,
+      `  - Left unjudged: ${unjudged.length > 0 ? unjudged.map((number) => link({ kind: "issue", number })).join(", ") : "none"}`,
+    ]),
+    "",
+  ];
 }
 
 function usageLines(usage: ReadonlyMap<string, IterationUsage>): string[] {

@@ -45,7 +45,7 @@ import {
 } from "./github.mts";
 import { intakePromptArgs } from "./prompts.mts";
 import { activeQueueScope } from "./queue.mts";
-import { handBackReport, type HandBackReport } from "./report.mts";
+import { handBackReport, intakeStopReport, type HandBackReport, type IntakeStopReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
 // Lenient where a slip is harmless, because one verdict that fails the schema
@@ -163,6 +163,11 @@ const runIntake: IntakeRun = intakeRunner();
 // into an umbrella (see applySplit). Any verdict can also add the bug label,
 // when it carries bug: true. A verdict for an id that wasn't sent to intake
 // is ignored and logged.
+//
+// Returns how many verdicts GitHub took and refused, the first refusal's
+// error, and the issues settled (a verdict GitHub took, or one another run
+// gave first), so intakeRound can record which issues a stop leaves behind
+// and why (#320).
 export function applyVerdicts(
   issues: readonly SandcastleIssue[],
   verdicts: readonly IntakeVerdict[],
@@ -171,10 +176,13 @@ export function applyVerdicts(
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
   splitGithub: SplitGitHub = liveSplitGitHub,
-): { applied: number; failed: number } {
+): { applied: number; failed: number; firstError: unknown; settled: number[] } {
   const sent = new Map(issues.map((issue) => [String(issue.number), issue]));
   const judged = new Set<string>();
+  // Judged by this verdict or, since the queue was read, by another run.
+  const settled = new Set<string>();
   const counts = { applied: 0, failed: 0 };
+  let firstError: unknown;
 
   for (const verdict of verdicts) {
     const ref = `#${verdict.id}`;
@@ -207,21 +215,28 @@ export function applyVerdicts(
       // possibly conflicting ones.
       if (JUDGED_LABELS.some((label) => hasLabel({ labels: issueLabels(issue.number, run, repo) }, label))) {
         log(`  ⚠ Skipping intake's verdict on ${ref}: another run has judged it since this round read the queue.`);
+        settled.add(verdict.id);
         continue;
       }
       log(`  ${applyVerdict(issue, verdict, run, repo, report, log, splitGithub)}`);
     } catch (error) {
       log(`  ⚠ Couldn't apply intake's ${verdict.verdict} verdict on ${ref}, so it's judged again in a later round or run: ${error}`);
       counts.failed += 1;
+      if (counts.failed === 1) firstError = error;
       continue;
     }
     counts.applied += 1;
+    settled.add(verdict.id);
   }
 
   for (const id of sent.keys()) {
     if (!judged.has(id)) log(`  ⚠ Intake gave no verdict on #${id}, so it's judged again in a later round or run.`);
   }
-  return counts;
+  return {
+    ...counts,
+    firstError,
+    settled: issues.filter((issue) => settled.has(String(issue.number))).map((issue) => issue.number),
+  };
 }
 
 // Adds the verdict's labels and posts its one comment, and returns the line
@@ -604,6 +619,11 @@ function handBackComment(lead: string, reason: string, questions: readonly strin
 // refused every verdict in INTAKE_REFUSED_BATCHES_LIMIT batches in a row,
 // since each later batch would then cost a run for nothing. An UncountedStopError (a usage limit or time budget) still
 // ends the run.
+//
+// Either stop is recorded in `stops` (lib/report.mts#IntakeStopReport) with
+// its reason, the issue numbers intake never judged this round, and the
+// first error's message in the streak that stopped it, so a run that can't
+// do its work ends red instead of silently exiting 0 (#320).
 export async function intakeRound(
   issues: readonly SandcastleIssue[],
   openPrs: readonly OpenPullRequest[],
@@ -613,12 +633,19 @@ export async function intakeRound(
   report: HandBackReport = handBackReport,
   log: (line: string) => void = console.log,
   warn: (message: string) => void = console.error,
+  stops: IntakeStopReport = intakeStopReport,
 ): Promise<void> {
   const refs = (batch: readonly SandcastleIssue[]) => batch.map((issue) => `#${issue.number}`).join(", ");
   let failedInARow = 0;
   let refusedInARow = 0;
-  // Why intake stopped for the round, once it has.
-  let stopped: string | undefined;
+  // The first error of each streak, for the stop's record.
+  let firstFailure: unknown;
+  let firstRefusal: unknown;
+  // Issues a verdict settled this round; the rest are left unjudged.
+  const settled = new Set<number>();
+  // Why intake stopped for the round, once it has, and the error that began
+  // the streak that stopped it.
+  let stopped: { reason: string; firstError: unknown } | undefined;
 
   // Runs intake over `batch` and applies its verdicts. Returns the run's
   // error when it failed, or undefined.
@@ -629,18 +656,27 @@ export async function intakeRound(
       verdicts = await run(intakePromptArgs(batch));
     } catch (error) {
       if (error instanceof UncountedStopError) throw error;
+      const failure = error ?? new Error("intake failed");
       failedInARow += 1;
-      if (failedInARow >= INTAKE_FAILED_RUNS_LIMIT) stopped = `${INTAKE_FAILED_RUNS_LIMIT} intake runs in a row failed`;
-      return error ?? new Error("intake failed");
+      if (failedInARow === 1) firstFailure = failure;
+      if (failedInARow >= INTAKE_FAILED_RUNS_LIMIT) {
+        stopped = { reason: `${INTAKE_FAILED_RUNS_LIMIT} intake runs in a row failed`, firstError: firstFailure };
+      }
+      return failure;
     }
     failedInARow = 0;
-    const { applied, failed } = applyVerdicts(batch, verdicts, gh, repo, report, log);
+    const { applied, failed, firstError, settled: settledInBatch } = applyVerdicts(batch, verdicts, gh, repo, report, log);
+    for (const number of settledInBatch) settled.add(number);
     // A batch counts only when GitHub refused more than one verdict in it: one
     // refused edit can be that issue's own, and narrowing makes single-issue
     // batches back to back. Any other run that answered resets the count.
     refusedInARow = applied === 0 && failed > 1 ? refusedInARow + 1 : 0;
+    if (refusedInARow === 1) firstRefusal = firstError;
     if (refusedInARow >= INTAKE_REFUSED_BATCHES_LIMIT) {
-      stopped = `GitHub refused every verdict in ${INTAKE_REFUSED_BATCHES_LIMIT} batches in a row`;
+      stopped = {
+        reason: `GitHub refused every verdict in ${INTAKE_REFUSED_BATCHES_LIMIT} batches in a row`,
+        firstError: firstRefusal,
+      };
     }
     return undefined;
   }
@@ -668,7 +704,23 @@ export async function intakeRound(
     const error = await judge(batch);
     if (error !== undefined) await narrow(batch, error);
   }
-  if (stopped) warn(`  ✗ ${stopped}, so intake stops for this round; the issues it hadn't judged are judged again in a later round or run.`);
+  if (stopped) {
+    warn(`  ✗ ${stopped.reason}, so intake stops for this round; the issues it hadn't judged are judged again in a later round or run.`);
+    stops.record({
+      reason: stopped.reason,
+      unjudged: unjudged.filter((issue) => !settled.has(issue.number)).map((issue) => issue.number),
+      firstError: rootMessage(stopped.firstError),
+    });
+  }
+}
+
+// The message of the innermost error in `error`'s cause chain. The host's gh
+// wrapper (lib/github.mts#ghWithStderr) names only the command when gh wrote
+// nothing to stderr, so the cause is what says why it failed.
+function rootMessage(error: unknown): string {
+  let root = error;
+  while (root instanceof Error && root.cause !== undefined) root = root.cause;
+  return root instanceof Error ? root.message : String(root);
 }
 
 // Phase 0a as main.mts runs it: load the queue and the open PRs, then run
