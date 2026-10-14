@@ -60,4 +60,35 @@ public class ReleaseLabelTests
 		label.Text.Should().Be(expectedText);
 		label.Link.Should().Be(expectedLink);
 	}
+
+	// Refs #349: only https:// repository URLs produce links; an http:// or SSH remote leaves the label as plain
+	// text.
+	[Theory]
+	[InlineData("v0.0.152-0-g5cc1da2", "http://github.com/mpaulosky/Blazor-Server", "v0.0.152")]
+	[InlineData("", "git@github.com:mpaulosky/Blazor-Server.git", "no release")]
+	public void FromDescribe_NonHttpsRepositoryUrl_ReturnsLabelWithNoLink(string describeOutput, string repositoryUrl,
+		string expectedText)
+	{
+		// Arrange
+
+		// Act
+		ReleaseLabel label = ReleaseLabel.FromDescribe(describeOutput, repositoryUrl);
+
+		// Assert
+		label.Text.Should().Be(expectedText);
+		label.Link.Should().BeEmpty();
+	}
+
+	// Refs #349: a trailing "/" is stripped from the repository URL, as well as ".git".
+	[Fact]
+	public void FromDescribe_TrailingSlashRepositoryUrl_ReturnsLinkWithoutIt()
+	{
+		// Arrange
+
+		// Act
+		ReleaseLabel label = ReleaseLabel.FromDescribe("v0.0.152-0-g5cc1da2", $"{RepositoryUrl}/");
+
+		// Assert
+		label.Link.Should().Be($"{RepositoryUrl}/releases/tag/v0.0.152");
+	}
 }

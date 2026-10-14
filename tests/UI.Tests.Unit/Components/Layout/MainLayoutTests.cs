@@ -23,6 +23,7 @@ public class MainLayoutTests : BunitContext
 	{
 		AddAuthorization().SetNotAuthorized();
 		Services.AddSingleton(TimeProvider.System);
+		Services.AddSingleton(new BuildInfo(string.Empty, string.Empty, string.Empty));
 	}
 
 	[Fact]
