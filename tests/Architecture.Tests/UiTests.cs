@@ -46,7 +46,7 @@ public class UiTests
 			SliceDependencyRule.FindCrossSliceDependencies(uiAssembly, featuresNamespace);
 
 		// Assert
-		slices.Should().Contain("Home").And.Contain("Authentication");
+		slices.Should().Contain("Home").And.Contain("Authentication").And.Contain("Themes");
 		crossSliceDependencies.Should()
 			.BeEmpty("each feature slice holds everything its use case needs, and depends on no other slice (ADR-0005)");
 	}
