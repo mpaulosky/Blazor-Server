@@ -13,30 +13,18 @@ namespace UI.Tests.Unit.Components.Features.Themes;
 
 public class ThemeExtensionsTests
 {
-	[Fact]
-	public void FromCookie_Light_ReturnsLight()
+	[Theory]
+	[InlineData("light", Theme.Light)]
+	[InlineData("dark", Theme.Dark)]
+	public void FromCookie_LightOrDark_ReturnsMatchingTheme(string value, Theme expected)
 	{
 		// Arrange
-		const string value = "light";
 
 		// Act
 		Theme result = Theme.FromCookie(value);
 
 		// Assert
-		result.Should().Be(Theme.Light);
-	}
-
-	[Fact]
-	public void FromCookie_Dark_ReturnsDark()
-	{
-		// Arrange
-		const string value = "dark";
-
-		// Act
-		Theme result = Theme.FromCookie(value);
-
-		// Assert
-		result.Should().Be(Theme.Dark);
+		result.Should().Be(expected);
 	}
 
 	[Theory]
@@ -57,42 +45,18 @@ public class ThemeExtensionsTests
 		result.Should().Be(Theme.System);
 	}
 
-	[Fact]
-	public void ToDataTheme_Light_ReturnsLight()
+	[Theory]
+	[InlineData(Theme.Light, "light")]
+	[InlineData(Theme.Dark, "dark")]
+	[InlineData(Theme.System, null)]
+	public void ToDataTheme_EachTheme_ReturnsLowercaseNameOrNullForSystem(Theme theme, string? expected)
 	{
 		// Arrange
-		const Theme theme = Theme.Light;
 
 		// Act
 		string? result = theme.ToDataTheme();
 
 		// Assert
-		result.Should().Be("light");
-	}
-
-	[Fact]
-	public void ToDataTheme_Dark_ReturnsDark()
-	{
-		// Arrange
-		const Theme theme = Theme.Dark;
-
-		// Act
-		string? result = theme.ToDataTheme();
-
-		// Assert
-		result.Should().Be("dark");
-	}
-
-	[Fact]
-	public void ToDataTheme_System_ReturnsNull()
-	{
-		// Arrange
-		const Theme theme = Theme.System;
-
-		// Act
-		string? result = theme.ToDataTheme();
-
-		// Assert
-		result.Should().BeNull();
+		result.Should().Be(expected);
 	}
 }
