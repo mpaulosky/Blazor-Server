@@ -9,6 +9,8 @@
 
 using AngleSharp.Dom;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using UI.Components.Layout;
 
 namespace UI.Tests.Unit.Components.Layout;
@@ -20,6 +22,7 @@ public class MainLayoutTests : BunitContext
 	public MainLayoutTests()
 	{
 		AddAuthorization().SetNotAuthorized();
+		Services.AddSingleton(TimeProvider.System);
 	}
 
 	[Fact]
@@ -45,8 +48,11 @@ public class MainLayoutTests : BunitContext
 			Render<MainLayout>(parameters => parameters.Add(layout => layout.Body, BodyMarkup));
 
 		// Assert
+		// The restyled NavMenu writes the link list once and renders it in both the desktop <nav> and the
+		// <details> mobile menu (see NavMenuTests), so the Home link now appears twice, each base-relative.
 		IReadOnlyList<IElement> homeLinks = cut.FindAll("a").Where(link => link.TextContent.Trim() == "Home").ToList();
-		homeLinks.Should().ContainSingle().Which.GetAttribute("href").Should().BeEmpty();
+		homeLinks.Should().HaveCount(2);
+		homeLinks.Should().OnlyContain(link => link.GetAttribute("href") == string.Empty);
 	}
 
 	[Fact]
