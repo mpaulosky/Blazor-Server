@@ -43,6 +43,8 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.141](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.141) | 2026-10-14 | fix(sandcastle): End a run red when intake stops for repeated failures | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-321-fix-sandcastle-end-a-run-red-when-intake-stops-for-repeated-failures.md) |
+| [v0.0.140](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.140) | 2026-10-14 | ci(sandcastle): Build the sandbox image before running Sandcastle | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-319-ci-sandcastle-build-the-sandbox-image-before-running-sandcastle.md) |
 | [v0.0.139](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.139) | 2026-10-14 | docs(ui): Add the UI restyle spec and its coding-standard lines | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-310-docs-ui-add-the-ui-restyle-spec-and-its-coding-standard-lines.md) |
 | [v0.0.138](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.138) | 2026-10-13 | ci(sandcastle): Trigger Sandcastle automatically from GitHub Actions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-301-ci-sandcastle-trigger-sandcastle-automatically-from-github-actions.md) |
 | [v0.0.137](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.137) | 2026-10-13 | test(auth): Run the Auth0 options validation without starting the app | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-298-test-auth-run-the-auth0-options-validation-without-starting-the-app.md) |
@@ -51,8 +53,6 @@ open, and their tests.
 | [v0.0.134](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.134) | 2026-10-13 | feat(admin): Add an Admin page only an Admin can open | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-293-feat-admin-add-an-admin-page-only-an-admin-can-open.md) |
 | [v0.0.133](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.133) | 2026-10-13 | chore(sandcastle): Merge main in before checkpoint 2 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-291-chore-sandcastle-merge-main-in-before-checkpoint-2.md) |
 | [v0.0.132](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.132) | 2026-10-13 | feat(auth): Greet the signed-in User by name in the nav bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-287-feat-auth-greet-the-signed-in-user-by-name-in-the-nav-bar.md) |
-| [v0.0.131](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.131) | 2026-10-13 | feat(profile): Show a User their own claims on a Profile page | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-288-feat-profile-show-a-user-their-own-claims-on-a-profile-page.md) |
-| [v0.0.130](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.130) | 2026-10-13 | feat(auth): Sign in and out through Auth0 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-285-feat-auth-sign-in-and-out-through-auth0.md) |
 
 <!-- RELEASES_END -->
 
