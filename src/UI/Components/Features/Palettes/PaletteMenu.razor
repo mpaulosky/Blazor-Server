@@ -1,0 +1,25 @@
+@* ============================================
+   Copyright (c) 2026. All rights reserved.
+   File Name :     PaletteMenu.razor
+   Company :       mpaulosky
+   Author :        Teqslamer
+   Solution Name : Blazor-Server
+   Project Name :  UI
+   ============================================= *@
+
+@code {
+	/// <summary>
+	///   Lays the menu out for the <c>&lt;details&gt;</c> mobile menu instead of the desktop nav.
+	/// </summary>
+	[Parameter]
+	public bool Mobile { get; set; }
+
+	[CascadingParameter]
+	private HttpContext? HttpContext { get; set; }
+
+	/// <inheritdoc />
+	protected override void OnInitialized()
+	{
+		throw new NotImplementedException();
+	}
+}

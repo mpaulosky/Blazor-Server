@@ -19,6 +19,12 @@ public class NavMenuTests : BunitContext
 {
 	private const string ThemeFormSelector = "form[role='group'][aria-label='Theme']";
 
+	// The desktop Palette menu adds its own nested <details>, so selectors for the mobile menu's <details> scope to
+	// its direct parentage rather than matching whichever <details> comes first.
+	private const string MobileMenuSelector = "header > div > details";
+
+	private const string PaletteFormSelector = "form[action='palette']";
+
 	[Fact]
 	public void Render_BrandLink_IsBaseRelativeAndShowsAriaHiddenLetterTileBeforeAppName()
 	{
@@ -126,7 +132,7 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
-		IElement details = cut.Find("details");
+		IElement details = cut.Find(MobileMenuSelector);
 		details.ClassList.Should().Contain("md:hidden");
 	}
 
@@ -173,9 +179,43 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
-		IElement details = cut.Find("details");
+		IElement details = cut.Find(MobileMenuSelector);
 		IElement themeForm = details.QuerySelectorAll(ThemeFormSelector).Should().ContainSingle().Subject;
 		themeForm.ClassList.Should().Contain("grid-cols-3");
+	}
+
+	[Fact]
+	public void Render_DesktopNav_RendersPaletteMenuAfterThemeControl()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		IElement nav = cut.Find("nav");
+		IElement[] forms = [.. nav.QuerySelectorAll("form")];
+		forms.Should().HaveCount(2);
+		forms[0].Matches(ThemeFormSelector).Should().BeTrue();
+		forms[1].Matches(PaletteFormSelector).Should().BeTrue();
+	}
+
+	[Fact]
+	public void Render_MobileMenu_RendersPaletteMenuAfterThemeControl()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+
+		// Assert
+		IElement details = cut.Find(MobileMenuSelector);
+		IElement[] forms = [.. details.QuerySelectorAll("form")];
+		forms.Should().HaveCount(2);
+		forms[0].Matches(ThemeFormSelector).Should().BeTrue();
+		forms[1].Matches(PaletteFormSelector).Should().BeTrue();
 	}
 
 	private static void AssertLink(IElement container, string text, string expectedHref)
