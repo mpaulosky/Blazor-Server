@@ -1285,6 +1285,36 @@ describe("intakeRound", () => {
     assert.equal(runs, 1);
   });
 
+  // AC: "An UncountedStopError (usage limit or time budget) still ends the
+  // run as stopped with exit code 0, as today (tested)." It isn't a stop
+  // intake records, even mid-streak, so intakeStopExitCode stays 0.
+  it("records no stop when an UncountedStopError ends the round after some failed runs", async () => {
+    const issues = Array.from({ length: INTAKE_BATCH_SIZE * 3 }, (_, i) => issue(i + 1));
+    const stops = new IntakeStopReport();
+    const stop = new UncountedStopError("usage limit");
+    let runs = 0;
+
+    await assert.rejects(
+      intakeRound(
+        issues,
+        [],
+        async () => {
+          runs += 1;
+          throw runs < INTAKE_FAILED_RUNS_LIMIT ? new Error("the sandbox didn't start") : stop;
+        },
+        recordingGh().run,
+        "o/r",
+        new HandBackReport(),
+        () => {},
+        () => {},
+        stops,
+      ),
+      (error) => error === stop,
+    );
+    assert.equal(runs, INTAKE_FAILED_RUNS_LIMIT);
+    assert.deepEqual(stops.items(), []);
+  });
+
   it("doesn't judge an issue whose PR is open", async () => {
     let ran = false;
 
