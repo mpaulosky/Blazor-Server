@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [feat(sandcastle): Write PR descriptions with Why, What changed and Verification](2026-10-14-pr-339-feat-sandcastle-write-pr-descriptions-with-why-what-changed-and-verification.md) | release,automation |
 | 2026-10-14 | [feat(ui): Restyle the page shell, nav, footer and error bar](2026-10-14-pr-337-feat-ui-restyle-the-page-shell-nav-footer-and-error-bar.md) | release,automation |
 | 2026-10-14 | [feat(ui): Restyle the Profile and Admin pages](2026-10-14-pr-331-feat-ui-restyle-the-profile-and-admin-pages.md) | release,automation |
 | 2026-10-14 | [feat(ui): Restyle the Access Denied, Not Found and Error pages](2026-10-14-pr-333-feat-ui-restyle-the-access-denied-not-found-and-error-pages.md) | release,automation |
