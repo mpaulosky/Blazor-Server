@@ -1,5 +1,22 @@
 @namespace UI.Components.Shared
 
+<section class="@SizeClass @Class" @attributes="AdditionalAttributes">
+	@if (Title is not null || Actions is not null)
+	{
+		<div class="flex items-center justify-between gap-4">
+			<h2 class="text-xl font-bold">@Title</h2>
+			@Actions
+		</div>
+		<div class="mt-4">
+			@ChildContent
+		</div>
+	}
+	else
+	{
+		@ChildContent
+	}
+</section>
+
 @code {
 	[Parameter]
 	public CardSize Size { get; set; } = CardSize.Section;
@@ -19,8 +36,12 @@
 	[Parameter(CaptureUnmatchedValues = true)]
 	public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
 
-	protected override void OnInitialized()
+	private string SizeClass => Size switch
 	{
-		throw new NotImplementedException();
-	}
+		CardSize.Hero =>
+			"grid gap-8 rounded-[2rem] border border-slate-200 bg-white/80 p-8 shadow-xl shadow-slate-900/5 lg:p-10 dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-black/30",
+		CardSize.Section =>
+			"rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/70",
+		_ => throw new ArgumentOutOfRangeException(nameof(Size), Size, "Unknown CardSize."),
+	};
 }

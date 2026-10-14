@@ -1,5 +1,27 @@
 @namespace UI.Components.Shared
 
+<header class="@Class" @attributes="AdditionalAttributes">
+	@if (Eyebrow is not null)
+	{
+		<span class="inline-flex rounded-full bg-accent-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-accent-700 dark:bg-accent-500/15 dark:text-accent-300">
+			@Eyebrow
+		</span>
+	}
+	<h1 class="text-4xl font-black tracking-tight text-balance sm:text-5xl @(Eyebrow is not null ? "mt-4" : null)">
+		@Title
+	</h1>
+	@if (Lead is not null)
+	{
+		<p class="mt-4 max-w-2xl text-lg text-slate-600 dark:text-slate-300">@Lead</p>
+	}
+	@if (ChildContent is not null)
+	{
+		<div class="mt-6 flex flex-wrap gap-3">
+			@ChildContent
+		</div>
+	}
+</header>
+
 @code {
 	[Parameter]
 	public RenderFragment? Eyebrow { get; set; }
@@ -18,9 +40,4 @@
 
 	[Parameter(CaptureUnmatchedValues = true)]
 	public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
-
-	protected override void OnInitialized()
-	{
-		throw new NotImplementedException();
-	}
 }

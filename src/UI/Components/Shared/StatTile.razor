@@ -1,5 +1,10 @@
 @namespace UI.Components.Shared
 
+<div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40 @Class" @attributes="AdditionalAttributes">
+	<dt class="text-[0.65rem] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">@Label</dt>
+	<dd class="mt-2 text-xl font-bold">@Value</dd>
+</div>
+
 @code {
 	[Parameter, EditorRequired]
 	public required string Label { get; set; }
@@ -12,9 +17,4 @@
 
 	[Parameter(CaptureUnmatchedValues = true)]
 	public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
-
-	protected override void OnInitialized()
-	{
-		throw new NotImplementedException();
-	}
 }
