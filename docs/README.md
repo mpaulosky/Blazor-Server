@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.139](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.139) | 2026-10-14 | docs(ui): Add the UI restyle spec and its coding-standard lines | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-310-docs-ui-add-the-ui-restyle-spec-and-its-coding-standard-lines.md) |
 | [v0.0.138](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.138) | 2026-10-13 | ci(sandcastle): Trigger Sandcastle automatically from GitHub Actions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-301-ci-sandcastle-trigger-sandcastle-automatically-from-github-actions.md) |
 | [v0.0.137](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.137) | 2026-10-13 | test(auth): Run the Auth0 options validation without starting the app | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-298-test-auth-run-the-auth0-options-validation-without-starting-the-app.md) |
 | [v0.0.136](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.136) | 2026-10-13 | fix(auth): Isolate the greeting name's text direction with bdi | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-296-fix-auth-isolate-the-greeting-name-s-text-direction-with-bdi.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.132](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.132) | 2026-10-13 | feat(auth): Greet the signed-in User by name in the nav bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-287-feat-auth-greet-the-signed-in-user-by-name-in-the-nav-bar.md) |
 | [v0.0.131](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.131) | 2026-10-13 | feat(profile): Show a User their own claims on a Profile page | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-288-feat-profile-show-a-user-their-own-claims-on-a-profile-page.md) |
 | [v0.0.130](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.130) | 2026-10-13 | feat(auth): Sign in and out through Auth0 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-285-feat-auth-sign-in-and-out-through-auth0.md) |
-| [v0.0.129](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.129) | 2026-10-13 | chore(sandcastle): Give the tester 45 minutes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-283-chore-sandcastle-give-the-tester-45-minutes.md) |
 
 <!-- RELEASES_END -->
 
