@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.151](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.151) | 2026-10-14 | feat(aspire): Serve WebApp over HTTPS from the AppHost's https profile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-343-feat-aspire-serve-webapp-over-https-from-the-apphost-s-https-profile.md) |
 | [v0.0.150](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.150) | 2026-10-14 | feat(ui): Turn Home into the Template showcase | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-341-feat-ui-turn-home-into-the-template-showcase.md) |
 | [v0.0.149](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.149) | 2026-10-14 | feat(sandcastle): Write PR descriptions with Why, What changed and Verification | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-339-feat-sandcastle-write-pr-descriptions-with-why-what-changed-and-verification.md) |
 | [v0.0.148](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.148) | 2026-10-14 | feat(ui): Restyle the page shell, nav, footer and error bar | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-337-feat-ui-restyle-the-page-shell-nav-footer-and-error-bar.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.144](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.144) | 2026-10-14 | feat(ui): Add the shared Card, PageHeader, StatTile, Badge and Button components | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-326-feat-ui-add-the-shared-card-pageheader-stattile-badge-and-button-components.md) |
 | [v0.0.143](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.143) | 2026-10-14 | feat(sandcastle): Say where the secret scan matched when it stops a push | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-327-feat-sandcastle-say-where-the-secret-scan-matched-when-it-stops-a-push.md) |
 | [v0.0.142](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.142) | 2026-10-14 | feat(ui): Add the dark variant, the accent token and the app name constant | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-323-feat-ui-add-the-dark-variant-the-accent-token-and-the-app-name-constant.md) |
-| [v0.0.141](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.141) | 2026-10-14 | fix(sandcastle): End a run red when intake stops for repeated failures | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-321-fix-sandcastle-end-a-run-red-when-intake-stops-for-repeated-failures.md) |
 
 <!-- RELEASES_END -->
 
