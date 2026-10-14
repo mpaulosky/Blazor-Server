@@ -120,7 +120,7 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		css.Should().Contain(".dark\\:bg-slate-950:where([data-theme=dark]");
-		css.Should().Contain("@media (prefers-color-scheme: dark)");
+		css.Replace(" ", string.Empty, StringComparison.Ordinal).Should().Contain("@media(prefers-color-scheme:dark)");
 	}
 
 	[Fact]
