@@ -14,6 +14,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.HttpResults;
 
+using UI.Security;
+
 namespace UI.Components.Features.Authentication;
 
 /// <summary>
