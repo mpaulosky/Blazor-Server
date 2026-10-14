@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.145](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.145) | 2026-10-14 | feat(ui): Restyle the reconnect modal | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-330-feat-ui-restyle-the-reconnect-modal.md) |
 | [v0.0.144](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.144) | 2026-10-14 | feat(ui): Add the shared Card, PageHeader, StatTile, Badge and Button components | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-326-feat-ui-add-the-shared-card-pageheader-stattile-badge-and-button-components.md) |
 | [v0.0.143](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.143) | 2026-10-14 | feat(sandcastle): Say where the secret scan matched when it stops a push | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-327-feat-sandcastle-say-where-the-secret-scan-matched-when-it-stops-a-push.md) |
 | [v0.0.142](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.142) | 2026-10-14 | feat(ui): Add the dark variant, the accent token and the app name constant | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-323-feat-ui-add-the-dark-variant-the-accent-token-and-the-app-name-constant.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.138](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.138) | 2026-10-13 | ci(sandcastle): Trigger Sandcastle automatically from GitHub Actions | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-301-ci-sandcastle-trigger-sandcastle-automatically-from-github-actions.md) |
 | [v0.0.137](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.137) | 2026-10-13 | test(auth): Run the Auth0 options validation without starting the app | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-298-test-auth-run-the-auth0-options-validation-without-starting-the-app.md) |
 | [v0.0.136](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.136) | 2026-10-13 | fix(auth): Isolate the greeting name's text direction with bdi | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-296-fix-auth-isolate-the-greeting-name-s-text-direction-with-bdi.md) |
-| [v0.0.135](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.135) | 2026-10-13 | fix(nav): Make the Home link base-relative | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-13-pr-295-fix-nav-make-the-home-link-base-relative.md) |
 
 <!-- RELEASES_END -->
 

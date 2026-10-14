@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-14 | [feat(ui): Restyle the reconnect modal](2026-10-14-pr-330-feat-ui-restyle-the-reconnect-modal.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the shared Card, PageHeader, StatTile, Badge and Button components](2026-10-14-pr-326-feat-ui-add-the-shared-card-pageheader-stattile-badge-and-button-components.md) | release,automation |
 | 2026-10-14 | [feat(sandcastle): Say where the secret scan matched when it stops a push](2026-10-14-pr-327-feat-sandcastle-say-where-the-secret-scan-matched-when-it-stops-a-push.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the dark variant, the accent token and the app name constant](2026-10-14-pr-323-feat-ui-add-the-dark-variant-the-accent-token-and-the-app-name-constant.md) | release,automation |
