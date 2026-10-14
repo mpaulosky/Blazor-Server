@@ -43,6 +43,7 @@ open, and their tests.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.153](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.153) | 2026-10-14 | feat(ui): Generate build-time BuildInfo and the Release label function | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) |
 | [v0.0.152](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.152) | 2026-10-14 | fix(ui): Send a stale Log out home instead of a 400 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-345-fix-ui-send-a-stale-log-out-home-instead-of-a-400.md) |
 | [v0.0.151](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.151) | 2026-10-14 | feat(aspire): Serve WebApp over HTTPS from the AppHost's https profile | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-343-feat-aspire-serve-webapp-over-https-from-the-apphost-s-https-profile.md) |
 | [v0.0.150](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.150) | 2026-10-14 | feat(ui): Turn Home into the Template showcase | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-341-feat-ui-turn-home-into-the-template-showcase.md) |
@@ -52,7 +53,6 @@ open, and their tests.
 | [v0.0.146](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.146) | 2026-10-14 | feat(ui): Restyle the Access Denied, Not Found and Error pages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-333-feat-ui-restyle-the-access-denied-not-found-and-error-pages.md) |
 | [v0.0.145](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.145) | 2026-10-14 | feat(ui): Restyle the reconnect modal | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-330-feat-ui-restyle-the-reconnect-modal.md) |
 | [v0.0.144](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.144) | 2026-10-14 | feat(ui): Add the shared Card, PageHeader, StatTile, Badge and Button components | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-326-feat-ui-add-the-shared-card-pageheader-stattile-badge-and-button-components.md) |
-| [v0.0.143](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.143) | 2026-10-14 | feat(sandcastle): Say where the secret scan matched when it stops a push | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-327-feat-sandcastle-say-where-the-secret-scan-matched-when-it-stops-a-push.md) |
 
 <!-- RELEASES_END -->
 
