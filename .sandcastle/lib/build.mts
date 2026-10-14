@@ -29,8 +29,8 @@ import { repoGitDir, worktreeLinkProblems, worktreePathFor } from "./host-safety
 import { runLimits, type RunLimits } from "./limits.mts";
 import { architectPromptArgs, backendPromptArgs, gateFixerPromptArgs, issuePromptArgs } from "./prompts.mts";
 import type { Outcome } from "./report.mts";
-import { containsSandboxSecret, containsSecret } from "./sandbox-env.mts";
-import type { SecretMatch } from "./scan.mts";
+import { containsSandboxSecret, containsSecret, sandboxSecrets } from "./sandbox-env.mts";
+import { describeSecretMatch, firstSecretMatch, type SecretMatch } from "./scan.mts";
 import { git } from "./shell.mts";
 import { agentSandbox } from "./skills.mts";
 
@@ -349,9 +349,7 @@ const liveHost: BuildHost = {
   latestDesignNote: (issueNumber) => latestDesignNote(issueNumber),
   markBuilding: (issueNumber) => claimBuildingLabel(issueNumber),
   unmarkBuilding: (issueNumber) => releaseBuildingLabel(issueNumber),
-  leaksSecret: (_base, _commit) => {
-    throw new Error("Not implemented");
-  },
+  leaksSecret: (base, commit) => firstSecretMatch(base, commit, sandboxSecrets()),
   startFromMain: (issueNumber, branch, base) => sweepStartFromMain(issueNumber, branch, base),
   publicError: (error) => publicErrorText(String(error instanceof Error ? error.message : error), containsSandboxSecret),
   publish,
@@ -737,9 +735,14 @@ async function buildMarkedIssue(
     if (gated === undefined) return unpublished("gate failed", "checkpoint 2");
 
     // The push is public, and the sandbox holds the Claude token or API key.
-    // The comment doesn't say where the secret is, since the issue is public too.
-    if (host.leaksSecret(base, gated)) {
-      console.error(`  ✗ #${issue.number}: a commit holds a secret, so ${branch} isn't published.`);
+    // The comment doesn't say where the secret is, since the issue is public
+    // too. The log and the run report do (#324): the location names no part
+    // of the secret, and without it nobody can tell a leak from a false
+    // positive once the runner, the only holder of the commit, is gone.
+    const leak = host.leaksSecret(base, gated);
+    if (leak !== undefined) {
+      const where = describeSecretMatch(leak);
+      log(`✗ a commit holds a secret (${where}), so ${branch} isn't published.`);
       host.commentOnIssue(
         issue.number,
         `Sandcastle didn't publish this issue: a commit on \`${branch}\` holds one of the sandbox's secrets, or something ` +
@@ -747,7 +750,7 @@ async function buildMarkedIssue(
           `\`git log -p ${BASE_BRANCH}..${branch}\` before anything pushes the branch, and rotate the secret if it has ` +
           "left this machine.",
       );
-      return unpublished("not published", "a commit holds a secret");
+      return unpublished("not published", `a commit holds a secret: ${where}`);
     }
 
     // A publish already reached goes ahead even once the run has hit the time

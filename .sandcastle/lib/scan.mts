@@ -19,24 +19,66 @@ import { git } from "./shell.mts";
 // such as the next file's "diff" header. Only hunk lines count, so a file
 // header ("+++ b/path") is never taken for content, nor content for a header.
 export function addedLines(patch: string): string[] {
-  const added: string[] = [];
+  return [...additions(patch)].map(({ text }) => text);
+}
+
+// An added line (see addedLines) with where it sits: the path of its file,
+// read from the file's "+++" header, and its line number in the new file,
+// counted from the hunk header's "+" range.
+type Addition = { readonly path: string; readonly line: number; readonly text: string };
+
+function* additions(patch: string): Generator<Addition> {
   let columns = 0;
-  for (const line of patch.split("\n")) {
-    const hunk = /^(@{2,}) /.exec(line);
+  let path = "";
+  let line = 0;
+  for (const row of patch.split("\n")) {
+    const hunk = /^(@{2,}) /.exec(row);
     if (hunk) {
       columns = hunk[1]!.length - 1;
+      line = Number(/ \+(\d+)(?:,\d+)? @/.exec(row)?.[1] ?? 0);
       continue;
     }
-    if (columns === 0) continue;
-    const markers = line.slice(0, columns);
+    if (columns === 0) {
+      // git ends a "+++" name that holds a space with a tab.
+      if (row.startsWith("+++ ")) path = headerPath(row.slice(4).replace(/\t$/, ""));
+      continue;
+    }
+    const markers = row.slice(0, columns);
     if (markers.length < columns || /[^ +\-]/.test(markers)) {
       // "\ No newline at end of file" belongs to the hunk; anything else ends it.
-      if (!line.startsWith("\\")) columns = 0;
+      if (!row.startsWith("\\")) columns = 0;
       continue;
     }
-    if (markers.includes("+") && !markers.includes("-")) added.push(line.slice(columns));
+    if (markers.includes("-")) continue;
+    if (markers.includes("+")) yield { path, line, text: row.slice(columns) };
+    line++;
   }
-  return added;
+}
+
+// The path a "+++" header names, without git's "b/" prefix (firstSecretMatch
+// asks for it explicitly) and with git's C-style quoting undone: a name with
+// a quote, backslash, control character or, by default, any non-ASCII byte
+// comes quoted, the bytes as octal escapes.
+function headerPath(name: string): string {
+  let path = name;
+  if (path.startsWith('"') && path.endsWith('"')) {
+    const escapes: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13 };
+    const bytes: number[] = [];
+    const chars = [...path.slice(1, -1)];
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i] !== "\\") {
+        bytes.push(...Buffer.from(chars[i]!));
+      } else if (/^[0-7]{3}$/.test(chars.slice(i + 1, i + 4).join(""))) {
+        bytes.push(parseInt(chars.slice(i + 1, i + 4).join(""), 8));
+        i += 3;
+      } else {
+        const escaped = chars[++i] ?? "";
+        bytes.push(...(escapes[escaped] === undefined ? Buffer.from(escaped) : [escapes[escaped]!]));
+      }
+    }
+    path = Buffer.from(bytes).toString("utf8");
+  }
+  return path.startsWith("b/") ? path.slice(2) : path;
 }
 
 // What the commits from `base` to `commit` publish, read in the main checkout.
@@ -52,10 +94,12 @@ export function publishedText(base: string, commit: string, run: (...args: strin
 
 // Where in a commit a match sits: its author or committer identity, its
 // message, a path it touches, or an added line (with the path and the line
-// number in the new file). Never the matched text itself (#324).
+// number in the new file). Never the matched text itself (#324), so a match in
+// a path doesn't name the path: the path holds the match. An added line's
+// path is safe to name, since firstSecretMatch reads a commit's paths before
+// its lines, and so stops at a path that holds a match first.
 export type MatchLocation =
-  | { readonly commit: string; readonly field: "author" | "committer" | "message" }
-  | { readonly commit: string; readonly field: "path"; readonly path: string }
+  | { readonly commit: string; readonly field: "author" | "committer" | "message" | "path" }
   | { readonly commit: string; readonly field: "line"; readonly path: string; readonly line: number };
 
 // A match a push would publish: where it sits, and what kind of thing it is
@@ -77,5 +121,43 @@ export function firstSecretMatch(
   secrets: ReadonlyMap<string, string>,
   run: (...args: string[]) => string = git,
 ): SecretMatch | undefined {
-  throw new Error("Not implemented");
+  for (const sha of run("rev-list", "--reverse", `${base}..${commit}`).split("\n").filter(Boolean)) {
+    const [author = "", committer = "", message = ""] = run("log", "-1", "--format=%an <%ae>%x00%cn <%ce>%x00%B", sha).split("\0");
+    for (const [field, text] of [["author", author], ["committer", committer], ["message", message]] as const) {
+      const kind = secretKindIn(text, secrets);
+      if (kind) return { location: { commit: sha, field }, kind };
+    }
+    // -z keeps each path as it is, where git would otherwise quote some.
+    const paths = run("log", "-1", "--format=", "--name-only", "-z", "--cc", "--no-renames", sha);
+    for (const path of paths.split("\0").filter(Boolean)) {
+      const kind = secretKindIn(path, secrets);
+      if (kind) return { location: { commit: sha, field: "path" }, kind };
+    }
+    // The prefixes are explicit, so a diff.noprefix or diff.mnemonicPrefix
+    // setting can't change the "+++ b/path" headers additions() reads.
+    const patch = run(
+      "log", "-1", "--format=", "-p", "--cc", "-U0", "--no-ext-diff", "--no-textconv", "--text",
+      "--src-prefix=a/", "--dst-prefix=b/", sha,
+    );
+    for (const { path, line, text } of additions(patch)) {
+      const kind = secretKindIn(text, secrets);
+      if (kind) return { location: { commit: sha, field: "line", path, line }, kind };
+    }
+  }
+  return undefined;
+}
+
+// A SecretMatch in words for the run log and the run report, such as
+// "something shaped like a gh*_ token in line 3 of src/x.ts, added by commit
+// 1a2b…". It's built from the match's location and kind alone, so it never
+// holds the matched text (#324).
+export function describeSecretMatch({ location, kind }: SecretMatch): string {
+  const what = kind.type === "secret" ? `the sandbox's ${kind.envKey} value` : `something shaped like a ${kind.shape} token`;
+  const where =
+    location.field === "line"
+      ? `line ${location.line} of ${location.path}, added by commit ${location.commit}`
+      : location.field === "path"
+        ? `a path commit ${location.commit} touches`
+        : `the ${location.field} of commit ${location.commit}`;
+  return `${what} in ${where}`;
 }

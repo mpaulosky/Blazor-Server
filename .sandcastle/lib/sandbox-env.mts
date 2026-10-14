@@ -44,8 +44,13 @@ export function sandboxEnv(envFile: string, hostEnv: Record<string, string | und
   return values;
 }
 
-// Token shapes worth catching even when they didn't come from the env file.
-const tokenPatterns = [/sk-ant-[A-Za-z0-9_-]{16,}/, /\bgh[pousr]_[A-Za-z0-9]{20,}\b/, /\bgithub_pat_[A-Za-z0-9_]{20,}\b/];
+// Token shapes worth catching even when they didn't come from the env file,
+// each with the name secretKindIn reports it by.
+const tokenShapes = [
+  { shape: "sk-ant-", pattern: /sk-ant-[A-Za-z0-9_-]{16,}/ },
+  { shape: "gh*_", pattern: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/ },
+  { shape: "github_pat_", pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/ },
+] as const;
 
 // Shorter values are too likely to be ordinary words to look for.
 const minimumSecretLength = 8;
@@ -56,13 +61,12 @@ export function containsSecret(text: string, secrets: Iterable<string>): boolean
   for (const secret of secrets) {
     if (secret.length >= minimumSecretLength && text.includes(secret)) return true;
   }
-  return tokenPatterns.some((pattern) => pattern.test(text));
+  return tokenShapes.some(({ pattern }) => pattern.test(text));
 }
 
 // containsSecret with the values .sandcastle/.env gives the sandbox.
 export function containsSandboxSecret(text: string): boolean {
-  const envFile = existsSync(ENV_FILE) ? readFileSync(ENV_FILE, "utf8") : "";
-  return containsSecret(text, sandboxEnv(envFile, process.env).values());
+  return containsSecret(text, sandboxSecrets().values());
 }
 
 // What kind of thing a match is: one of the sandbox's secret values, naming
@@ -77,5 +81,16 @@ export type SecretKind = { readonly type: "secret"; readonly envKey: string } | 
 // yes/no, so lib/scan.mts can report where a push was stopped without ever
 // handling the matched text.
 export function secretKindIn(text: string, secrets: ReadonlyMap<string, string>): SecretKind | undefined {
-  throw new Error("Not implemented");
+  for (const [envKey, secret] of secrets) {
+    if (secret.length >= minimumSecretLength && text.includes(secret)) return { type: "secret", envKey };
+  }
+  const token = tokenShapes.find(({ pattern }) => pattern.test(text));
+  return token === undefined ? undefined : { type: "pattern", shape: token.shape };
+}
+
+// The values .sandcastle/.env gives the sandbox, keyed by the key each came
+// from, for containsSandboxSecret and lib/scan.mts#firstSecretMatch.
+export function sandboxSecrets(): Map<string, string> {
+  const envFile = existsSync(ENV_FILE) ? readFileSync(ENV_FILE, "utf8") : "";
+  return sandboxEnv(envFile, process.env);
 }

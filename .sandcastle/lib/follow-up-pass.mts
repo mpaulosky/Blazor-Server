@@ -60,8 +60,8 @@ import { runLimits, type RunLimits } from "./limits.mts";
 import { followUpPromptArgs, gateFixerPromptArgs } from "./prompts.mts";
 import { ownerCheck, type IsOwner } from "./queue.mts";
 import { humanThreadReport, outcomeReport, type HumanThreadEntry, type OutcomeEntry, type OutcomeReport } from "./report.mts";
-import { containsSandboxSecret } from "./sandbox-env.mts";
-import type { SecretMatch } from "./scan.mts";
+import { containsSandboxSecret, sandboxSecrets } from "./sandbox-env.mts";
+import { describeSecretMatch, firstSecretMatch, type SecretMatch } from "./scan.mts";
 import { git } from "./shell.mts";
 
 // Where the follow-up role writes its verdicts, relative to the worktree.
@@ -563,9 +563,7 @@ export const livePassHost: PassHost = {
   unmarkBuilding: (issue) => releaseBuildingLabel(issue),
   createSandbox: (branch) => createCheckedSandbox(branch),
   worktreeProblems: (path) => worktreeLinkProblems(path, repoGitDir()),
-  leaksSecret: (_base, _commit) => {
-    throw new Error("Not implemented");
-  },
+  leaksSecret: (base, commit) => firstSecretMatch(base, commit, sandboxSecrets()),
   push: (branch, commit) =>
     retryOnServerError(
       () => void git("push", "--quiet", "origin", `${commit}:refs/heads/${branch}`),
@@ -837,16 +835,20 @@ function planPass(
 }
 
 // Hands the PR back with sandcastle:needs-human (see giveUpComment), quoting
-// `output` once it's safe to post. A hand-back that fails is logged: the next
-// round's sweep finds the PR again.
-function giveUp(target: PassTarget, host: PassHost, reason: string, output: string | undefined): PassOutcome {
-  host.log(`  ✋ PR #${target.number}: ${reason}, so it's handed back.`);
+// `output` once it's safe to post. `privateDetail`, when given, is added to
+// the reason in the run log and the run report but left out of the PR comment,
+// for what's fine for the run's own records but not for the public PR, such as
+// where the secret scan matched (#324). A hand-back that fails is logged: the
+// next round's sweep finds the PR again.
+function giveUp(target: PassTarget, host: PassHost, reason: string, output: string | undefined, privateDetail?: string): PassOutcome {
+  const recorded = privateDetail === undefined ? reason : `${reason} (${privateDetail})`;
+  host.log(`  ✋ PR #${target.number}: ${recorded}, so it's handed back.`);
   try {
-    host.handBack(target.number, reason, giveUpComment(reason, output === undefined ? undefined : host.publicError(output)));
+    host.handBack(target.number, recorded, giveUpComment(reason, output === undefined ? undefined : host.publicError(output)));
   } catch (error) {
     console.error(`  ⚠ PR #${target.number}: handing it back failed, so the next round tries again: ${error}`);
   }
-  return { kind: "gave-up", reason };
+  return { kind: "gave-up", reason: recorded };
 }
 
 // What planPass decided, read again once the issue was marked: the threads
@@ -872,7 +874,7 @@ async function passOnMarkedIssue(
 ): Promise<PassOutcome> {
   const branch = target.headRefName;
   const log = (line: string) => host.log(`  PR #${target.number} ${line}`);
-  const stop = (reason: string, output?: string) => giveUp(target, host, reason, output);
+  const stop = (reason: string, output?: string, privateDetail?: string) => giveUp(target, host, reason, output, privateDetail);
   let sandbox: sandcastle.Sandbox;
   try {
     sandbox = await host.createSandbox(branch);
@@ -1038,10 +1040,15 @@ async function passOnMarkedIssue(
     if (gated !== target.headRefOid) {
       // The push is public, and the sandbox holds the Claude token or API
       // key. The comment doesn't say where the secret is: the PR is public too.
-      if (host.leaksSecret(base, gated)) {
+      // The log and the run report do (#324), since the location names no
+      // part of the secret, and the runner is the only holder of the commit.
+      const leak = host.leaksSecret(base, gated);
+      if (leak !== undefined) {
         return stop(
           "a commit holds one of the sandbox's secrets, or something shaped like a Claude or GitHub token, so nothing " +
             "was pushed. Find it before anything pushes the branch, and rotate the secret if it has left the machine",
+          undefined,
+          describeSecretMatch(leak),
         );
       }
       try {
