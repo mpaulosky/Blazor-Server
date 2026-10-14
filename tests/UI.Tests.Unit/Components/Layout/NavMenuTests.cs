@@ -11,7 +11,6 @@ using AngleSharp.Dom;
 
 using Domain.Constants;
 
-using UI.Components.Features.Themes;
 using UI.Components.Layout;
 
 namespace UI.Tests.Unit.Components.Layout;
@@ -155,10 +154,13 @@ public class NavMenuTests : BunitContext
 		IRenderedComponent<NavMenu> cut = Render<NavMenu>();
 
 		// Assert
+		// Queried from the actually-rendered nav element rather than bUnit's FindComponents<T>().Nodes, which
+		// reparses a component's markup into a brand-new, disconnected AngleSharp document on every access and so
+		// can never be found inside an ancestor from the real render tree.
 		IElement nav = cut.Find("nav");
-		IRenderedComponent<ThemeControl> themeControl =
-			cut.FindComponents<ThemeControl>().Single(control => nav.Contains(control.Nodes[0]));
-		themeControl.Instance.Mobile.Should().BeFalse();
+		IElement? themeForm = nav.QuerySelector("form[role='group'][aria-label='Theme']");
+		themeForm.Should().NotBeNull();
+		themeForm!.ClassList.Should().NotContain("grid-cols-3");
 	}
 
 	[Fact]
@@ -172,9 +174,9 @@ public class NavMenuTests : BunitContext
 
 		// Assert
 		IElement details = cut.Find("details");
-		IRenderedComponent<ThemeControl> themeControl =
-			cut.FindComponents<ThemeControl>().Single(control => details.Contains(control.Nodes[0]));
-		themeControl.Instance.Mobile.Should().BeTrue();
+		IElement? themeForm = details.QuerySelector("form[role='group'][aria-label='Theme']");
+		themeForm.Should().NotBeNull();
+		themeForm!.ClassList.Should().Contain("grid-cols-3");
 	}
 
 	private static void AssertLink(IElement container, string text, string expectedHref)
