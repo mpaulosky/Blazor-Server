@@ -22,6 +22,13 @@ public partial class AppTailwindCssTests
 	[GeneratedRegex(":root\\[data-palette=\"(?<hue>[a-z]+)\"\\]\\s*\\{(?<body>[^}]*)\\}")]
 	private static partial Regex DataPaletteRulePattern();
 
+	// The bare :root rule (not :root[data-palette=…]), whose body may hold one nested block such as @variant dark.
+	[GeneratedRegex(@":root\s*\{(?<body>(?:[^{}]|\{[^{}]*\})*)\}")]
+	private static partial Regex RootRulePattern();
+
+	[GeneratedRegex(@"@variant dark\s*\{[^}]*scrollbar-color: var\(--color-accent-400\) var\(--color-accent-950\);[^}]*\}")]
+	private static partial Regex DarkScrollbarColorBlockPattern();
+
 	private static string ReadAppTailwindCss()
 	{
 		return RepositoryFiles.ReadAllText("src", "UI", "Styles", "app.tailwind.css");
@@ -163,5 +170,35 @@ public partial class AppTailwindCssTests
 
 		// Assert
 		css.Should().NotContain("data-palette=\"blue\"");
+	}
+
+	[Fact]
+	public void AppTailwindCss_ContainsRootAccentColorAndLightScrollbarColor()
+	{
+		// Arrange
+		string css = ReadAppTailwindCss();
+
+		// Act
+		Match rootRule = RootRulePattern().Match(css);
+
+		// Assert
+		rootRule.Success.Should().BeTrue("app.tailwind.css should have a bare :root rule for the browser chrome");
+		string body = rootRule.Groups["body"].Value;
+		body.Should().Contain("accent-color: var(--color-accent-600);");
+		body.Should().Contain("scrollbar-color: var(--color-accent-500) var(--color-accent-100);");
+	}
+
+	[Fact]
+	public void AppTailwindCss_ContainsDarkScrollbarColorUnderDarkVariant()
+	{
+		// Arrange
+		string css = ReadAppTailwindCss();
+
+		// Act
+		string rootRuleBody = RootRulePattern().Match(css).Groups["body"].Value;
+
+		// Assert
+		rootRuleBody.Should().MatchRegex(DarkScrollbarColorBlockPattern(),
+			"the Dark scrollbar-color should sit in an @variant dark block inside the :root rule");
 	}
 }

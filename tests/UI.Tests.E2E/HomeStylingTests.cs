@@ -59,4 +59,28 @@ public class HomeStylingTests(WebAppFixture fixture)
 		// Assert
 		await Expect(homeLink).ToHaveCSSAsync("color", expectedColor);
 	}
+
+	[Fact]
+	public async Task PageHeader_Printed_TitleDropsTheGradientForASolidAccentColour()
+	{
+		// Arrange
+		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage page = webAppPage.Page;
+		await page.EmulateMediaAsync(new() { Media = Media.Print });
+		await page.GotoAsync(fixture.BaseAddress.ToString());
+		ILocator title = page.Locator("main h1");
+		await Expect(title).ToBeVisibleAsync();
+
+		// Act
+		// Browsers skip background graphics when printing, so a title painted only through bg-clip-text would print blank.
+		string expectedColor = await page.EvaluateAsync<string>(
+			"cls => { const probe = document.createElement('span'); probe.className = cls; document.body.append(probe); " +
+			"const color = getComputedStyle(probe).color; probe.remove(); return color; }",
+			"print:text-accent-800");
+
+		// Assert
+		await Expect(title).ToHaveCSSAsync("background-image", "none");
+		await Expect(title).ToHaveCSSAsync("color", expectedColor);
+	}
 }

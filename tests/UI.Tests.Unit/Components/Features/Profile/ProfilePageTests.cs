@@ -35,6 +35,24 @@ public class ProfilePageTests : BunitContext
 	}
 
 	[Fact]
+	public void Render_User_TableHeaderHasAccentBackgroundAndText()
+	{
+		// Arrange
+		AddAuthorization().SetAuthorized("a-user");
+
+		// Act
+		IRenderedComponent<ProfilePage> cut = Render<ProfilePage>();
+
+		// Assert
+		cut.Find("thead").ClassList.Should().Contain([
+			"bg-accent-200",
+			"text-accent-800",
+			"dark:bg-accent-800",
+			"dark:text-accent-200",
+		]);
+	}
+
+	[Fact]
 	public void Render_User_ShowsOneTableRowPerClaim()
 	{
 		// Arrange

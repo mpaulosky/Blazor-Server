@@ -3,11 +3,11 @@
 <header class="@Class" @attributes="AdditionalAttributes">
 	@if (Eyebrow is not null)
 	{
-		<span class="inline-flex rounded-full bg-accent-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-accent-700 dark:bg-accent-500/15 dark:text-accent-300">
+		<span class="inline-flex rounded-full bg-accent-200 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-accent-800 dark:bg-accent-500/15 dark:text-accent-300">
 			@Eyebrow
 		</span>
 	}
-	<h1 class="text-4xl font-black tracking-tight text-balance sm:text-5xl @(Eyebrow is not null ? "mt-4" : null)">
+	<h1 class="bg-linear-to-r from-accent-800 to-accent-500 bg-clip-text text-4xl font-black tracking-tight text-balance text-transparent sm:text-5xl dark:from-accent-100 dark:to-accent-400 print:bg-none print:text-accent-800 @(Eyebrow is not null ? "mt-4" : null)">
 		@Title
 	</h1>
 	@if (Lead is not null)

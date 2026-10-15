@@ -43,6 +43,44 @@ public class PageHeaderTests : BunitContext
 	}
 
 	[Fact]
+	public void Render_EyebrowSet_EyebrowPillHasAccentBackgroundAndText()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<PageHeader> cut = Render<PageHeader>(parameters => parameters
+			.Add(c => c.Title, "Page title")
+			.Add(c => c.Eyebrow, "Eyebrow text"));
+
+		// Assert
+		IElement eyebrow = cut.Find("header span");
+		eyebrow.ClassList.Should().Contain(["bg-accent-200", "text-accent-800"]);
+	}
+
+	[Fact]
+	public void Render_Title_HeadingHasGradientTextFillClasses()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<PageHeader> cut = Render<PageHeader>(parameters => parameters
+			.Add(c => c.Title, "Page title"));
+
+		// Assert
+		cut.Find("h1").ClassList.Should().Contain([
+			"bg-linear-to-r",
+			"from-accent-800",
+			"to-accent-500",
+			"bg-clip-text",
+			"text-transparent",
+			"dark:from-accent-100",
+			"dark:to-accent-400",
+			"print:bg-none",
+			"print:text-accent-800",
+		]);
+	}
+
+	[Fact]
 	public void Render_EyebrowUnset_RendersNoEyebrowPill()
 	{
 		// Arrange
