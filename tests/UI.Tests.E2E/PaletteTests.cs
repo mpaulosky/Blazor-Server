@@ -49,7 +49,6 @@ public class PaletteTests(WebAppFixture fixture)
 		await page.GetByRole(AriaRole.Button, new() { Name = "Rose" }).ClickAsync();
 
 		// Assert
-		string roseBackgroundColor = await body.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
-		roseBackgroundColor.Should().NotBe(blueBackgroundColor);
+		await Expect(body).Not.ToHaveCSSAsync("background-color", blueBackgroundColor);
 	}
 }
