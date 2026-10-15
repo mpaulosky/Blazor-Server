@@ -17,6 +17,7 @@ It builds on the tokens the restyle added ([UI Restyle](ui-restyle.md#tokens)): 
 - **Two slices,** `Features/Themes/` and `Features/Palettes/`, each with its own value type, command, validator, handler, endpoint, control and `Add<Feature>Feature()`. No
   umbrella term or slice covers both.
 - **The domain terms.** **Theme** is Light, Dark or System, and **Palette** is the accent hue, as `CONTEXT.md` defines them. Never "mode" or "color scheme".
+  [Palette Tint](palette-tint.md) later widened the Palette to tint the surfaces too ([ADR 0008](../adr/0008-the-palette-tints-the-surfaces.md)).
 - **Accessible.** Every hue meets WCAG AA in both Themes, every button has a visible `focus-visible` ring and an accessible name, and `aria-pressed` marks the current choice.
 
 Out of scope: syncing either choice to the User's Auth0 profile, screenshot or visual-regression tests, and an umbrella term or slice over the two.

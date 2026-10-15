@@ -88,6 +88,10 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - Style every surface for light and dark with `dark:` variants. The `dark` variant follows the OS until the visitor picks a Theme
   (see [docs/plans/ui-restyle.md](plans/ui-restyle.md)).
 - Write accent colour as `accent-*` (`bg-accent-600`), never as a raw hue such as `blue-*`, so the Palette can swap it.
+- Surfaces, borders, dividers and hover fills use `accent-*` too, so the Palette tints them (see [docs/plans/palette-tint.md](plans/palette-tint.md)).
+  Text stays `slate-*`: secondary text is `slate-600` in Light and `slate-300` in Dark.
+  Pair every `focus-visible:outline-accent-500` with `dark:focus-visible:outline-accent-300`.
+  The Palette menu's panel and tiles stay slate, so its swatches read true.
   Colours with a fixed meaning, such as the amber warning and the badge tones, keep their hue.
 - Put reusable UI building blocks (card, badge, button) in `Components/Shared/`. They hold no feature or domain logic, aren't the Shared Kernel, and never depend on a feature slice.
 - Call JavaScript interop only from `OnAfterRenderAsync`, never while the component is prerendering. Guard one-time setup with `if (firstRender)`.
@@ -97,7 +101,7 @@ The repo uses [Central Package Management](https://learn.microsoft.com/nuget/con
 - Don't use `HttpContext` in interactive components. Read the signed-in user through `AuthenticationStateProvider` or a cascading `Task<AuthenticationState>`.
 - Declare render modes explicitly where the component defines them (`@rendermode InteractiveServer`). Keep pages that don't need interactivity statically rendered.
 - Use the domain terms from `CONTEXT.md` in code and UI.
-  For example, **Theme** means light/dark mode and **Palette** means accent color.
+  For example, **Theme** means light/dark mode and **Palette** means the hue that tints the accent and the surfaces.
   Don't use either word for the other, or swap in synonyms like "color scheme".
 
 ### Authentication and authorization (Auth0)
