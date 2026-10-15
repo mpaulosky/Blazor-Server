@@ -31,9 +31,9 @@ else
 	private string KindClass => Kind switch
 	{
 		ButtonKind.Primary =>
-			"rounded-xl bg-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 motion-safe:transition",
+			"rounded-xl bg-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 dark:focus-visible:outline-accent-300 motion-safe:transition",
 		ButtonKind.Secondary =>
-			"rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 dark:border-slate-700 dark:hover:bg-slate-800 motion-safe:transition",
+			"rounded-xl border border-accent-300 px-4 py-2 text-sm font-semibold hover:bg-accent-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 dark:focus-visible:outline-accent-300 dark:border-accent-700 dark:hover:bg-accent-800 motion-safe:transition",
 		_ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, "Unknown ButtonKind."),
 	};
 }

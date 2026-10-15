@@ -130,7 +130,7 @@ public class HomePageTests : BunitContext
 		// Assert
 		IElement card = CardWithHeading(cut, "What's inside");
 		IElement badge = card.QuerySelectorAll("span").Single(span => span.TextContent.Trim() == "Template");
-		badge.ClassList.Should().Contain("border-slate-200");
+		badge.ClassList.Should().Contain("border-accent-200");
 	}
 
 	[Theory]

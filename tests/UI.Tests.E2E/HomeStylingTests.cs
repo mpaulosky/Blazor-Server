@@ -33,4 +33,30 @@ public class HomeStylingTests(WebAppFixture fixture)
 		// font-size is 32px (2em), so this still fails without Tailwind applied.
 		await Expect(heading).ToHaveCSSAsync("font-size", "48px");
 	}
+
+	[Theory]
+	[InlineData(ColorScheme.Light, "text-accent-800!")]
+	[InlineData(ColorScheme.Dark, "dark:text-accent-200!")]
+	public async Task NavMenu_ActiveHomeLink_ComputesTheAccentTextColour(ColorScheme colorScheme, string expectedClass)
+	{
+		// Arrange
+		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage page = webAppPage.Page;
+		await page.EmulateMediaAsync(new() { ColorScheme = colorScheme });
+		await page.GotoAsync(fixture.BaseAddress.ToString());
+		ILocator homeLink = page.Locator("header nav").GetByRole(AriaRole.Link, new() { Name = "Home" });
+		await Expect(homeLink).ToBeVisibleAsync();
+
+		// Act
+		// NavLink adds ActiveClass on top of the link's resting text-slate-* classes, and Tailwind orders those after
+		// text-accent-*, so only the active colour's own rule shows whether it wins the cascade.
+		string expectedColor = await page.EvaluateAsync<string>(
+			"cls => { const probe = document.createElement('span'); probe.className = cls; document.body.append(probe); " +
+			"const color = getComputedStyle(probe).color; probe.remove(); return color; }",
+			expectedClass);
+
+		// Assert
+		await Expect(homeLink).ToHaveCSSAsync("color", expectedColor);
+	}
 }

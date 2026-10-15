@@ -149,7 +149,7 @@ public class NavMenuTests : BunitContext
 		// bUnit's default NavigationManager starts at the root ("/"), so the Home NavLink (Match.All, href="")
 		// is active without an explicit navigation.
 		IElement homeLink = cut.Find("nav").QuerySelectorAll("a").Single(link => link.TextContent.Trim() == "Home");
-		homeLink.ClassList.Should().Contain(["bg-accent-50", "text-accent-700"]);
+		homeLink.ClassList.Should().Contain(["bg-accent-200", "text-accent-800!", "dark:bg-accent-800", "dark:text-accent-200!"]);
 	}
 
 	[Fact]
