@@ -61,6 +61,14 @@ public class PaletteTests(WebAppFixture fixture)
 	{
 		// Arrange
 		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+		await using WebAppPage lightWebAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage lightPage = lightWebAppPage.Page;
+		await lightPage.GotoAsync(fixture.BaseAddress.ToString());
+		ILocator lightBody = lightPage.Locator("body");
+		await Expect(lightBody).Not.ToHaveCSSAsync("background-color", "rgba(0, 0, 0, 0)");
+		string lightBlueBackgroundColor =
+			await lightBody.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
+
 		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
 		IPage page = webAppPage.Page;
 		// System follows the OS, so a Dark colour scheme renders the Dark surfaces (accent-950 on <body>).
@@ -69,6 +77,11 @@ public class PaletteTests(WebAppFixture fixture)
 		ILocator body = page.Locator("body");
 		await Expect(body).Not.ToHaveCSSAsync("background-color", "rgba(0, 0, 0, 0)");
 		string blueBackgroundColor = await body.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
+
+		// A Dark accent-950 body renders a different colour than the Light accent-100 body; equal colours mean the
+		// Dark colour scheme never reached <body>, and the assertions below would compare Light against Light.
+		blueBackgroundColor.Should().NotBe(lightBlueBackgroundColor,
+			"the emulated Dark colour scheme should render the Dark body surface, not the Light one");
 
 		// Act
 		await page.Locator("nav details summary").ClickAsync();
