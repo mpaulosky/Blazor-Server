@@ -258,6 +258,16 @@
 }
 
 @layer base {
+	/* The browser's own chrome (checkboxes, radios, range thumbs, scrollbars) follows the Palette too. */
+	:root {
+		accent-color: var(--color-accent-600);
+		scrollbar-color: var(--color-accent-500) var(--color-accent-100);
+
+		@variant dark {
+			scrollbar-color: var(--color-accent-400) var(--color-accent-950);
+		}
+	}
+
 	/* FocusOnNavigate moves focus to the h1 after navigation; utilities can't target :focus directly. */
 	h1:focus {
 		outline: none;
