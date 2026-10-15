@@ -17,20 +17,12 @@ public partial class UiRestyleTests
 {
 	private static readonly string RepositoryRoot = ProjectReferenceRule.FindRepositoryRoot();
 
-	public static TheoryData<string> RazorFiles
-	{
-		get
-		{
-			TheoryData<string> data = new();
+	public static TheoryData<string> RazorFiles => new(FindRazorFiles());
 
-			foreach (string path in FindRazorFiles())
-			{
-				data.Add(path);
-			}
-
-			return data;
-		}
-	}
+	// PaletteMenu.razor keeps slate on its panel, tiles and swatch ring, so each swatch reads true; PaletteMenuTests
+	// holds its <summary> to the surface table instead.
+	public static TheoryData<string> RazorFilesExceptThePaletteMenu =>
+		new(FindRazorFiles().Where(path => !path.EndsWith("/PaletteMenu.razor", StringComparison.Ordinal)));
 
 	[Theory]
 	[MemberData(nameof(RazorFiles))]
@@ -49,26 +41,21 @@ public partial class UiRestyleTests
 	}
 
 	[Theory]
-	[MemberData(nameof(RazorFiles))]
+	[MemberData(nameof(RazorFilesExceptThePaletteMenu))]
 	public void RazorFile_Markup_DoesNotUseSlateSurfaceClassesExceptThePaletteMenu(string repositoryRelativePath)
 	{
 		// Arrange
 		string markup = ReadMarkup(repositoryRelativePath);
-		bool isPaletteMenu = string.Equals(Path.GetFileName(repositoryRelativePath), "PaletteMenu.razor",
-			StringComparison.Ordinal);
 
 		// Act
 		IReadOnlyList<string> matches =
 			[.. SlateSurfaceClassPattern().Matches(markup).Select(match => match.Value)];
 
 		// Assert
-		if (!isPaletteMenu)
-		{
-			matches.Should().BeEmpty(
-				$"{repositoryRelativePath} should tint its surfaces, borders, dividers, rings and gradient stops " +
-				"with accent-*, not slate-*, so the Palette reaches them (docs/plans/palette-tint.md); " +
-				"PaletteMenu.razor is the only exception, for its panel, tiles and swatch ring");
-		}
+		matches.Should().BeEmpty(
+			$"{repositoryRelativePath} should tint its surfaces, borders, dividers, rings and gradient stops " +
+			"with accent-*, not slate-*, so the Palette reaches them (docs/plans/palette-tint.md); " +
+			"PaletteMenu.razor is the only exception, for its panel, tiles and swatch ring");
 	}
 
 	[Theory]
