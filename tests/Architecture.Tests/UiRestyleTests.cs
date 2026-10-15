@@ -7,6 +7,7 @@
 // Project Name :  Architecture.Tests
 // =============================================
 
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Architecture.Tests.Rules;
@@ -60,20 +61,24 @@ public partial class UiRestyleTests
 
 	[Theory]
 	[MemberData(nameof(RazorFiles))]
-	public void RazorFile_Markup_DoesNotUseTheDroppedSecondaryTextShades(string repositoryRelativePath)
+	public void RazorFile_Markup_DoesNotUseSlateTextTooFaintForItsTheme(string repositoryRelativePath)
 	{
 		// Arrange
 		string markup = ReadMarkup(repositoryRelativePath);
 
 		// Act
 
+		IReadOnlyList<string> tooFaint =
+		[
+			.. SlateTextClassPattern().Matches(markup)
+				.Where(match => IsTooFaintForItsTheme(match.Groups["variants"].Value, int.Parse(match.Groups["shade"].Value, CultureInfo.InvariantCulture)))
+				.Select(match => match.Value),
+		];
+
 		// Assert
-		markup.Should().NotContain("text-slate-500",
-			$"{repositoryRelativePath} should use text-slate-600 for Light secondary text, which keeps WCAG AA on " +
-			"the tinted surfaces for every hue (docs/plans/palette-tint.md)");
-		markup.Should().NotContain("dark:text-slate-400",
-			$"{repositoryRelativePath} should use dark:text-slate-300 for Dark secondary text, which keeps WCAG AA " +
-			"on the tinted surfaces for every hue (docs/plans/palette-tint.md)");
+		tooFaint.Should().BeEmpty(
+			$"{repositoryRelativePath} should keep Light text at slate-600 or darker and Dark text at slate-300 or " +
+			"lighter, which keeps WCAG AA on the tinted surfaces for every hue (docs/plans/palette-tint.md)");
 	}
 
 	[Theory]
@@ -86,12 +91,17 @@ public partial class UiRestyleTests
 		const string darkOutline = "dark:focus-visible:outline-accent-300";
 
 		// Act
-		IReadOnlyList<string> classStringsWithLightOutline =
-		[
-			.. QuotedStringPattern().Matches(markup)
-				.Select(match => match.Value)
-				.Where(value => value.Contains(lightOutline, StringComparison.Ordinal)),
-		];
+		// The string literal around each ring, bounded by the nearest quotes either side, so a ternary nested inside
+		// a class attribute is checked on its own.
+		List<string> classStringsWithLightOutline = [];
+		for (int index = markup.IndexOf(lightOutline, StringComparison.Ordinal);
+			index >= 0;
+			index = markup.IndexOf(lightOutline, index + lightOutline.Length, StringComparison.Ordinal))
+		{
+			int start = markup.LastIndexOf('"', index) + 1;
+			int end = markup.IndexOf('"', index);
+			classStringsWithLightOutline.Add(markup[start..(end < 0 ? markup.Length : end)]);
+		}
 
 		// Assert
 		foreach (string classString in classStringsWithLightOutline)
@@ -114,12 +124,17 @@ public partial class UiRestyleTests
 			.OrderBy(path => path, StringComparer.Ordinal);
 	}
 
-	// Matches bg-/border-/divide-/ring-/from-/via-/to-slate-<n>, with or without one or more colon-separated variant
-	// prefixes (dark:, hover:, even:, backdrop:, or a chain such as dark:hover:). The lookbehind keeps it from
-	// matching mid-word, such as the unrelated "ring-offset-slate-900" the Palette menu's current swatch ring uses.
-	[GeneratedRegex(@"(?<![\w-])(?:[a-z]+:)*(?:bg|border|divide|ring|from|via|to)-slate-\d+")]
+	// Light text needs slate-600 or darker on accent-100; Dark text needs slate-300 or lighter on accent-900.
+	private static bool IsTooFaintForItsTheme(string variants, int shade) =>
+		variants.Contains("dark:", StringComparison.Ordinal) ? shade >= 400 : shade <= 500;
+
+	// Matches bg-/border-/border-<side>-/divide-/ring-/outline-/from-/via-/to-slate-<n>, with or without a chain of
+	// variant prefixes (dark:, hover:, even:, backdrop:, group-hover:). The lookbehind keeps it from matching
+	// mid-word, such as "ring-offset-slate-900" on the Palette menu's swatch ring. Shadows aren't surfaces:
+	// shadow-slate-900/5 stays on purpose.
+	[GeneratedRegex(@"(?<![\w-])(?:[a-z-]+:)*(?:bg|border(?:-[trblxyse])?|divide|ring|outline|from|via|to)-slate-\d+")]
 	private static partial Regex SlateSurfaceClassPattern();
 
-	[GeneratedRegex("\"[^\"]*\"")]
-	private static partial Regex QuotedStringPattern();
+	[GeneratedRegex(@"(?<![\w-])(?<variants>(?:[a-z-]+:)*)text-slate-(?<shade>\d+)")]
+	private static partial Regex SlateTextClassPattern();
 }

@@ -229,6 +229,23 @@ public class PaletteMenuTests : BunitContext
 	}
 
 	[Fact]
+	public void Render_Mobile_FormSitsOnAWhiteAndDarkSlatePanel()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<PaletteMenu> cut = Render<PaletteMenu>(parameters => parameters.Add(p => p.Mobile, true));
+
+		// Assert
+		// The mobile menu around it is tinted, so the form keeps a slate surface of its own (docs/plans/palette-tint.md).
+		IElement? panel = cut.Find("section").QuerySelector(":scope > div");
+		panel.Should().NotBeNull();
+		panel!.QuerySelector("form").Should().NotBeNull();
+		panel.ClassList.Should().Contain("bg-white");
+		panel.ClassList.Should().Contain("dark:bg-slate-900");
+	}
+
+	[Fact]
 	public void Render_Desktop_SummaryUsesAccentBorderAndNoSlateBackgroundOrBorderClass()
 	{
 		// Arrange

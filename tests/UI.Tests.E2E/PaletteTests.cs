@@ -51,4 +51,25 @@ public class PaletteTests(WebAppFixture fixture)
 		// Assert
 		await Expect(body).Not.ToHaveCSSAsync("background-color", blueBackgroundColor);
 	}
+
+	[Fact]
+	public async Task PaletteMenu_RoseChosenInDark_ChangesBodyComputedBackgroundColorFromBlues()
+	{
+		// Arrange
+		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage page = webAppPage.Page;
+		// System follows the OS, so a Dark colour scheme renders the Dark surfaces (accent-950 on <body>).
+		await page.EmulateMediaAsync(new() { ColorScheme = ColorScheme.Dark });
+		await page.GotoAsync(fixture.BaseAddress.ToString());
+		ILocator body = page.Locator("body");
+		string blueBackgroundColor = await body.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
+
+		// Act
+		await page.Locator("nav details summary").ClickAsync();
+		await page.GetByRole(AriaRole.Button, new() { Name = "Rose" }).ClickAsync();
+
+		// Assert
+		await Expect(body).Not.ToHaveCSSAsync("background-color", blueBackgroundColor);
+	}
 }
