@@ -71,7 +71,10 @@ public partial class UiRestyleTests
 		IReadOnlyList<string> tooFaint =
 		[
 			.. SlateTextClassPattern().Matches(markup)
-				.Where(match => IsTooFaintForItsTheme(match.Groups["variants"].Value, int.Parse(match.Groups["shade"].Value, CultureInfo.InvariantCulture)))
+				.Where(match => IsTooFaintForItsTheme(
+					match.Groups["variants"].Value,
+					int.Parse(match.Groups["shade"].Value, CultureInfo.InvariantCulture),
+					match.Groups["alpha"].Success))
 				.Select(match => match.Value),
 		];
 
@@ -154,8 +157,9 @@ public partial class UiRestyleTests
 	}
 
 	// Light text needs slate-600 or darker on accent-100; Dark text needs slate-300 or lighter on accent-900.
-	private static bool IsTooFaintForItsTheme(string variants, int shade) =>
-		variants.Contains("dark:", StringComparison.Ordinal) ? shade >= 400 : shade <= 500;
+	// An opacity modifier (text-slate-700/50) lets the tinted surface through, so it's too faint whatever the shade.
+	private static bool IsTooFaintForItsTheme(string variants, int shade, bool hasOpacity) =>
+		hasOpacity || (variants.Contains("dark:", StringComparison.Ordinal) ? shade >= 400 : shade <= 500);
 
 	// Matches bg-/border-/border-<side>-/divide-/ring-/outline-/from-/via-/to-slate-<n>, with or without a chain of
 	// variant prefixes (dark:, hover:, even:, backdrop:, group-hover:). The lookbehind keeps it from matching
@@ -164,10 +168,11 @@ public partial class UiRestyleTests
 	[GeneratedRegex(@"(?<![\w-])(?:[a-z-]+:)*(?:bg|border(?:-[trblxyse])?|divide|ring|outline|from|via|to)-slate-\d+")]
 	private static partial Regex SlateSurfaceClassPattern();
 
-	[GeneratedRegex(@"(?<![\w-])(?<variants>(?:[a-z-]+:)*)text-slate-(?<shade>\d+)")]
+	[GeneratedRegex(@"(?<![\w-])(?<variants>(?:[a-z-]+:)*)text-slate-(?<shade>\d+)(?:/(?<alpha>\d+))?")]
 	private static partial Regex SlateTextClassPattern();
 
-	// A resting Dark text colour: exactly "dark:", no state variant after it, and a colour rather than a size.
-	[GeneratedRegex(@"(?<![\w-])dark:text-(?:slate-\d+|white|black|accent-\d+)(?![\w-])")]
+	// A resting Dark text colour light enough for the Dark surfaces: exactly "dark:", no state variant, no opacity,
+	// and white or a 50–300 shade (accent-300 on accent-900 is the darkest pair that keeps AA).
+	[GeneratedRegex(@"(?<![\w-])dark:text-(?:white|(?:slate|accent)-(?:50|[123]00))(?![\w/-])")]
 	private static partial Regex DarkTextClassPattern();
 }
