@@ -29,6 +29,54 @@ public class StatTileTests : BunitContext
 	}
 
 	[Fact]
+	public void Render_LabelAndValue_TileHasAccentLeftBorderAndBackground()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<StatTile> cut = Render<StatTile>(parameters => parameters
+			.Add(c => c.Label, "Stack")
+			.Add(c => c.Value, ".NET 10"));
+
+		// Assert
+		cut.Find("div").ClassList.Should().Contain([
+			"border-l-4",
+			"border-l-accent-500",
+			"bg-accent-50",
+			"dark:border-l-accent-500",
+			"dark:bg-accent-900/60",
+		]);
+	}
+
+	[Fact]
+	public void Render_LabelAndValue_LabelHasSlateTextClasses()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<StatTile> cut = Render<StatTile>(parameters => parameters
+			.Add(c => c.Label, "Stack")
+			.Add(c => c.Value, ".NET 10"));
+
+		// Assert
+		cut.Find("dt").ClassList.Should().Contain(["text-slate-600", "dark:text-slate-300"]);
+	}
+
+	[Fact]
+	public void Render_LabelAndValue_ValueHasAccentTextClasses()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<StatTile> cut = Render<StatTile>(parameters => parameters
+			.Add(c => c.Label, "Stack")
+			.Add(c => c.Value, ".NET 10"));
+
+		// Assert
+		cut.Find("dd").ClassList.Should().Contain(["text-accent-700", "dark:text-accent-300"]);
+	}
+
+	[Fact]
 	public void Render_ClassParameter_AppearsAfterComponentsOwnClasses()
 	{
 		// Arrange

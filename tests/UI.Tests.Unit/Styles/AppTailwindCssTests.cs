@@ -164,4 +164,45 @@ public partial class AppTailwindCssTests
 		// Assert
 		css.Should().NotContain("data-palette=\"blue\"");
 	}
+
+	[Fact]
+	public void AppTailwindCss_ContainsRootAccentColorAndLightScrollbarColor()
+	{
+		// Arrange
+		string css = ReadAppTailwindCss();
+
+		// Act
+
+		// Assert
+		css.Should().Contain("accent-color: var(--color-accent-600);");
+		css.Should().Contain("scrollbar-color: var(--color-accent-500) var(--color-accent-100);");
+	}
+
+	[Fact]
+	public void AppTailwindCss_ContainsDarkScrollbarColorUnderDarkVariant()
+	{
+		// Arrange
+		string css = ReadAppTailwindCss();
+
+		// Act
+
+		// Assert
+		css.Should().Contain("@variant dark");
+		css.Should().Contain("scrollbar-color: var(--color-accent-400) var(--color-accent-950);");
+	}
+
+	[Fact]
+	public void AppTailwindCss_RootAccentColorRule_AppearsAfterThePaletteRules()
+	{
+		// Arrange
+		string css = ReadAppTailwindCss();
+		int lastPaletteRuleIndex = css.IndexOf("data-palette=\"rose\"", StringComparison.Ordinal);
+		int accentColorIndex = css.IndexOf("accent-color: var(--color-accent-600);", StringComparison.Ordinal);
+
+		// Act
+
+		// Assert
+		lastPaletteRuleIndex.Should().BeGreaterThan(-1);
+		accentColorIndex.Should().BeGreaterThan(lastPaletteRuleIndex);
+	}
 }

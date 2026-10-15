@@ -136,6 +136,50 @@ public partial class UiRestyleTests
 			"beside it, or the Light shade shows on the Dark surfaces and fails WCAG AA (docs/plans/palette-tint.md)");
 	}
 
+	[Fact]
+	public void DarkTextClassPattern_HoverDarkTextWhite_IsNotTreatedAsARestingDarkTextClass()
+	{
+		// Arrange
+		const string classString = "hover:dark:text-white";
+
+		// Act
+		bool isMatch = DarkTextClassPattern().IsMatch(classString);
+
+		// Assert
+		isMatch.Should().BeFalse(
+			"hover:dark:text-white only rescues the text colour on hover, so it shouldn't count as a resting Dark " +
+			"text class that pairs with a Light text-slate-* class (docs/plans/palette-tint.md)");
+	}
+
+	[Fact]
+	public void DarkTextClassPattern_PlainDarkTextWhite_IsTreatedAsARestingDarkTextClass()
+	{
+		// Arrange
+		const string classString = "dark:text-white";
+
+		// Act
+		bool isMatch = DarkTextClassPattern().IsMatch(classString);
+
+		// Assert
+		isMatch.Should().BeTrue();
+	}
+
+	[Fact]
+	public void SlateTextClassPattern_DarkDataOpenBracketVariant_CapturesDarkInTheVariantChain()
+	{
+		// Arrange
+		const string classString = "dark:data-[open]:text-slate-600";
+
+		// Act
+		Match match = SlateTextClassPattern().Match(classString);
+
+		// Assert
+		match.Success.Should().BeTrue();
+		match.Groups["variants"].Value.Should().Contain("dark:",
+			"the variant chain should match the bracketed data-[open]: segment too, so this class is checked as " +
+			"Dark text, not Light (docs/plans/palette-tint.md)");
+	}
+
 	// The string literal around an index, bounded by the nearest quotes either side.
 	private static string EnclosingString(string markup, int index)
 	{
