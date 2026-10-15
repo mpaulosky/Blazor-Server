@@ -91,16 +91,13 @@ public partial class UiRestyleTests
 		const string darkOutline = "dark:focus-visible:outline-accent-300";
 
 		// Act
-		// The string literal around each ring, bounded by the nearest quotes either side, so a ternary nested inside
-		// a class attribute is checked on its own.
+		// The string literal around each ring, so a ternary nested inside a class attribute is checked on its own.
 		List<string> classStringsWithLightOutline = [];
 		for (int index = markup.IndexOf(lightOutline, StringComparison.Ordinal);
 			index >= 0;
 			index = markup.IndexOf(lightOutline, index + lightOutline.Length, StringComparison.Ordinal))
 		{
-			int start = markup.LastIndexOf('"', index) + 1;
-			int end = markup.IndexOf('"', index);
-			classStringsWithLightOutline.Add(markup[start..(end < 0 ? markup.Length : end)]);
+			classStringsWithLightOutline.Add(EnclosingString(markup, index));
 		}
 
 		// Assert
@@ -110,6 +107,38 @@ public partial class UiRestyleTests
 				$"{repositoryRelativePath}: every class string with {lightOutline} needs {darkOutline} beside it, " +
 				"so the Dark focus ring keeps WCAG AA for every hue (docs/plans/palette-tint.md)");
 		}
+	}
+
+	[Theory]
+	[MemberData(nameof(RazorFiles))]
+	public void RazorFile_ClassStringsWithLightSlateText_AlsoCarryADarkTextClass(string repositoryRelativePath)
+	{
+		// Arrange
+		string markup = ReadMarkup(repositoryRelativePath);
+
+		// Act
+		// A bare text-slate-600 also applies in Dark unless the same string overrides it, and on accent-900 it fails AA.
+		IReadOnlyList<string> unpairedClassStrings =
+		[
+			.. SlateTextClassPattern().Matches(markup)
+				.Where(match => !match.Groups["variants"].Value.Contains("dark:", StringComparison.Ordinal))
+				.Select(match => EnclosingString(markup, match.Index))
+				.Where(classString => !DarkTextClassPattern().IsMatch(classString))
+				.Distinct(StringComparer.Ordinal),
+		];
+
+		// Assert
+		unpairedClassStrings.Should().BeEmpty(
+			$"{repositoryRelativePath}: every class string with a Light text-slate-* class needs a dark:text-* class " +
+			"beside it, or the Light shade shows on the Dark surfaces and fails WCAG AA (docs/plans/palette-tint.md)");
+	}
+
+	// The string literal around an index, bounded by the nearest quotes either side.
+	private static string EnclosingString(string markup, int index)
+	{
+		int start = markup.LastIndexOf('"', index) + 1;
+		int end = markup.IndexOf('"', index);
+		return markup[start..(end < 0 ? markup.Length : end)];
 	}
 
 	private static string ReadMarkup(string repositoryRelativePath) =>
@@ -137,4 +166,7 @@ public partial class UiRestyleTests
 
 	[GeneratedRegex(@"(?<![\w-])(?<variants>(?:[a-z-]+:)*)text-slate-(?<shade>\d+)")]
 	private static partial Regex SlateTextClassPattern();
+
+	[GeneratedRegex(@"(?<![\w-])dark:(?:[a-z-]+:)*text-")]
+	private static partial Regex DarkTextClassPattern();
 }
