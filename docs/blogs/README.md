@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-15 | [feat(ui): Tint the surfaces with the Palette, and guard them](2026-10-15-pr-392-feat-ui-tint-the-surfaces-with-the-palette-and-guard-them.md) | release,automation |
 | 2026-10-15 | [docs(ui): Add the Palette tint spec and ADR 0008](2026-10-15-pr-390-docs-ui-add-the-palette-tint-spec-and-adr-0008.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the Palette menu to the nav](2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md) | release,automation |
 | 2026-10-14 | [feat(ui): Add the Theme control to the nav](2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md) | release,automation |
