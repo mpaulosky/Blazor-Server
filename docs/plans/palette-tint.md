@@ -116,9 +116,11 @@ Decided in [Decide: How the surface tint reaches the markup](https://github.com/
 `tests/Architecture.Tests/UiRestyleTests.cs` widens from four layout files to every `.razor` file under `src/UI`, and gains these checks:
 
 - No `bg-slate-`, `border-slate-`, `divide-slate-`, `ring-slate-`, `from-slate-`, `via-slate-` or `to-slate-` class, with or without a variant prefix (`dark:`,
-  `hover:`, `even:`, `backdrop:`). `PaletteMenu.razor` is the only file exempt.
+  `hover:`, `even:`, `backdrop:`). `PaletteMenu.razor` is the only file exempt, for its panel, tiles and swatch ring; a bUnit test (below) holds its `<summary>`
+  to the table.
 - No `text-slate-500` and no `dark:text-slate-400`, in any file.
-- Every file with `focus-visible:outline-accent-500` also has `dark:focus-visible:outline-accent-300`.
+- Every class string (a `class` attribute's value, or a C# string constant holding a class list) that contains `focus-visible:outline-accent-500` also contains
+  `dark:focus-visible:outline-accent-300`. The check is per string, not per file, so one focusable element can't hide behind another's Dark ring.
 
 Its existing `gray-` and `blue-` checks widen to every file too.
 
@@ -131,7 +133,8 @@ Test-first, as `CODING_STANDARDS.md` asks. No screenshot or visual-regression ba
   `HomePageTests` (the badge border), `ReconnectModalTests` (its border, background and backdrop) and any bUnit test that asserts a hover or border class. `BadgeTests` keeps
   `text-slate-600`.
 - **bUnit:** PageHeader's `<h1>` has the gradient classes and its eyebrow `bg-accent-200`; StatTile has `border-l-accent-500` and its value `text-accent-700`; the Profile `thead` has `bg-accent-200` and
-  `text-accent-800`; `PaletteMenu`'s panel still has `bg-white` and `dark:bg-slate-900`.
+  `text-accent-800`; `PaletteMenu`'s panel still has `bg-white` and `dark:bg-slate-900`, and its `<summary>` has `border-accent-200` and
+  `dark:border-accent-700` and no `slate-` background or border class.
 - **Styles:** `AppTailwindCssTests` checks that the compiled CSS sets `accent-color` and `scrollbar-color` on `:root` from the accent token.
 - **E2E** (Playwright through the AppHost): the existing Palette test also checks that the `<body>`'s computed `background-color` changes when the visitor picks Rose, so
   the tint follows the Palette in a real browser.
