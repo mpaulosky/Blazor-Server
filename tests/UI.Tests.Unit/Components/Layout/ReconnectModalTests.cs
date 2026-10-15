@@ -15,17 +15,18 @@ namespace UI.Tests.Unit.Components.Layout;
 
 public class ReconnectModalTests : BunitContext
 {
-	// The Card's Section classes from docs/plans/ui-restyle.md, which go on the <dialog> itself.
+	// The Card's Section classes from docs/plans/ui-restyle.md, which go on the <dialog> itself, with the surface
+	// tint from docs/plans/palette-tint.md.
 	private static readonly string[] CardSectionClasses =
 	[
 		"rounded-3xl",
 		"border",
-		"border-slate-200",
+		"border-accent-200",
 		"bg-white/80",
 		"p-6",
 		"shadow-sm",
-		"dark:border-slate-800",
-		"dark:bg-slate-900/70",
+		"dark:border-accent-800",
+		"dark:bg-accent-900/70",
 	];
 
 	// The Button's Primary classes from docs/plans/ui-restyle.md, written inline on Retry and Resume.
@@ -88,7 +89,7 @@ public class ReconnectModalTests : BunitContext
 
 		// Assert
 		IElement dialog = cut.Find("dialog");
-		dialog.ClassList.Should().Contain("backdrop:bg-slate-950/50");
+		dialog.ClassList.Should().Contain("backdrop:bg-accent-950/50");
 	}
 
 	[Fact]

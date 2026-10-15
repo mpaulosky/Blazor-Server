@@ -71,7 +71,7 @@ public class ButtonTests : BunitContext
 
 	[Theory]
 	[InlineData(ButtonKind.Primary, "bg-accent-600")]
-	[InlineData(ButtonKind.Secondary, "border-slate-300")]
+	[InlineData(ButtonKind.Secondary, "border-accent-300")]
 	public void Render_Kind_AppliesTheKindsDistinguishingClass(ButtonKind kind, string distinguishingClass)
 	{
 		// Arrange

@@ -212,6 +212,42 @@ public class PaletteMenuTests : BunitContext
 	}
 
 	[Fact]
+	public void Render_Desktop_PanelKeepsWhiteBackgroundAndDarkSlateBackground()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<PaletteMenu> cut = Render<PaletteMenu>();
+
+		// Assert
+		// The panel stays slate so each tile's own-hue swatch reads true (docs/plans/palette-tint.md).
+		IElement details = cut.Find("details");
+		IElement? panel = details.QuerySelector(":scope > div");
+		panel.Should().NotBeNull();
+		panel!.ClassList.Should().Contain("bg-white");
+		panel.ClassList.Should().Contain("dark:bg-slate-900");
+	}
+
+	[Fact]
+	public void Render_Desktop_SummaryUsesAccentBorderAndNoSlateBackgroundOrBorderClass()
+	{
+		// Arrange
+
+		// Act
+		IRenderedComponent<PaletteMenu> cut = Render<PaletteMenu>();
+
+		// Assert
+		// The <summary> is nav chrome, so it follows the surface table unlike the panel it discloses.
+		IElement details = cut.Find("details");
+		IElement? summary = details.QuerySelector("summary");
+		summary.Should().NotBeNull();
+		summary!.ClassList.Should().Contain("border-accent-200");
+		summary.ClassList.Should().Contain("dark:border-accent-700");
+		summary.ClassList.Should()
+			.NotContain(className => className.Contains("slate-", StringComparison.Ordinal));
+	}
+
+	[Fact]
 	public void Render_Desktop_WrapsFormInDetails()
 	{
 		// Arrange

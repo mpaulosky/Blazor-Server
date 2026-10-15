@@ -32,4 +32,24 @@ public class PaletteTests(WebAppFixture fixture)
 		await page.ReloadAsync();
 		await Expect(page.Locator("html")).ToHaveAttributeAsync("data-palette", "rose");
 	}
+
+	[Fact]
+	public async Task PaletteMenu_RoseChosen_ChangesBodyComputedBackgroundColorFromBlues()
+	{
+		// Arrange
+		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+		await using WebAppPage webAppPage = await fixture.CreatePageAsync(cancellationToken);
+		IPage page = webAppPage.Page;
+		await page.GotoAsync(fixture.BaseAddress.ToString());
+		ILocator body = page.Locator("body");
+		string blueBackgroundColor = await body.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
+
+		// Act
+		await page.Locator("nav details summary").ClickAsync();
+		await page.GetByRole(AriaRole.Button, new() { Name = "Rose" }).ClickAsync();
+
+		// Assert
+		string roseBackgroundColor = await body.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
+		roseBackgroundColor.Should().NotBe(blueBackgroundColor);
+	}
 }
