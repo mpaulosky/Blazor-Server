@@ -246,7 +246,7 @@ public class PaletteMenuTests : BunitContext
 	}
 
 	[Fact]
-	public void Render_Desktop_SummaryUsesAccentBorderAndNoSlateBackgroundOrBorderClass()
+	public void Render_Desktop_SummaryUsesAccentBorderNoSlateSurfaceAndMutedText()
 	{
 		// Arrange
 
@@ -260,8 +260,13 @@ public class PaletteMenuTests : BunitContext
 		summary.Should().NotBeNull();
 		summary!.ClassList.Should().Contain("border-accent-200");
 		summary.ClassList.Should().Contain("dark:border-accent-700");
-		summary.ClassList.Should()
-			.NotContain(className => className.Contains("slate-", StringComparison.Ordinal));
+		summary.ClassList.Should().NotContain(className =>
+			className.Contains("bg-slate-", StringComparison.Ordinal) ||
+			className.Contains("border-slate-", StringComparison.Ordinal) ||
+			className.Contains("ring-slate-", StringComparison.Ordinal) ||
+			className.Contains("outline-slate-", StringComparison.Ordinal));
+		summary.ClassList.Should().Contain("text-slate-600");
+		summary.ClassList.Should().Contain("dark:text-slate-300");
 	}
 
 	[Fact]

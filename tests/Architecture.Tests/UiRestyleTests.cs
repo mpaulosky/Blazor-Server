@@ -167,6 +167,7 @@ public partial class UiRestyleTests
 	[GeneratedRegex(@"(?<![\w-])(?<variants>(?:[a-z-]+:)*)text-slate-(?<shade>\d+)")]
 	private static partial Regex SlateTextClassPattern();
 
-	[GeneratedRegex(@"(?<![\w-])dark:(?:[a-z-]+:)*text-")]
+	// A resting Dark text colour: exactly "dark:", no state variant after it, and a colour rather than a size.
+	[GeneratedRegex(@"(?<![\w-])dark:text-(?:slate-\d+|white|black|accent-\d+)(?![\w-])")]
 	private static partial Regex DarkTextClassPattern();
 }

@@ -42,6 +42,7 @@ public class PaletteTests(WebAppFixture fixture)
 		IPage page = webAppPage.Page;
 		await page.GotoAsync(fixture.BaseAddress.ToString());
 		ILocator body = page.Locator("body");
+		await Expect(body).Not.ToHaveCSSAsync("background-color", "rgba(0, 0, 0, 0)");
 		string blueBackgroundColor = await body.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
 
 		// Act
@@ -49,6 +50,9 @@ public class PaletteTests(WebAppFixture fixture)
 		await page.GetByRole(AriaRole.Button, new() { Name = "Rose" }).ClickAsync();
 
 		// Assert
+		// Wait for the Rose page itself, so a body still waiting on its stylesheet (transparent) can't pass as "not blue".
+		await Expect(page.Locator("html")).ToHaveAttributeAsync("data-palette", "rose");
+		await Expect(body).Not.ToHaveCSSAsync("background-color", "rgba(0, 0, 0, 0)");
 		await Expect(body).Not.ToHaveCSSAsync("background-color", blueBackgroundColor);
 	}
 
@@ -63,6 +67,7 @@ public class PaletteTests(WebAppFixture fixture)
 		await page.EmulateMediaAsync(new() { ColorScheme = ColorScheme.Dark });
 		await page.GotoAsync(fixture.BaseAddress.ToString());
 		ILocator body = page.Locator("body");
+		await Expect(body).Not.ToHaveCSSAsync("background-color", "rgba(0, 0, 0, 0)");
 		string blueBackgroundColor = await body.EvaluateAsync<string>("el => getComputedStyle(el).backgroundColor");
 
 		// Act
@@ -70,6 +75,9 @@ public class PaletteTests(WebAppFixture fixture)
 		await page.GetByRole(AriaRole.Button, new() { Name = "Rose" }).ClickAsync();
 
 		// Assert
+		// Wait for the Rose page itself, so a body still waiting on its stylesheet (transparent) can't pass as "not blue".
+		await Expect(page.Locator("html")).ToHaveAttributeAsync("data-palette", "rose");
+		await Expect(body).Not.ToHaveCSSAsync("background-color", "rgba(0, 0, 0, 0)");
 		await Expect(body).Not.ToHaveCSSAsync("background-color", blueBackgroundColor);
 	}
 }
