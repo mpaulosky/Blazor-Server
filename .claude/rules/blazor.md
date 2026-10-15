@@ -55,7 +55,10 @@ This is a server-rendered Blazor Web App on .NET 10 and C# 14. `docs/CODING_STAN
 
 - Style with Tailwind CSS v4 utility classes. Avoid inline `style` attributes and one-off CSS. Use `.razor.css` isolation only when utilities can't express the style.
 - Style light and dark with `dark:`, write accent colour as `accent-*` rather than a raw hue, and compose the building blocks in `Components/Shared/`
-  (`Card`, `PageHeader`, `StatTile`, `Badge`, `Button`) before writing new markup. `docs/plans/ui-restyle.md` has their class lists.
+  (`Card`, `PageHeader`, `StatTile`, `Badge`, `Button`) before writing new markup. `docs/plans/ui-restyle.md` has their class lists, with the colours
+  `docs/plans/palette-tint.md` changed.
+- Surfaces, borders, dividers and hover fills use `accent-*`, so the Palette tints them; text stays `slate-*` (`slate-600` secondary in Light, `slate-300` in
+  Dark), and every `focus-visible:outline-accent-500` has a `dark:focus-visible:outline-accent-300` beside it. Only the Palette menu's panel and tiles stay slate.
 
 ## Testing
 

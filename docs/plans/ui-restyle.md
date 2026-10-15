@@ -1,5 +1,8 @@
 # UI Restyle
 
+> [Palette Tint](palette-tint.md) changes this spec's colours: surfaces, borders and hover fills now use `accent-*`, and secondary text is `slate-600`/`slate-300`.
+> The class lists below are as the restyle built them.
+
 This is the visual spec for restyling the Generated App after the look of the Articles repo (`mpaulosky/Articles`): a floating rounded nav with a letter tile, slate cards,
 a hero with an eyebrow pill and stat tiles, and coloured pill badges, in light and dark.
 
