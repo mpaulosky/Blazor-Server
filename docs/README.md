@@ -53,6 +53,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.163](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.163) | 2026-10-15 | docs(ui): Add the Palette tint spec and ADR 0008 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-390-docs-ui-add-the-palette-tint-spec-and-adr-0008.md) |
 | [v0.0.162](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.162) | 2026-10-14 | feat(ui): Add the Palette menu to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md) |
 | [v0.0.161](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.161) | 2026-10-14 | feat(ui): Add the Theme control to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md) |
 | [v0.0.160](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.160) | 2026-10-14 | feat(ui): Add the Palettes slice, its cookie, data-palette and the hue rules | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-376-feat-ui-add-the-palettes-slice-its-cookie-data-palette-and-the-hue-rules.md) |
@@ -62,7 +63,6 @@ Blue, the default, renders no attribute.
 | [v0.0.156](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.156) | 2026-10-14 | docs(ui): Add the Theme and Palette spec and ADR 0007 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-368-docs-ui-add-the-theme-and-palette-spec-and-adr-0007.md) |
 | [v0.0.155](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.155) | 2026-10-14 | feat(ui): Show the Release and commit in the footer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) |
 | [v0.0.154](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.154) | 2026-10-14 | fix(sandcastle): Keep the parent's conventional prefix on split child issues | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-359-fix-sandcastle-keep-the-parent-s-conventional-prefix-on-split-child-issues.md) |
-| [v0.0.153](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.153) | 2026-10-14 | feat(ui): Generate build-time BuildInfo and the Release label function | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-350-feat-ui-generate-build-time-buildinfo-and-the-release-label-function.md) |
 
 <!-- RELEASES_END -->
 
