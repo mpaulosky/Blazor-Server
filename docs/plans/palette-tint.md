@@ -80,7 +80,8 @@ page gets them, except the table header, which lives in the Profile slice.
 
 - **PageHeader's `<h1>`** gains a gradient text fill:
   `bg-linear-to-r from-accent-800 to-accent-500 bg-clip-text text-transparent dark:from-accent-100 dark:to-accent-400`. The title is large text, so it needs 3:1; the
-  weakest end stop is 3.37:1 (Rose's `accent-400` on `accent-900`).
+  weakest end stop is 3.37:1 (Rose's `accent-400` on `accent-900`). Browsers skip background graphics when printing, so
+  `print:bg-none print:text-accent-800` prints the title in solid `accent-800` instead of leaving it blank.
 - **PageHeader's eyebrow pill** moves from `bg-accent-100 text-accent-700` to `bg-accent-200 text-accent-800` in Light (Dark keeps
   `dark:bg-accent-500/15 dark:text-accent-300`). On a page whose header sits straight on the `accent-100` page, as Profile's and Admin's do, the old pill vanished;
   the new one passes with at least 5.42:1.

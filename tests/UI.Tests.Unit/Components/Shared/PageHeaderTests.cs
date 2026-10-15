@@ -75,6 +75,8 @@ public class PageHeaderTests : BunitContext
 			"text-transparent",
 			"dark:from-accent-100",
 			"dark:to-accent-400",
+			"print:bg-none",
+			"print:text-accent-800",
 		]);
 	}
 

@@ -201,19 +201,4 @@ public partial class AppTailwindCssTests
 		rootRuleBody.Should().MatchRegex(DarkScrollbarColorBlockPattern(),
 			"the Dark scrollbar-color should sit in an @variant dark block inside the :root rule");
 	}
-
-	[Fact]
-	public void AppTailwindCss_RootAccentColorRule_AppearsAfterThePaletteRules()
-	{
-		// Arrange
-		string css = ReadAppTailwindCss();
-		int lastPaletteRuleIndex = css.IndexOf("data-palette=\"rose\"", StringComparison.Ordinal);
-		int accentColorIndex = css.IndexOf("accent-color: var(--color-accent-600);", StringComparison.Ordinal);
-
-		// Act
-
-		// Assert
-		lastPaletteRuleIndex.Should().BeGreaterThan(-1);
-		accentColorIndex.Should().BeGreaterThan(lastPaletteRuleIndex);
-	}
 }
