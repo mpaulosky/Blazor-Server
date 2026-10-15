@@ -212,11 +212,14 @@ public partial class UiRestyleTests
 	[GeneratedRegex(@"(?<![\w-])(?:[a-z-]+:)*(?:bg|border(?:-[trblxyse])?|divide|ring|outline|from|via|to)-slate-\d+")]
 	private static partial Regex SlateSurfaceClassPattern();
 
-	[GeneratedRegex(@"(?<![\w-])(?<variants>(?:[a-z-]+:)*)text-slate-(?<shade>\d+)(?:/(?<alpha>\d+))?")]
+	// Each variant may carry digits and one bracketed argument (2xl:, data-[open]:, aria-[current=page]:, [&_a]:), so
+	// "dark:" earlier in such a chain still marks the class as Dark text.
+	[GeneratedRegex(@"(?<![\w-])(?<variants>(?:[\w-]*(?:\[[^\]\s]*\])?[\w-]*:)*)text-slate-(?<shade>\d+)(?:/(?<alpha>\d+))?")]
 	private static partial Regex SlateTextClassPattern();
 
 	// A resting Dark text colour light enough for the Dark surfaces: exactly "dark:", no state variant, no opacity,
-	// and white or a 50–300 shade (accent-300 on accent-900 is the darkest pair that keeps AA).
-	[GeneratedRegex(@"(?<![\w-])dark:text-(?:white|(?:slate|accent)-(?:50|[123]00))(?![\w/-])")]
+	// and white or a 50–300 shade (accent-300 on accent-900 is the darkest pair that keeps AA). The ":" in the
+	// lookbehind rules out "dark:" at the end of a chain, such as hover:dark:text-white.
+	[GeneratedRegex(@"(?<![\w:-])dark:text-(?:white|(?:slate|accent)-(?:50|[123]00))(?![\w/-])")]
 	private static partial Regex DarkTextClassPattern();
 }
