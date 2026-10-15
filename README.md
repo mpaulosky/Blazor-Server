@@ -26,7 +26,8 @@ describes the Template; a Generated App is expected to replace it.
 The Template is intended to give every Generated App:
 
 - A server-rendered Blazor Web App on .NET 10.
-- Tailwind CSS styling with a light/dark **Theme** and a selectable accent-color **Palette**, both persisted in cookies.
+- Tailwind CSS styling with a light/dark **Theme** and a selectable **Palette** that tints the accent color and the
+  surfaces, both persisted in cookies.
 - Auth0 authentication and authorization, distinguishing a **Visitor** (unauthenticated), a **User** (authenticated)
   and an **Admin** (a User with the Admin role).
 
@@ -35,7 +36,7 @@ See [CONTEXT.md](https://github.com/mpaulosky/Blazor-Server/blob/main/CONTEXT.md
 **Status:** early stage. The Template currently contains the **Shared Kernel** (`src/Domain`), the Blazor Web App
 scaffold (`src/UI`: a Home page, a nav menu, a NotFound page and the Tailwind CSS v4 build), sign-in and sign-out through
 Auth0 with the Admin role mapped, a Profile page listing a **User**'s own claims, an Admin page only an **Admin** can
-open, the light/dark **Theme**, the accent-color **Palette**, and their tests.
+open, the light/dark **Theme**, the **Palette** that tints the accent and the surfaces, and their tests.
 
 The **Theme** is chosen from a Light, Dark and System group in the nav, on desktop and in the mobile menu. Each button
 posts to `/theme`, which stores the choice in a `theme` cookie and returns to the same page, so it works without
@@ -44,7 +45,9 @@ uses the chosen Theme. System, the default, deletes the cookie and follows the O
 
 The **Palette** is chosen from a menu of 17 Tailwind hues, from Red to Rose, opened from a swatch button in the nav on desktop and shown
 as a Palette section in the mobile menu. Each tile posts to `/palette`, which stores the hue in a `palette` cookie and returns to the
-same page, again without JavaScript. The server writes `data-palette` on `<html>`, and a CSS rule for each hue swaps the accent color.
+same page, again without JavaScript. The server writes `data-palette` on `<html>`, and a CSS rule for each hue swaps the accent scale.
+The Palette tints the accent (buttons, links and highlights) and the surfaces (the page, cards, nav, footer, borders, dividers and hover
+fills), in both Themes. Text stays neutral, and the Palette menu's own panel stays slate so each swatch shows its true hue.
 Blue, the default, renders no attribute.
 
 ## Releases

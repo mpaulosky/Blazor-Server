@@ -36,6 +36,9 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 	[GeneratedRegex("<body([^>]*)>")]
 	private static partial Regex BodyTagPattern();
 
+	[GeneratedRegex("<div class=\"([^\"]*min-h-screen[^\"]*)\"")]
+	private static partial Regex MainLayoutDivPattern();
+
 	[GeneratedRegex(@"\s+")]
 	private static partial Regex WhitespacePattern();
 
@@ -127,7 +130,7 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 	}
 
 	[Fact]
-	public async Task GetHome_ReturnsBodyElementWithSlateBackgroundClasses()
+	public async Task GetHome_ReturnsBodyElementWithAccentBackgroundClasses()
 	{
 		// Arrange
 
@@ -139,7 +142,24 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 
 		// Assert
 		match.Success.Should().BeTrue();
-		match.Value.Should().Contain("class=\"bg-slate-50 dark:bg-slate-950\"");
+		match.Value.Should().Contain("class=\"bg-accent-100 dark:bg-accent-950\"");
+	}
+
+	[Fact]
+	public async Task GetHome_ReturnsMainLayoutDivWithAccentBackgroundClasses()
+	{
+		// Arrange
+
+		// Act
+		HttpResponseMessage response =
+			await _client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
+		string html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+		Match match = MainLayoutDivPattern().Match(html);
+
+		// Assert
+		match.Success.Should().BeTrue();
+		match.Groups[1].Value.Should().Contain("bg-accent-100");
+		match.Groups[1].Value.Should().Contain("dark:bg-accent-950");
 	}
 
 	[Fact]
@@ -172,9 +192,9 @@ public partial class AppTests : IClassFixture<UiWebApplicationFactory>
 		// Only Release builds pass --minify, so whitespace is stripped before matching. Both rules are matched whole:
 		// an explicit data-theme=dark turns dark on, and the OS preference applies only without data-theme=light.
 		string compactCss = WhitespacePattern().Replace(css, string.Empty);
-		compactCss.Should().Contain(".dark\\:bg-slate-950:where([data-theme=dark],[data-theme=dark]*)");
+		compactCss.Should().Contain(".dark\\:bg-accent-950:where([data-theme=dark],[data-theme=dark]*)");
 		compactCss.Should().Contain(
-			"@media(prefers-color-scheme:dark){.dark\\:bg-slate-950:where(:not([data-theme=light],[data-theme=light]*))");
+			"@media(prefers-color-scheme:dark){.dark\\:bg-accent-950:where(:not([data-theme=light],[data-theme=light]*))");
 	}
 
 	[Fact]

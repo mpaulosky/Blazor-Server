@@ -1,8 +1,8 @@
 @namespace UI.Components.Shared
 
 @* dt/dd are only valid HTML inside a dl, so the caller must render StatTile directly inside a <dl>. *@
-<div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40 @Class" @attributes="AdditionalAttributes">
-	<dt class="text-[0.65rem] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">@Label</dt>
+<div class="rounded-2xl border border-accent-200 bg-accent-100 p-4 dark:border-accent-800 dark:bg-accent-950/40 @Class" @attributes="AdditionalAttributes">
+	<dt class="text-[0.65rem] font-medium uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">@Label</dt>
 	<dd class="mt-2 text-xl font-bold">@Value</dd>
 </div>
 
