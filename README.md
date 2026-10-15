@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.165](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.165) | 2026-10-15 | chore: Apply repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-394-chore-apply-repo-ci-baseline-template.md) |
 | [v0.0.164](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.164) | 2026-10-15 | feat(ui): Tint the surfaces with the Palette, and guard them | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-392-feat-ui-tint-the-surfaces-with-the-palette-and-guard-them.md) |
 | [v0.0.163](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.163) | 2026-10-15 | docs(ui): Add the Palette tint spec and ADR 0008 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-390-docs-ui-add-the-palette-tint-spec-and-adr-0008.md) |
 | [v0.0.162](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.162) | 2026-10-14 | feat(ui): Add the Palette menu to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.158](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.158) | 2026-10-14 | feat(ui): Add the Themes slice, its cookie and data-theme | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-372-feat-ui-add-the-themes-slice-its-cookie-and-data-theme.md) |
 | [v0.0.157](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.157) | 2026-10-14 | refactor(ui): Move LocalReturnUrl to a cross-cutting UI.Security | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-370-refactor-ui-move-localreturnurl-to-a-cross-cutting-ui-security.md) |
 | [v0.0.156](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.156) | 2026-10-14 | docs(ui): Add the Theme and Palette spec and ADR 0007 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-368-docs-ui-add-the-theme-and-palette-spec-and-adr-0007.md) |
-| [v0.0.155](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.155) | 2026-10-14 | feat(ui): Show the Release and commit in the footer | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-361-feat-ui-show-the-release-and-commit-in-the-footer.md) |
 
 <!-- RELEASES_END -->
 
