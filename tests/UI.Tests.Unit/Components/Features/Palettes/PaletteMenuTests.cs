@@ -265,6 +265,7 @@ public class PaletteMenuTests : BunitContext
 			className.Contains("border-slate-", StringComparison.Ordinal) ||
 			className.Contains("ring-slate-", StringComparison.Ordinal) ||
 			className.Contains("outline-slate-", StringComparison.Ordinal));
+		summary.ClassList.Should().Contain(["hover:border-accent-400", "dark:hover:border-accent-400"]);
 		summary.ClassList.Should().Contain("text-slate-600");
 		summary.ClassList.Should().Contain("dark:text-slate-300");
 	}

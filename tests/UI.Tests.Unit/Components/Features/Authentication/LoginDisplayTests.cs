@@ -46,6 +46,21 @@ public class LoginDisplayTests : BunitContext
 	}
 
 	[Fact]
+	public void Render_Visitor_LogInPillHoverBorderStandsOutFromItsResting()
+	{
+		// Arrange
+		AddAuthorization().SetNotAuthorized();
+
+		// Act
+		IRenderedComponent<LoginDisplay> cut = Render<LoginDisplay>();
+
+		// Assert
+		// The resting border is accent-200 / dark accent-700, so the hover steps clear of both (docs/plans/palette-tint.md).
+		cut.Find("a").ClassList.Should()
+			.Contain(["border-accent-200", "hover:border-accent-400", "dark:border-accent-700", "dark:hover:border-accent-400"]);
+	}
+
+	[Fact]
 	public void Render_User_ShowsLogOutFormAndNoLogInLink()
 	{
 		// Arrange
