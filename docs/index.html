@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.167">v0.0.167</a></td>
+                <td>2026-10-16</td>
+                <td>build(deps): Pin MessagePack 2.5.307 past GHSA-qhrr-8q5h-9q3h</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-399-build-deps-pin-messagepack-2-5-307-past-ghsa-qhrr-8q5h-9q3h.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.166">v0.0.166</a></td>
                 <td>2026-10-15</td>
                 <td>feat(ui): Add the accent touches: the title gradient, StatTile, the Profile table header and the browser chrome</td>
@@ -282,12 +288,6 @@
                 <td>feat(ui): Add the Themes slice, its cookie and data-theme</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-372-feat-ui-add-the-themes-slice-its-cookie-and-data-theme.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.157">v0.0.157</a></td>
-                <td>2026-10-14</td>
-                <td>refactor(ui): Move LocalReturnUrl to a cross-cutting UI.Security</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-370-refactor-ui-move-localreturnurl-to-a-cross-cutting-ui-security.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-16">16 Oct 2026</time><span class="post-tag">v0.0.167</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-399-build-deps-pin-messagepack-2-5-307-past-ghsa-qhrr-8q5h-9q3h.md">build(deps): Pin MessagePack 2.5.307 past GHSA-qhrr-8q5h-9q3h</a></h3>
+              <p class="post-excerpt">Aspire brings in MessagePack 2.5.302, which advisory GHSA-qhrr-8q5h-9q3h covers (moderate: nested arrays can blow past buffer length limits). The fix first ships in 2.5.303. dotnet list package…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/399">PR #399</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-15">15 Oct 2026</time><span class="post-tag">v0.0.166</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-372-feat-ui-add-the-themes-slice-its-cookie-and-data-theme.md">feat(ui): Add the Themes slice, its cookie and data-theme</a></h3>
               <p class="post-excerpt">A Generated App needs to remember a visitor&#x27;s Theme (Light, Dark or System) and render it from the first paint, without JavaScript and without a flash of the wrong Theme. This branch adds the server…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/372">PR #372</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-14">14 Oct 2026</time><span class="post-tag">v0.0.157</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-370-refactor-ui-move-localreturnurl-to-a-cross-cutting-ui-security.md">refactor(ui): Move LocalReturnUrl to a cross-cutting UI.Security</a></h3>
-              <p class="post-excerpt">LocalReturnUrl is the rule that keeps a visitor-supplied returnUrl pointing inside the app, so an endpoint can&#x27;t be used to redirect somewhere else. It lived in the Authentication slice, because…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/370">PR #370</a></p>
             </article>
           </li>
         </ul>
