@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.167](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.167) | 2026-10-16 | build(deps): Pin MessagePack 2.5.307 past GHSA-qhrr-8q5h-9q3h | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-399-build-deps-pin-messagepack-2-5-307-past-ghsa-qhrr-8q5h-9q3h.md) |
 | [v0.0.166](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.166) | 2026-10-15 | feat(ui): Add the accent touches: the title gradient, StatTile, the Profile table header and the browser chrome | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-396-feat-ui-add-the-accent-touches-the-title-gradient-stattile-the-profile-table-header-and-the-browser-chrome.md) |
 | [v0.0.165](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.165) | 2026-10-15 | chore: Apply repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-394-chore-apply-repo-ci-baseline-template.md) |
 | [v0.0.164](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.164) | 2026-10-15 | feat(ui): Tint the surfaces with the Palette, and guard them | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-392-feat-ui-tint-the-surfaces-with-the-palette-and-guard-them.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.160](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.160) | 2026-10-14 | feat(ui): Add the Palettes slice, its cookie, data-palette and the hue rules | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-376-feat-ui-add-the-palettes-slice-its-cookie-data-palette-and-the-hue-rules.md) |
 | [v0.0.159](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.159) | 2026-10-14 | fix(sandcastle): Unshallow the checkout so the secret scan reads only a PR's commits | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-373-fix-sandcastle-unshallow-the-checkout-so-the-secret-scan-reads-only-a-pr-s-commits.md) |
 | [v0.0.158](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.158) | 2026-10-14 | feat(ui): Add the Themes slice, its cookie and data-theme | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-372-feat-ui-add-the-themes-slice-its-cookie-and-data-theme.md) |
-| [v0.0.157](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.157) | 2026-10-14 | refactor(ui): Move LocalReturnUrl to a cross-cutting UI.Security | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-370-refactor-ui-move-localreturnurl-to-a-cross-cutting-ui-security.md) |
 
 <!-- RELEASES_END -->
 
