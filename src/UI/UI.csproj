@@ -34,6 +34,32 @@
 		<TailwindInput Include="Styles/app.tailwind.css" />
 	</ItemGroup>
 
+	<!-- A fresh clone or worktree has no node_modules, so a local build installs the workspace's packages from the
+	     root lockfile before the CLI runs (mpaulosky/Blazor-Server#409). CI installs them in .github/ci/prepare.sh,
+	     and design-time builds have no pnpm, so both skip this. -->
+	<Target
+		Name="EnsurePnpmPackages"
+		BeforeTargets="BuildTailwindCss"
+		Condition="'$(DesignTimeBuild)' != 'true' AND '$(CI)' != 'true' AND '$(CI)' != '1' AND !Exists('$(MSBuildProjectDirectory)/node_modules/@tailwindcss/cli/package.json')">
+		<Exec
+			Command="pnpm --version"
+			IgnoreExitCode="true"
+			IgnoreStandardErrorWarningFormat="true"
+			StandardOutputImportance="low"
+			StandardErrorImportance="low">
+			<Output TaskParameter="ExitCode" PropertyName="PnpmExitCode" />
+		</Exec>
+		<Error
+			Condition="'$(PnpmExitCode)' != '0'"
+			Text="The Tailwind CSS CLI isn't installed, and 'pnpm --version' failed, so pnpm can't install it. Run 'corepack enable pnpm' (or install pnpm), then 'pnpm install' at the repository root, and build again." />
+		<Message Importance="high" Text="The Tailwind CSS CLI isn't installed: running pnpm install --frozen-lockfile at the repository root." />
+		<!-- As for the CLI below: pnpm's output is never parsed as MSBuild warnings, so only its exit code decides. -->
+		<Exec
+			Command="pnpm install --frozen-lockfile"
+			WorkingDirectory="$(MSBuildThisFileDirectory)../.."
+			IgnoreStandardErrorWarningFormat="true" />
+	</Target>
+
 	<!-- The CLI writes into obj/<Configuration>/, so Debug and Release each keep their own up-to-date check and
 	     never skip a rebuild because the other configuration already touched wwwroot/css/app.css.
 	     Skipped in design-time builds (IDEs, the code-metrics workflow), which have no pnpm. -->

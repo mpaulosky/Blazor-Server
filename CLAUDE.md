@@ -52,9 +52,10 @@ matching files.
 
 ## Commands
 
-The repo uses pnpm (pinned by `packageManager` in `package.json`); npm is refused. Run `pnpm install` first: the UI
-build runs the Tailwind CLI from the pnpm packages and fails with an error naming `pnpm install` when they're missing.
-Run it again after changing any `package.json`, and commit `pnpm-lock.yaml` with the change.
+The repo uses pnpm (pinned by `packageManager` in `package.json`); npm is refused. The UI build runs the Tailwind CLI
+from the pnpm packages: a local build runs `pnpm install --frozen-lockfile` itself when they're missing, and fails with
+an error naming `corepack enable pnpm` when pnpm is missing or won't run. CI installs them in `.github/ci/prepare.sh`.
+Run `pnpm install` after changing any `package.json`, and commit `pnpm-lock.yaml` with the change.
 
 ```bash
 pnpm install                                          # the pnpm workspace: root tooling and src/UI's Tailwind CLI
