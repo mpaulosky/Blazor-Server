@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.171">v0.0.171</a></td>
+                <td>2026-10-18</td>
+                <td>fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409)</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.170">v0.0.170</a></td>
                 <td>2026-10-18</td>
                 <td>chore: Re-apply the repo-ci-baseline Template</td>
@@ -282,12 +288,6 @@
                 <td>feat(ui): Add the Palette menu to the nav</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.161">v0.0.161</a></td>
-                <td>2026-10-14</td>
-                <td>feat(ui): Add the Theme control to the nav</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-18">18 Oct 2026</time><span class="post-tag">v0.0.171</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md">fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409)</a></h3>
+              <p class="post-excerpt">A fresh clone or worktree has no node_modules, so dotnet build failed in UI.csproj&#x27;s BuildTailwindCss target (&quot;The Tailwind CSS CLI isn&#x27;t installed in src/UI/node_modules&quot;). That failed the pre-push…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/410">PR #410</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-18">18 Oct 2026</time><span class="post-tag">v0.0.170</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md">feat(ui): Add the Palette menu to the nav</a></h3>
               <p class="post-excerpt">The Palettes slice already stored a visitor&#x27;s chosen accent hue in a palette cookie and rendered it as data-palette on &lt;html&gt;. Nothing in the UI posted to it, though, so visitors couldn&#x27;t change the…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/380">PR #380</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-14">14 Oct 2026</time><span class="post-tag">v0.0.161</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md">feat(ui): Add the Theme control to the nav</a></h3>
-              <p class="post-excerpt">The Generated App could already store a visitor&#x27;s Theme in a theme cookie and render it as data-theme on &lt;html&gt;, but nothing in the UI let a visitor choose it. Visitors had no way to pick Light or…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/377">PR #377</a></p>
             </article>
           </li>
         </ul>

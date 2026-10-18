@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.171](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.171) | 2026-10-18 | fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409) | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md) |
 | [v0.0.170](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.170) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-405-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.169](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.169) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-403-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.168](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.168) | 2026-10-16 | build(deps): Update NuGet packages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-401-build-deps-update-nuget-packages.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.164](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.164) | 2026-10-15 | feat(ui): Tint the surfaces with the Palette, and guard them | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-392-feat-ui-tint-the-surfaces-with-the-palette-and-guard-them.md) |
 | [v0.0.163](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.163) | 2026-10-15 | docs(ui): Add the Palette tint spec and ADR 0008 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-390-docs-ui-add-the-palette-tint-spec-and-adr-0008.md) |
 | [v0.0.162](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.162) | 2026-10-14 | feat(ui): Add the Palette menu to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md) |
-| [v0.0.161](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.161) | 2026-10-14 | feat(ui): Add the Theme control to the nav | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-377-feat-ui-add-the-theme-control-to-the-nav.md) |
 
 <!-- RELEASES_END -->
 
