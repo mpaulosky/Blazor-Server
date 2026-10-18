@@ -41,8 +41,18 @@
 		Name="EnsurePnpmPackages"
 		BeforeTargets="BuildTailwindCss"
 		Condition="'$(DesignTimeBuild)' != 'true' AND '$(CI)' != 'true' AND '$(CI)' != '1' AND !Exists('$(MSBuildProjectDirectory)/node_modules/@tailwindcss/cli/package.json')">
+		<Exec Command="pnpm --version" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+			<Output TaskParameter="ExitCode" PropertyName="PnpmExitCode" />
+		</Exec>
+		<Error
+			Condition="'$(PnpmExitCode)' != '0'"
+			Text="The Tailwind CSS CLI isn't installed, and pnpm isn't on PATH to install it. Run 'corepack enable pnpm' (or install pnpm), then 'pnpm install' at the repository root, and build again." />
 		<Message Importance="high" Text="The Tailwind CSS CLI isn't installed: running pnpm install --frozen-lockfile at the repository root." />
-		<Exec Command="pnpm install --frozen-lockfile" WorkingDirectory="$(MSBuildThisFileDirectory)../.." />
+		<!-- As for the CLI below: pnpm's output is never parsed as MSBuild warnings, so only its exit code decides. -->
+		<Exec
+			Command="pnpm install --frozen-lockfile"
+			WorkingDirectory="$(MSBuildThisFileDirectory)../.."
+			IgnoreStandardErrorWarningFormat="true" />
 	</Target>
 
 	<!-- The CLI writes into obj/<Configuration>/, so Debug and Release each keep their own up-to-date check and
