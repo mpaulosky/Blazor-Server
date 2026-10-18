@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.172">v0.0.172</a></td>
+                <td>2026-10-18</td>
+                <td>fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.171">v0.0.171</a></td>
                 <td>2026-10-18</td>
                 <td>fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409)</td>
@@ -282,12 +288,6 @@
                 <td>docs(ui): Add the Palette tint spec and ADR 0008</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-390-docs-ui-add-the-palette-tint-spec-and-adr-0008.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.162">v0.0.162</a></td>
-                <td>2026-10-14</td>
-                <td>feat(ui): Add the Palette menu to the nav</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-18">18 Oct 2026</time><span class="post-tag">v0.0.172</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md">fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5</a></h3>
+              <p class="post-excerpt">Sandcastle&#x27;s Sonnet roles named claude-sonnet-5, the previous Sonnet, instead of claude-sonnet-5-5. Its Opus roles and Claude Review already use claude-opus-5-5.</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/412">PR #412</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-18">18 Oct 2026</time><span class="post-tag">v0.0.171</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-390-docs-ui-add-the-palette-tint-spec-and-adr-0008.md">docs(ui): Add the Palette tint spec and ADR 0008</a></h3>
               <p class="post-excerpt">The visitor&#x27;s Palette only coloured buttons, links and highlights, and every surface stayed slate. The map Map: Tint the Generated App&#x27;s surfaces with the Palette settled that the Palette tints the…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/390">PR #390</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-14">14 Oct 2026</time><span class="post-tag">v0.0.162</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-14-pr-380-feat-ui-add-the-palette-menu-to-the-nav.md">feat(ui): Add the Palette menu to the nav</a></h3>
-              <p class="post-excerpt">The Palettes slice already stored a visitor&#x27;s chosen accent hue in a palette cookie and rendered it as data-palette on &lt;html&gt;. Nothing in the UI posted to it, though, so visitors couldn&#x27;t change the…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/380">PR #380</a></p>
             </article>
           </li>
         </ul>
