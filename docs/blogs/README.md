@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-18 | [fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409)](2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md) | release,automation |
 | 2026-10-18 | [chore: Re-apply the repo-ci-baseline Template](2026-10-18-pr-405-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-18 | [chore: Re-apply the repo-ci-baseline Template](2026-10-18-pr-403-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-16 | [build(deps): Update NuGet packages](2026-10-16-pr-401-build-deps-update-nuget-packages.md) | release,automation |
