@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-18 | [chore: Re-apply the repo-ci-baseline Template](2026-10-18-pr-403-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-16 | [build(deps): Update NuGet packages](2026-10-16-pr-401-build-deps-update-nuget-packages.md) | release,automation |
 | 2026-10-16 | [build(deps): Pin MessagePack 2.5.307 past GHSA-qhrr-8q5h-9q3h](2026-10-16-pr-399-build-deps-pin-messagepack-2-5-307-past-ghsa-qhrr-8q5h-9q3h.md) | release,automation |
 | 2026-10-15 | [feat(ui): Add the accent touches: the title gradient, StatTile, the Profile table header and the browser chrome](2026-10-15-pr-396-feat-ui-add-the-accent-touches-the-title-gradient-stattile-the-profile-table-header-and-the-browser-chrome.md) | release,automation |
