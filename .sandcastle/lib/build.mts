@@ -343,18 +343,80 @@ function commandOutput(error: unknown): string {
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
 
+// The host repository's `git config user.name` and `user.email`; a missing
+// one is undefined. @ai-hero/sandcastle reads the same two when a role starts.
+type GitIdentity = { name: string | undefined; email: string | undefined };
+
+// What createCheckedSandbox needs from outside; tests pass stubs.
+export type CheckedSandboxHost = {
+  // Creates the live sandbox for `branch` (sandcastle.createSandbox).
+  createSandbox(branch: string): Promise<sandcastle.Sandbox>;
+  gitIdentity(): GitIdentity;
+  // What's wrong with how a worktree finds its repository (see
+  // lib/host-safety.mts); empty when nothing is.
+  worktreeProblems(worktreePath: string): string[];
+};
+
 // The live sandbox for `branch`, for a build and a follow-up pass
 // (lib/follow-up-pass.mts) alike. Sandcastle reuses a branch's worktree
 // that's still there, running git in it first, so that one is checked before
-// it's handed over.
-export function createCheckedSandbox(branch: string): Promise<sandcastle.Sandbox> {
+// it's handed over. The host's git identity is set in the sandbox here too:
+// @ai-hero/sandcastle copies it in only when a role starts, and the follow-up
+// pass merges main before any role has (#419).
+export async function createCheckedSandbox(branch: string, host: CheckedSandboxHost = liveCheckedSandboxHost): Promise<sandcastle.Sandbox> {
   const existing = worktreePathFor(process.cwd(), branch);
-  const problems = existsSync(existing) ? worktreeProblems(existing) : [];
+  const problems = existsSync(existing) ? host.worktreeProblems(existing) : [];
   if (problems.length > 0) {
-    return Promise.reject(new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`));
+    throw new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`);
   }
-  return sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree });
+  const sandbox = await host.createSandbox(branch);
+  try {
+    await setGitIdentity(sandbox, host.gitIdentity());
+  } catch (error) {
+    // Creating the sandbox ran hooks in a worktree that may hold an earlier
+    // round's agent-written code, so check it as buildMarkedIssue does before
+    // close() runs git in it. A failed close() is logged, not thrown, so the
+    // error that stopped the build stays the one reported.
+    const tampered = host.worktreeProblems(sandbox.worktreePath);
+    if (tampered.length > 0) {
+      console.error(`  ✗ left ${sandbox.worktreePath} and its sandbox in place: ${tampered.join("; ")}`);
+    } else {
+      await sandbox.close().catch((closeError) => console.error(`  ⚠ closing the sandbox failed: ${closeError}`));
+    }
+    throw error;
+  }
+  return sandbox;
 }
+
+// Sets `identity` as the sandbox's global git user.name and user.email, each
+// only when the host has it, as @ai-hero/sandcastle's "Setting up sandbox"
+// step does. A failed `git config` throws rather than leave a merge to fail
+// later without a committer identity.
+async function setGitIdentity(sandbox: sandcastle.Sandbox, identity: GitIdentity): Promise<void> {
+  for (const [key, value] of [["user.name", identity.name], ["user.email", identity.email]] as const) {
+    if (value === undefined) continue;
+    const set = await sandbox.exec(`git config --global ${key} ${shellWord(value)}`);
+    if (set.exitCode !== 0) {
+      throw new Error(`setting git ${key} in the sandbox failed: ${set.stderr.trim()}`);
+    }
+  }
+}
+
+// The host's git config value for `key`, or undefined when it's unset or
+// empty: git exits non-zero for an unset key.
+function hostGitConfig(key: string): string | undefined {
+  try {
+    return git("config", key) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const liveCheckedSandboxHost: CheckedSandboxHost = {
+  createSandbox: (branch) => sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree }),
+  gitIdentity: () => ({ name: hostGitConfig("user.name"), email: hostGitConfig("user.email") }),
+  worktreeProblems,
+};
 
 const liveHost: BuildHost = {
   createSandbox: createCheckedSandbox,
@@ -383,7 +445,8 @@ const liveHost: BuildHost = {
 };
 
 // `value` as one single-quoted shell word, for the commit and branch names
-// buildIssue puts in a sandbox command.
+// buildIssue puts in a sandbox command and the host's git identity
+// createCheckedSandbox does.
 function shellWord(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }

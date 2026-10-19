@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
+import { createCheckedSandbox } from "./build.mts";
 import { FOLLOW_UP_MARKER, FOLLOW_UP_PASS_CAP, FOLLOW_UP_REPLY_MARKER } from "./config.mts";
 import { UncountedStopError } from "./errors.mts";
 import type { CheckState, PassTarget } from "./follow-up.mts";
@@ -978,6 +979,52 @@ describe("runPass", () => {
     assert.ok(!sandbox.execCalls.some((call) => call.includes("rebase")), "runPass must never rebase");
     assert.ok(!sandbox.execCalls.some((call) => /--force/.test(call)), "runPass must never force anything");
     assert.equal(calls.push.length, 1);
+  });
+
+  // Acceptance criterion: "A test pins that the follow-up pass's clean merge of
+  // main succeeds before any role has run." The sandbox refuses a merge until
+  // the host's identity is in it, as a fresh sandbox does (#419); the pass gets
+  // its sandbox from createCheckedSandbox, as the live host does.
+  it("merges main cleanly before any role has run, because the sandbox it gets from createCheckedSandbox has the host's git identity", async () => {
+    const sandbox = sandboxFake({ followUpJson: "[]" });
+    const configured = new Set<string>();
+    const identitySandbox = {
+      ...sandbox.sandbox,
+      worktreePath: "/worktree",
+      run: sandbox.sandbox.run.bind(sandbox.sandbox),
+      close: sandbox.sandbox.close.bind(sandbox.sandbox),
+      exec: async (command: string) => {
+        const set = /^git config --global (user\.name|user\.email) /.exec(command);
+        if (set !== null) {
+          configured.add(set[1]!);
+          return { stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (command.startsWith("git merge ") && configured.size < 2) {
+          sandbox.execCalls.push(command);
+          sandbox.steps.push(command);
+          return { stdout: "", stderr: "Committer identity unknown", exitCode: 128 };
+        }
+        return sandbox.sandbox.exec(command);
+      },
+    } as unknown as Sandbox;
+    const { passHost, calls } = passHostFake({ threads: [], containsBase: false, checks: [redCheck()], sandbox });
+    passHost.createSandbox = (branch) =>
+      createCheckedSandbox(branch, {
+        createSandbox: async () => identitySandbox,
+        gitIdentity: () => ({ name: "Ada Lovelace", email: "ada@example.com" }),
+        worktreeProblems: () => [],
+      });
+
+    const outcome = await runPass(passTarget({ reasons: ["check Build Solution is red"] }), issue, BASE, passHost);
+
+    const mergeIndex = sandbox.steps.findIndex((step) => step.startsWith("git merge "));
+    assert.notEqual(mergeIndex, -1, sandbox.steps.join("\n"));
+    const roleIndex = sandbox.steps.findIndex((step) => !step.startsWith("git ") && !step.startsWith("rm ") && !step.startsWith("cat"));
+    assert.ok(roleIndex === -1 || mergeIndex < roleIndex, sandbox.steps.join("\n"));
+    assert.equal(calls.handBack.length, 0, calls.handBack.map((entry) => entry.body).join("\n"));
+    assert.ok(!calls.log.some((line) => /merging main into the branch failed/.test(line)), calls.log.join("\n"));
+    assert.notEqual(outcome.kind, "gave-up");
+    assert.ok(configured.size === 2, "expected both the name and the email to be set");
   });
 
   it("gives up and quotes the gate's tail when the gate stays red after the gate-fixer's attempts", async () => {
