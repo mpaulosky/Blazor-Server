@@ -343,18 +343,36 @@ function commandOutput(error: unknown): string {
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
 
+// What createCheckedSandbox needs from outside; tests pass stubs.
+export type CheckedSandboxHost = {
+  // Creates the live sandbox for `branch` (sandcastle.createSandbox).
+  createSandbox(branch: string): Promise<sandcastle.Sandbox>;
+  // The host repository's `git config user.name` and `user.email`; a missing
+  // one is undefined. @ai-hero/sandcastle reads the same two when a role starts.
+  gitIdentity(): { name: string | undefined; email: string | undefined };
+};
+
 // The live sandbox for `branch`, for a build and a follow-up pass
 // (lib/follow-up-pass.mts) alike. Sandcastle reuses a branch's worktree
 // that's still there, running git in it first, so that one is checked before
-// it's handed over.
-export function createCheckedSandbox(branch: string): Promise<sandcastle.Sandbox> {
+// it's handed over. The host's git identity is set in the sandbox here too:
+// @ai-hero/sandcastle copies it in only when a role starts, and the follow-up
+// pass merges main before any role has (#419).
+export async function createCheckedSandbox(branch: string, host: CheckedSandboxHost = liveCheckedSandboxHost): Promise<sandcastle.Sandbox> {
   const existing = worktreePathFor(process.cwd(), branch);
   const problems = existsSync(existing) ? worktreeProblems(existing) : [];
   if (problems.length > 0) {
-    return Promise.reject(new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`));
+    throw new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`);
   }
-  return sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree });
+  return host.createSandbox(branch);
 }
+
+const liveCheckedSandboxHost: CheckedSandboxHost = {
+  createSandbox: (branch) => sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree }),
+  gitIdentity: () => {
+    throw new Error("Not implemented");
+  },
+};
 
 const liveHost: BuildHost = {
   createSandbox: createCheckedSandbox,
