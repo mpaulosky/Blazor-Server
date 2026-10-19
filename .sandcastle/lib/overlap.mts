@@ -64,11 +64,14 @@ export function overlapComment({ file, on, linked }: Deferral): string {
     file === undefined
       ? `The planner named no files this issue will change, so it may touch anything ${what} changes.`
       : `It's expected to change \`${file}\`, which ${what} changes too.`;
-  const after = linked
-    ? `It won't be built until ${ref} lands. To override, delete the "blocked by ${ref}" link on this issue.`
-    : on.kind === "issue"
-      ? `It waits while ${ref} is built. If ${ref} opens no pull request, a later round of this run can build it; otherwise a later run checks again.`
-      : "It won't be built in this run; a later run checks again.";
+  let after: string;
+  if (linked) {
+    after = `It won't be built until ${ref} lands. To override, delete the "blocked by ${ref}" link on this issue.`;
+  } else if (on.kind === "issue") {
+    after = `It waits while ${ref} is built. If ${ref} opens no pull request, a later round of this run can build it; otherwise a later run checks again.`;
+  } else {
+    after = "It won't be built in this run; a later run checks again.";
+  }
   return [
     OVERLAP_MARKER,
     `Sandcastle deferred this issue behind ${ref}, so the two don't conflict once one merges.`,
@@ -110,7 +113,7 @@ export function deferOverlaps(
 
   // readyPicks has resolved the files already; resolving again keeps a path
   // that would reach the log clean whoever calls this.
-  const filesOf = new Map(picks.map((issue) => [issue, resolveFiles(issue.files)]));
+  const resolved = picks.map((issue) => ({ issue, files: resolveFiles(issue.files) }));
 
   // Each path a kept pick will change, with that pick's number, so a later pick
   // names the first kept pick it collides with.
@@ -130,9 +133,7 @@ export function deferOverlaps(
     return undefined;
   };
 
-  const named = picks.filter((issue) => filesOf.get(issue)!.length > 0);
-  for (const issue of named) {
-    const files = filesOf.get(issue)!;
+  for (const { issue, files } of resolved.filter((pick) => pick.files.length > 0)) {
     const deferral = firstOverlap(files);
     if (deferral) {
       deferrals.set(issue, deferral);
@@ -148,10 +149,13 @@ export function deferOverlaps(
   // another would leave them all waiting for nothing (#425).
   const [firstKept] = kept;
   const [firstPr] = openPrs;
-  let blocker: Deferral["on"] | undefined = firstKept
-    ? { kind: "issue", number: Number(firstKept.id) }
-    : firstPr && { kind: "pr", number: firstPr.number };
-  for (const issue of picks.filter((pick) => !named.includes(pick))) {
+  let blocker: Deferral["on"] | undefined;
+  if (firstKept) {
+    blocker = { kind: "issue", number: Number(firstKept.id) };
+  } else if (firstPr) {
+    blocker = { kind: "pr", number: firstPr.number };
+  }
+  for (const { issue } of resolved.filter((pick) => pick.files.length === 0)) {
     if (blocker === undefined) {
       kept.push(issue);
       blocker = { kind: "issue", number: Number(issue.id) };
@@ -162,19 +166,20 @@ export function deferOverlaps(
 
   // Every read before any write: a deferral comment can't be checked, so
   // nothing is posted or built on a guess.
-  const deferred = picks.filter((issue) => deferrals.has(issue));
-  const commented = new Set(deferred.filter((issue) => github.commented(Number(issue.id))));
+  const deferred = picks.flatMap((issue) => {
+    const deferral = deferrals.get(issue);
+    return deferral ? [{ id: Number(issue.id), deferral }] : [];
+  });
+  const commented = new Set(deferred.filter(({ id }) => github.commented(id)).map(({ id }) => id));
 
   const holds: OverlapHold[] = [];
-  for (const issue of deferred) {
-    const deferral = deferrals.get(issue)!;
-    const id = Number(issue.id);
+  for (const { id, deferral } of deferred) {
     const ref = `#${deferral.on.number}`;
     holds.push({ id, behind: deferral.on });
     report.record({ kind: "issue", number: id, outcome: "deferred", detail: `behind ${ref}` });
     const why = deferral.file === undefined ? "it names no files" : deferral.file;
     log(`  ⏸ The overlap check defers #${id} behind ${ref} (${why}).`);
-    if (commented.has(issue)) continue;
+    if (commented.has(id)) continue;
     try {
       github.comment(id, overlapComment(deferral));
     } catch (error) {
