@@ -343,13 +343,15 @@ function commandOutput(error: unknown): string {
 
 const worktreeProblems = (worktreePath: string) => worktreeLinkProblems(worktreePath, repoGitDir());
 
+// The host repository's `git config user.name` and `user.email`; a missing
+// one is undefined. @ai-hero/sandcastle reads the same two when a role starts.
+type GitIdentity = { name: string | undefined; email: string | undefined };
+
 // What createCheckedSandbox needs from outside; tests pass stubs.
 export type CheckedSandboxHost = {
   // Creates the live sandbox for `branch` (sandcastle.createSandbox).
   createSandbox(branch: string): Promise<sandcastle.Sandbox>;
-  // The host repository's `git config user.name` and `user.email`; a missing
-  // one is undefined. @ai-hero/sandcastle reads the same two when a role starts.
-  gitIdentity(): { name: string | undefined; email: string | undefined };
+  gitIdentity(): GitIdentity;
 };
 
 // The live sandbox for `branch`, for a build and a follow-up pass
@@ -378,7 +380,7 @@ export async function createCheckedSandbox(branch: string, host: CheckedSandboxH
 // only when the host has it, as @ai-hero/sandcastle's "Setting up sandbox"
 // step does. A failed `git config` throws rather than leave a merge to fail
 // later without a committer identity.
-async function setGitIdentity(sandbox: sandcastle.Sandbox, identity: { name: string | undefined; email: string | undefined }): Promise<void> {
+async function setGitIdentity(sandbox: sandcastle.Sandbox, identity: GitIdentity): Promise<void> {
   for (const [key, value] of [["user.name", identity.name], ["user.email", identity.email]] as const) {
     if (value === undefined) continue;
     const set = await sandbox.exec(`git config --global ${key} ${shellWord(value)}`);
@@ -430,7 +432,8 @@ const liveHost: BuildHost = {
 };
 
 // `value` as one single-quoted shell word, for the commit and branch names
-// buildIssue puts in a sandbox command.
+// buildIssue puts in a sandbox command and the host's git identity
+// createCheckedSandbox does.
 function shellWord(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
