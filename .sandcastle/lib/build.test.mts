@@ -4,6 +4,7 @@ import type { Sandbox, SandboxRunOptions } from "@ai-hero/sandcastle";
 import type { execFileSync } from "node:child_process";
 import {
   buildIssue,
+  createCheckedSandbox,
   designComment,
   designNoteIn,
   latestDesignNote,
@@ -14,6 +15,7 @@ import {
   publish,
   UncountedStopError,
   type BuildHost,
+  type CheckedSandboxHost,
   workflowFilesFrom,
   workflowLogArgs,
 } from "./build.mts";
@@ -1719,5 +1721,155 @@ describe("workflowFilesFrom", () => {
     const output = "\n.github/workflows/ci.yml\n\n.github/workflows/release.yml\n.github/workflows/ci.yml\n";
 
     assert.deepEqual(workflowFilesFrom(output), [".github/workflows/ci.yml", ".github/workflows/release.yml"]);
+  });
+});
+
+// A sandbox whose `git merge` fails the way git does without a committer
+// identity (#419) until both `git config --global user.name` and `user.email`
+// have run in it. Every exec lands in `execCalls`, in order.
+function identityCheckingSandbox() {
+  const execCalls: string[] = [];
+  const config = new Map<string, string>();
+  const sandbox = {
+    worktreePath: "/worktree",
+    exec: async (command: string) => {
+      execCalls.push(command);
+      const set = /^git config --global (user\.name|user\.email) (.*)$/.exec(command);
+      if (set !== null) {
+        config.set(set[1]!, set[2]!);
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git merge ")) {
+        if (config.has("user.name") && config.has("user.email")) return { stdout: "Merge made\n", stderr: "", exitCode: 0 };
+        return {
+          stdout: "",
+          stderr: "Committer identity unknown\nfatal: unable to auto-detect email address (got 'agent@sandbox.(none)')",
+          exitCode: 128,
+        };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    },
+  } as unknown as Sandbox;
+  return { sandbox, execCalls };
+}
+
+function checkedSandboxHost(
+  sandbox: Sandbox,
+  identity: { name: string | undefined; email: string | undefined },
+  worktreeProblems: string[] = [],
+): CheckedSandboxHost {
+  return { createSandbox: async () => sandbox, gitIdentity: () => identity, worktreeProblems: () => worktreeProblems };
+}
+
+describe("createCheckedSandbox", () => {
+  // Acceptance criterion: "`createCheckedSandbox` sets the host's `git config
+  // user.name` and `user.email` in the sandbox (`git config --global`)."
+  it("sets the host's git user.name and user.email in the sandbox with git config --global", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" }));
+
+    assert.ok(execCalls.includes("git config --global user.name 'Ada Lovelace'"), execCalls.join("\n"));
+    assert.ok(execCalls.includes("git config --global user.email 'ada@example.com'"), execCalls.join("\n"));
+  });
+
+  it("quotes a host name with a single quote as one shell word", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada O'Neil", email: "ada@example.com" }));
+
+    assert.ok(execCalls.includes("git config --global user.name 'Ada O'\\''Neil'"), execCalls.join("\n"));
+  });
+
+  // Acceptance criterion: "A test pins that a sandbox from `createCheckedSandbox`
+  // gets the host's identity before the host's first `git merge`."
+  it("gives the sandbox the host's identity before the host's first git merge, so the merge isn't refused for it", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    const created = await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" }));
+    const merge = await created.exec("git merge --no-edit -m 'Merge main into fix/419-identity' 'abc123'");
+
+    assert.equal(merge.exitCode, 0, merge.stderr);
+    const mergeIndex = execCalls.findIndex((call) => call.startsWith("git merge "));
+    assert.ok(execCalls.findIndex((call) => call.startsWith("git config --global user.name")) < mergeIndex);
+    assert.ok(execCalls.findIndex((call) => call.startsWith("git config --global user.email")) < mergeIndex);
+  });
+
+  // Acceptance criterion: "If the host has neither, the sandbox is left as it is."
+  it("leaves the sandbox as it is when the host has neither a git user.name nor a user.email", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: undefined, email: undefined }));
+
+    assert.deepEqual(execCalls, []);
+  });
+
+  // A CI runner often has user.email configured but not user.name.
+  it("sets only the email when the host has a git user.email but no user.name", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: undefined, email: "ada@example.com" }));
+
+    assert.deepEqual(execCalls, ["git config --global user.email 'ada@example.com'"]);
+  });
+
+  it("sets only the name when the host has a git user.name but no user.email", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: undefined }));
+
+    assert.deepEqual(execCalls, ["git config --global user.name 'Ada Lovelace'"]);
+  });
+
+  it("leaves the worktree and its sandbox in place, without closing it, when setting the identity fails and the worktree no longer points at this repository", async () => {
+    let closed = 0;
+    const sandbox = {
+      worktreePath: "/worktree",
+      exec: async () => ({ stdout: "", stderr: "error: could not lock config file", exitCode: 255 }),
+      close: async () => {
+        closed++;
+      },
+    } as unknown as Sandbox;
+
+    await assert.rejects(
+      createCheckedSandbox(
+        "fix/419-identity",
+        checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" }, ["/worktree/.git doesn't point into /repo/.git/worktrees"]),
+      ),
+      /setting git user\.name in the sandbox failed/,
+    );
+    assert.equal(closed, 0);
+  });
+
+  it("throws the error that setting the identity failed with, not the one from closing the sandbox", async () => {
+    const sandbox = {
+      worktreePath: "/worktree",
+      exec: async () => ({ stdout: "", stderr: "error: could not lock config file", exitCode: 255 }),
+      close: async () => {
+        throw new Error("close blew up");
+      },
+    } as unknown as Sandbox;
+
+    await assert.rejects(
+      createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" })),
+      /setting git user\.name in the sandbox failed: error: could not lock config file/,
+    );
+  });
+
+  it("closes the sandbox and throws when setting the host's identity in it fails, rather than hand it over", async () => {
+    let closed = 0;
+    const sandbox = {
+      worktreePath: "/worktree",
+      exec: async () => ({ stdout: "", stderr: "error: could not lock config file", exitCode: 255 }),
+      close: async () => {
+        closed++;
+      },
+    } as unknown as Sandbox;
+
+    await assert.rejects(
+      createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" })),
+      /setting git user\.name in the sandbox failed: error: could not lock config file/,
+    );
+    assert.equal(closed, 1);
   });
 });
