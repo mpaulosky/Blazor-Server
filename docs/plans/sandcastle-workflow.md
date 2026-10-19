@@ -212,7 +212,7 @@ Instead the host holds the pick back for the rest of the run when it waits on a 
 A hold behind a pick the critique defers, or whose build opens no PR, is released at the end of the round ([#425](https://github.com/mpaulosky/Blazor-Server/issues/425)).
 When a pick's comments can't be read, it's still deferred, and only its comment is skipped, with a warning ([#428](https://github.com/mpaulosky/Blazor-Server/issues/428)).
 The critique then judges what's left, with each pick's `files`.
-It gets the held picks among the unpicked ready issues, each with a note that it's held, so a pick that depends on one is deferred behind it ([#428](https://github.com/mpaulosky/Blazor-Server/issues/428)).
+It gets the held picks among the unpicked ready issues, those held this round and those whose hold lasts the run, each with a note that it's held, so a pick that depends on one is deferred behind it ([#428](https://github.com/mpaulosky/Blazor-Server/issues/428)).
 
 The critique checks one thing: whether the round's parallel set is safe, meaning no file or module overlap between picks, and no pick depending on an API or decision another open issue
 will establish. Its only power is to **defer** a pick.

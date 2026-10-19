@@ -117,8 +117,8 @@ export function resolveFiles(files: readonly string[] | undefined, root: string 
 }
 
 // The note on a held issue in the critique's unpicked list, which
-// critique-prompt.md explains: the planner picked it, but it waits this round
-// behind a pick or pull request, either because they share a file or because
+// critique-prompt.md explains: the planner picked it, but it waits behind a
+// pick or pull request, either because they share a file or because
 // the planner named no files for it (so it may touch anything).
 export function heldNote({ behind, file }: OverlapHold): string {
   const what = `${behind.kind === "issue" ? "pick" : "open pull request"} #${behind.number}`;
@@ -126,13 +126,13 @@ export function heldNote({ behind, file }: OverlapHold): string {
     file === undefined
       ? `it names no files, so it may touch anything ${what} changes`
       : `it shares \`${file}\` with ${what}`;
-  return `Held back this round by the overlap check, waiting on ${what}: ${why}. It's still work to come.`;
+  return `Held back by the overlap check, waiting on ${what}: ${why}. It's still work to come.`;
 }
 
 // The ready issues the critique should treat as unpicked work: those the
-// planner left out, and the picks the overlap check held back this round
-// (`holds`), each with a `note` saying what it waits on. A kept pick, one of
-// `kept`, is excluded. The critique's dependency check covers an unpicked
+// planner left out, and the picks the overlap check holds back (`holds`: this
+// round's, and the lasting ones from earlier rounds), each with a `note` saying
+// what it waits on. A kept pick, one of `kept`, is excluded. The critique's dependency check covers an unpicked
 // ready issue, and a held issue is work still to come, so a pick that depends
 // on one can be deferred behind it (#428).
 export function unpickedReady(

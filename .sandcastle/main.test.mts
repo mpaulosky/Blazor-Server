@@ -394,6 +394,11 @@ describe("main.mts's overlap follow-ups", () => {
 
   // #428: the critique's dependency check must see the held issues.
   it("passes the round's overlap holds to unpickedReady, so the critique sees the held issues", () => {
-    assert.match(mainMts, /unpickedReady\([^)]*holds/);
+    assert.match(mainMts, /unpickedReady\([^;]*\.\.\.holds\b/);
+  });
+
+  // #428: a hold that lasts the run drops out of `ready` in later rounds, but not out of `unblocked`.
+  it("passes the lasting holds from earlier rounds, and every unblocked issue, to unpickedReady", () => {
+    assert.match(mainMts, /unpickedReady\(unblocked,[^;]*overlapDeferred\.values\(\)/);
   });
 });

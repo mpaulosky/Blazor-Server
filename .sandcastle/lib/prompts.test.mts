@@ -216,7 +216,8 @@ describe("critique-prompt.md", () => {
   const prompt = readFileSync(new URL("../critique-prompt.md", import.meta.url), "utf8");
 
   it("says an unpicked ready issue can be held back by the overlap check, and that it still counts for dependencies", () => {
-    assert.match(prompt, /held/i);
-    assert.match(prompt, /overlap/i);
+    assert.match(prompt, /`note`[^\n]*held/);
+    assert.match(prompt, /overlap check held it back/);
+    assert.match(prompt, /counts for the dependency check/);
   });
 });
