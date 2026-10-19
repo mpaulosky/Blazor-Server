@@ -99,8 +99,9 @@ function sharesPath(a: string, b: string): boolean {
 // reaches the run report as "deferred", and gets one comment naming the shared
 // file and the PR or issue it waits on, unless the host already posted one in
 // an earlier run. The holds aren't final: main.mts keeps only lastingHolds
-// once the critique and the build have run. A failed GitHub read throws, so
-// nothing is built on an overlap the host couldn't check.
+// once the critique and the build have run. A failed read of the open PRs or
+// their files throws, so nothing is built on an overlap the host couldn't
+// check; a failed comments read only skips that pick's comment (#428).
 export function deferOverlaps(
   picks: readonly PlannedIssue[],
   github: OverlapGitHub = liveGitHub,
@@ -164,13 +165,23 @@ export function deferOverlaps(
     }
   }
 
-  // Every read before any write: a deferral comment can't be checked, so
-  // nothing is posted or built on a guess.
+  // Every read before any write. The deferral doesn't depend on the comments
+  // read, so a failed read skips only that pick's comment rather than end the
+  // run on one transient gh error (#428); not posting is the safe side, since
+  // a duplicate comment is the only other outcome.
   const deferred = picks.flatMap((issue) => {
     const deferral = deferrals.get(issue);
     return deferral ? [{ id: Number(issue.id), deferral }] : [];
   });
-  const commented = new Set(deferred.filter(({ id }) => github.commented(id)).map(({ id }) => id));
+  const skipComment = new Set<number>();
+  for (const { id, deferral } of deferred) {
+    try {
+      if (github.commented(id)) skipComment.add(id);
+    } catch (error) {
+      skipComment.add(id);
+      log(`  ⚠ #${id} is deferred behind #${deferral.on.number}, but its comments couldn't be read, so no comment is posted (${error}).`);
+    }
+  }
 
   const holds: OverlapHold[] = [];
   for (const { id, deferral } of deferred) {
@@ -179,7 +190,7 @@ export function deferOverlaps(
     report.record({ kind: "issue", number: id, outcome: "deferred", detail: `behind ${ref}` });
     const why = deferral.file === undefined ? "it names no files" : deferral.file;
     log(`  ⏸ The overlap check defers #${id} behind ${ref} (${why}).`);
-    if (commented.has(id)) continue;
+    if (skipComment.has(id)) continue;
     try {
       github.comment(id, overlapComment(deferral));
     } catch (error) {
