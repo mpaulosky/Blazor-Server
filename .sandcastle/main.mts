@@ -45,6 +45,10 @@
 //   Phase 1 (Plan):             The planner analyzes the ready issues, builds
 //                               a dependency graph, and outputs a <plan> JSON
 //                               listing unblocked issues.
+//   Phase 1a (Overlap):         The host, with no agent, defers each pick whose
+//                               predicted files share a path with a pick kept
+//                               before it or with an open PR into main, from
+//                               any author or queue (lib/overlap.mts).
 //   Phase 1b (Critique):        A second run checks whether the picks are safe
 //                               to build in parallel and defers the ones that
 //                               aren't behind a native "blocked by" link. The
@@ -83,7 +87,8 @@
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
 // issues are picked up after each round. The loop stops early when a round
-// opens no pull request, but not when the critique defers every pick.
+// opens no pull request, but not when the overlap check or the critique
+// defers every pick.
 //
 // The run also stops cleanly, exiting 0, once it can't finish more work
 // (lib/limits.mts, #147): no new round or role run starts after
@@ -133,6 +138,7 @@ import { cacheHostLogin, ensureLabels, openPullRequests, repoName } from "./lib/
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { runLimits } from "./lib/limits.mts";
+import { deferOverlaps } from "./lib/overlap.mts";
 import { planRound, resolveRoles } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import {
@@ -236,6 +242,12 @@ try {
 
   startedUp = true;
 
+  // The picks the overlap check deferred this run. One deferred behind a pull
+  // request has no "blocked by" link for the gate to hold it back with, so
+  // without this the planner would pick it, and the host comment on it, again
+  // every round.
+  const overlapDeferred = new Set<number>();
+
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // No new round once the budget has passed or the usage limit was hit.
     const stopReason = runLimits.stopReason();
@@ -299,15 +311,20 @@ try {
     // -----------------------------------------------------------------------
     // Phase 0b: Gate
     // -----------------------------------------------------------------------
-    const { ready, blocked } = gateIssues();
+    const gated = gateIssues();
+    const { blocked } = gated;
 
     for (const { issue, reasons } of blocked) {
       console.log(`  ⏸ #${issue.number} is held back: ${reasons.join("; ")}`);
     }
+    for (const issue of gated.ready.filter((ready) => overlapDeferred.has(ready.number))) {
+      console.log(`  ⏸ #${issue.number} is held back: the overlap check deferred it earlier in this run`);
+    }
+    const ready = gated.ready.filter((issue) => !overlapDeferred.has(issue.number));
 
     if (ready.length === 0) {
       console.log(
-        blocked.length > 0
+        blocked.length > 0 || overlapDeferred.size > 0
           ? "Every open issue is waiting on a blocker, a pull request, another run, intake or a human. Exiting."
           : `No open, owner-approved issues in the queue (${describeQueueScope(scope)}). Exiting.`,
       );
@@ -330,8 +347,25 @@ try {
     // planner's raw roles field, resolved to a safe list by resolveRoles
     // (lib/plan.mts), which falls back to every optional role when it's
     // missing or invalid.
+    // -----------------------------------------------------------------------
+    // Phase 1a: Overlap
+    // -----------------------------------------------------------------------
+    // In code, before the critique: two builds of one file conflict once the
+    // first merges (#421). The critique still runs on what's left, for
+    // dependencies and for overlaps of modules rather than paths.
+    const unshared = deferOverlaps(planned);
+    const unsharedIds = new Set(unshared.map((issue) => issue.id));
+    for (const issue of planned) {
+      if (!unsharedIds.has(issue.id)) overlapDeferred.add(Number(issue.id));
+    }
+
+    if (unshared.length === 0) {
+      console.log("The overlap check deferred every pick. Moving on to the next round.");
+      continue;
+    }
+
     const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
-    const picks = planned.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
+    const picks = unshared.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
 
     // -----------------------------------------------------------------------
     // Phase 1b: Critique

@@ -207,6 +207,20 @@ export function openPullRequests(): OpenPullRequest[] {
   return sameRepository(listed).map(({ number, headRefName }) => ({ number, headRefName }));
 }
 
+// The open pull requests into main from this repository's branches, whoever
+// opened them and whichever queue built them, for the overlap check
+// (lib/overlap.mts, #421). A fork's PR is left out, as in openPullRequests: it
+// would let an outsider hold any issue back by touching its files.
+export function openPullRequestsIntoMain(): OpenPullRequest[] {
+  const listed = JSON.parse(
+    sh(
+      process.cwd(), "gh", "pr", "list", "--repo", repoName(), "--state", "open", "--base", "main", "--limit", "1000",
+      "--json", "number,headRefName,isCrossRepository",
+    ),
+  ) as ListedPullRequest[];
+  return sameRepository(listed).map(({ number, headRefName }) => ({ number, headRefName }));
+}
+
 // The open pull request from this repository's `branch`, or a new one for it
 // with the title and body, as its URL. A fork's PR from a branch of the same
 // name doesn't count.

@@ -352,3 +352,19 @@ describe(".sandcastle/.env.example budget", () => {
     }
   });
 });
+
+// The host defers overlapping picks in code before the critique runs, and the
+// critique still runs on what's left, for dependencies and module overlaps
+// (#421).
+describe("main.mts's overlap wiring", () => {
+  it("runs the overlap check after the planner and before the critique", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const planCall = mainMts.indexOf("planRound(");
+    const overlapCall = mainMts.indexOf("deferOverlaps(");
+    const critiqueCall = mainMts.indexOf("critiqueRound(");
+
+    assert.notEqual(overlapCall, -1, "main.mts doesn't call deferOverlaps(");
+    assert.notEqual(critiqueCall, -1, "main.mts doesn't call critiqueRound(");
+    assert.ok(planCall < overlapCall && overlapCall < critiqueCall, "main.mts doesn't check overlaps between the plan and the critique");
+  });
+});

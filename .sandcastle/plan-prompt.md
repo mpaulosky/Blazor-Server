@@ -37,12 +37,21 @@ when the issue needs it: each one costs a run.
 
 An empty list, `[]`, means the issue needs none of them. If you leave `roles` out, every optional role runs.
 
+# FILES
+
+For each issue you pick, list in `files` the paths, relative to the repository root, that you expect the issue to change: the files it edits, adds or deletes, its tests
+included. Read the repository to find them. The host builds no two issues at once that name the same path, nor an issue that names a path an open pull request changes. An
+issue with no `files`, or an empty list, is treated as touching anything, and is built only on its own, so name every path you can.
+
 # OUTPUT
 
 Output your plan as a JSON object wrapped in `<plan>` tags:
 
 <plan>
-{"issues": [{"id": "42", "title": "Fix auth bug", "roles": []}, {"id": "43", "title": "Add a Palette picker", "roles": ["architect", "ui", "scribe"]}]}
+{"issues": [
+{"id": "42", "title": "Fix auth bug", "roles": [], "files": ["src/UI/Program.cs", "tests/UI.Tests.Integration/ProgramTests.cs"]},
+{"id": "43", "title": "Add a Palette picker", "roles": ["architect", "ui", "scribe"], "files": ["src/UI/Components/Features/Palettes/PaletteMenu.razor", "CONTEXT.md"]}
+]}
 </plan>
 
 Include only unblocked issues. If every issue is blocked, include the single highest-priority candidate (the one with the fewest or weakest dependencies).

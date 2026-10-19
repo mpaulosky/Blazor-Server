@@ -77,7 +77,7 @@ Saved search for everything waiting on a human: `is:open label:sandcastle:needs-
 2. **Intake**: judge every unjudged `Sandcastle` issue against the Definition of Ready.
 3. **Blocker gate**: hold back issues whose blockers haven't landed (unchanged from today).
 4. **Plan**: the planner picks issues to build in parallel and the optional roles each needs.
-5. **Critique**: defer picks that aren't safe to build alongside the others.
+5. **Critique**: defer, in code, picks whose predicted files overlap another pick or an open PR, then have the critique defer picks that aren't safe to build alongside the others.
 6. **Build**: one sandbox per picked issue runs the role team, the gate and publishes a PR.
 
 The queue is the `Sandcastle` label in Actions. A local run must name its scope, either an issue number or a dev label such as `Sandcastle:dev` through an environment variable, so it
@@ -195,10 +195,18 @@ The planner (unchanged in purpose) picks the ready issues to build in parallel t
   ([critique decision](https://github.com/mpaulosky/Blazor-Server/issues/57)).
 - **It picks the optional roles.** Each picked issue gets a `roles` field listing any of `architect`, `ui`, `scribe`. The host validates it and runs every role when it's missing or
   invalid ([team decision](https://github.com/mpaulosky/Blazor-Server/issues/58)).
+- **It predicts each pick's files.** Each picked issue gets a `files` field listing the paths the planner expects it to change. The host's overlap check (Phase 5) reads it
+  ([#421](https://github.com/mpaulosky/Blazor-Server/issues/421)).
 
 ## Phase 5: Critique
 
 Decided in [What the plan critique (rubber duck) checks and may change](https://github.com/mpaulosky/Blazor-Server/issues/57).
+
+**The host's overlap check runs first** (`lib/overlap.mts`, [#421](https://github.com/mpaulosky/Blazor-Server/issues/421)), in code with no agent.
+It defers a pick whose `files` share a path with a pick kept earlier in the planner's order, or with any open PR into main from this repository's branches, whoever opened it.
+A pick with no `files` is treated as touching anything: it's built only as the round's only pick with no open PR into main.
+Each deferral gets one comment naming the file and the issue or PR it waits on. One behind an issue built this round is also linked as blocked by it.
+One behind a PR has no link, so the host holds it back for the rest of the run instead. The critique then judges what's left.
 
 The critique checks one thing: whether the round's parallel set is safe, meaning no file or module overlap between picks, and no pick depending on an API or decision another open issue
 will establish. Its only power is to **defer** a pick.
@@ -426,6 +434,7 @@ architect design notes, follow-up pass summaries, build-failure markers and hand
   lib/gate.mts        blocker gate
   lib/intake.mts      intake run and verdict application
   lib/plan.mts        planner
+  lib/overlap.mts     the host's file-overlap deferral of picks
   lib/critique.mts    plan critique and deferral links
   lib/build.mts       role team, gate checkpoints, publish
   lib/follow-up.mts   PR sweep and passes
