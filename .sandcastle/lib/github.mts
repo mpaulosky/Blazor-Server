@@ -798,25 +798,40 @@ export function commentOnPullRequest(
   ghWithStderr(run, ["pr", "comment", String(number), "--repo", repo, "--body-file", "-"], body);
 }
 
-// Every path an open PR changes, from all pages of its file list.
+// Every path an open PR changes, from all pages of its file list. The REST
+// endpoint pages with --paginate, where `gh pr view --json files` may stop at
+// the first 100 paths, so a larger PR was checked against part of its list
+// and the overlap check failed open (#425). A renamed file counts under its
+// old path too, since a branch that edits the old path conflicts with it.
 export function pullRequestFiles(
-  _pr: number,
-  _run: typeof execFileSync = execFileSync,
-  _repo: string = repoName(),
+  pr: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
 ): string[] {
-  throw new Error("Not implemented");
+  return jsonLines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/pulls/${pr}/files`,
+      "--jq", ".[] | (.filename, (.previous_filename // empty)) | @json",
+    ]),
+  ) as string[];
 }
 
 // Whether the host (`poster`) has commented on the issue or PR `number` with a
-// body that carries `marker`.
+// body that carries `marker`. Only the host's own comments count: anyone can
+// comment on a public issue, and a pasted marker mustn't stand in for one. The
+// overlap check reads it so a pick deferred again in a later run isn't
+// commented on every run (#425).
 export function hostCommentedWith(
-  _number: number,
-  _marker: string,
-  _run: typeof execFileSync = execFileSync,
-  _repo: string = repoName(),
-  _poster: string = (signedInLogin ??= hostLogin(_run)),
+  number: number,
+  marker: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  poster: string = (signedInLogin ??= hostLogin(run)),
 ): boolean {
-  throw new Error("Not implemented");
+  const comments = jsonLines(
+    ghWithStderr(run, ["api", "--paginate", `repos/${repo}/issues/${number}/comments`, "--jq", ".[] | {body, author: .user.login} | @json"]),
+  ) as { body: string; author: string }[];
+  return comments.some((comment) => comment.author === poster && comment.body.includes(marker));
 }
 
 // Any issue's body, or "" when it has none.

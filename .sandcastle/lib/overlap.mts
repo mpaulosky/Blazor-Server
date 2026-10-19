@@ -5,8 +5,11 @@
 // pick whose predicted `files` (lib/plan.mts) share a path with a pick kept
 // earlier in the planner's order or with an open pull request into main, from
 // any author or queue. Two builds of one file conflict once the first merges
-// (#421). A pick with no files, or an empty list, is treated as touching
-// anything: it's built only as the round's only pick with no open PR into main.
+// (#421). A folder covers the paths under it. A pick with no files, or an
+// empty list, is treated as touching anything: it waits behind the first kept
+// pick or open PR, and with neither, the first such pick is built and the rest
+// wait behind it. Each deferral is a hold, released if what it waits on is a
+// pick that opens no PR this round (see lastingHolds).
 // ---------------------------------------------------------------------------
 
 import {
@@ -18,7 +21,7 @@ import {
   type OpenPullRequest,
 } from "./github.mts";
 import { OVERLAP_MARKER } from "./config.mts";
-import type { PlannedIssue } from "./plan.mts";
+import { resolveFiles, type PlannedIssue } from "./plan.mts";
 import { outcomeReport, type OutcomeReport } from "./report.mts";
 
 // The GitHub reads and writes the check needs; tests pass a stub. Each one
@@ -27,6 +30,8 @@ export type OverlapGitHub = {
   // Every open pull request whose base is main, whoever opened it.
   openPullRequestsIntoMain(): OpenPullRequest[];
   pullRequestFiles(pr: number): string[];
+  // Not called since #425, which stopped linking a hold behind a pick: the
+  // hold is released when that pick opens no PR, and a link would outlast it.
   addBlockedBy(issue: number, blocker: number): void;
   comment(issue: number, body: string): void;
   // Whether the host already posted an overlap deferral comment (OVERLAP_MARKER)
@@ -44,11 +49,14 @@ const liveGitHub: OverlapGitHub = {
 
 // Why a pick waits: the shared path (none for a pick with no files), the issue
 // or pull request it waits on, and whether it's linked as blocked by that
-// issue, which holds it back in later runs too.
+// issue. deferOverlaps no longer links (#425): a hold behind a pick is released
+// when that pick opens no PR, and a link would outlast the release.
 type Deferral = { file?: string; on: { kind: "issue" | "pr"; number: number }; linked: boolean };
 
 // The comment posted on a deferred pick, naming the file and the issue or pull
-// request it waits on, as the critique's deferral comment does.
+// request it waits on, as the critique's deferral comment does. It carries
+// OVERLAP_MARKER, so a later run that defers the pick again finds it and
+// doesn't post another (#425).
 export function overlapComment({ file, on, linked }: Deferral): string {
   const ref = `#${on.number}`;
   const what = `${on.kind === "issue" ? "issue" : "pull request"} ${ref}`;
@@ -58,10 +66,15 @@ export function overlapComment({ file, on, linked }: Deferral): string {
       : `It's expected to change \`${file}\`, which ${what} changes too.`;
   const after = linked
     ? `It won't be built until ${ref} lands. To override, delete the "blocked by ${ref}" link on this issue.`
-    : "It won't be built in this run; a later run checks again.";
-  return [`Sandcastle deferred this issue behind ${ref}, so the two don't conflict once one merges.`, `**Reason:** ${reason}`, after].join(
-    "\n\n",
-  );
+    : on.kind === "issue"
+      ? `It waits while ${ref} is built. If ${ref} opens no pull request, a later round of this run can build it; otherwise a later run checks again.`
+      : "It won't be built in this run; a later run checks again.";
+  return [
+    OVERLAP_MARKER,
+    `Sandcastle deferred this issue behind ${ref}, so the two don't conflict once one merges.`,
+    `**Reason:** ${reason}`,
+    after,
+  ].join("\n\n");
 }
 
 // A pick the check held back, and what it waits on.
@@ -71,12 +84,20 @@ export type OverlapHold = { id: number; behind: { kind: "issue" | "pr"; number: 
 // the rest.
 export type OverlapResult = { kept: PlannedIssue[]; holds: OverlapHold[] };
 
-// Return the picks still to build this round, in the planner's order. Each
-// deferred pick gets one comment naming the shared file and the PR or issue it
-// waits on, and reaches the run report as "deferred". A pick deferred behind a
-// pick built this round is also linked as blocked by it; one deferred behind a
-// pull request isn't, since a PR can't be a native blocker. A failed GitHub
-// read throws, so nothing is built on an overlap the host couldn't check.
+// Whether two repo-relative paths touch the same file: they're equal, or one is
+// a folder the other sits under. `src/UI` covers `src/UI/Program.cs` but not
+// `src/UIKit/a.cs`.
+function sharesPath(a: string, b: string): boolean {
+  return a === b || b.startsWith(`${a}/`) || a.startsWith(`${b}/`);
+}
+
+// Return the picks still to build this round, in the planner's order, and a
+// hold on each deferred pick saying what it waits on. Each deferred pick
+// reaches the run report as "deferred", and gets one comment naming the shared
+// file and the PR or issue it waits on, unless the host already posted one in
+// an earlier run. The holds aren't final: main.mts keeps only lastingHolds
+// once the critique and the build have run. A failed GitHub read throws, so
+// nothing is built on an overlap the host couldn't check.
 export function deferOverlaps(
   picks: readonly PlannedIssue[],
   github: OverlapGitHub = liveGitHub,
@@ -85,78 +106,75 @@ export function deferOverlaps(
 ): OverlapResult {
   const openPrs = github
     .openPullRequestsIntoMain()
-    .map((pr) => ({ number: pr.number, files: new Set(github.pullRequestFiles(pr.number)) }));
+    .map((pr) => ({ number: pr.number, files: github.pullRequestFiles(pr.number) }));
 
-  const hasFiles = (issue: PlannedIssue): issue is PlannedIssue & { files: string[] } =>
-    issue.files !== undefined && issue.files.length > 0;
+  // readyPicks has resolved the files already; resolving again keeps a path
+  // that would reach the log clean whoever calls this.
+  const filesOf = new Map(picks.map((issue) => [issue, resolveFiles(issue.files)]));
 
   // Each path a kept pick will change, with that pick's number, so a later pick
   // names the first kept pick it collides with.
-  const claimed = new Map<string, number>();
+  const claimed: { file: string; id: number }[] = [];
   const kept: PlannedIssue[] = [];
   const deferrals = new Map<PlannedIssue, Deferral>();
 
   // The first of the pick's files that a kept pick or an open PR changes. A
-  // kept pick wins over a PR on the same file, since only a pick can be linked.
+  // kept pick wins over a PR on the same file.
   const firstOverlap = (files: readonly string[]): Deferral | undefined => {
     for (const file of files) {
-      const earlier = claimed.get(file);
-      if (earlier !== undefined) return { file, on: { kind: "issue", number: earlier }, linked: true };
-      const pr = openPrs.find((open) => open.files.has(file));
+      const earlier = claimed.find((claim) => sharesPath(claim.file, file));
+      if (earlier) return { file, on: { kind: "issue", number: earlier.id }, linked: false };
+      const pr = openPrs.find((open) => open.files.some((changed) => sharesPath(changed, file)));
       if (pr) return { file, on: { kind: "pr", number: pr.number }, linked: false };
     }
     return undefined;
   };
 
-  for (const issue of picks.filter(hasFiles)) {
-    const deferral = firstOverlap(issue.files);
+  const named = picks.filter((issue) => filesOf.get(issue)!.length > 0);
+  for (const issue of named) {
+    const files = filesOf.get(issue)!;
+    const deferral = firstOverlap(files);
     if (deferral) {
       deferrals.set(issue, deferral);
       continue;
     }
     kept.push(issue);
-    for (const file of issue.files) claimed.set(file, Number(issue.id));
+    for (const file of files) claimed.push({ file, id: Number(issue.id) });
   }
 
-  // A pick with no files may touch anything, so it's built only alone with no
-  // open PR. Otherwise it waits behind the first pick kept this round, or else
-  // the first open PR, or else another pick that names no files, unlinked:
-  // linking two such picks to each other would leave both waiting forever.
+  // A pick with no files may touch anything, so it waits behind the first pick
+  // kept this round, or else the first open PR. With neither in its way, the
+  // first such pick is built and the rest wait behind it: holding each behind
+  // another would leave them all waiting for nothing (#425).
   const [firstKept] = kept;
   const [firstPr] = openPrs;
-  for (const issue of picks.filter((pick) => !hasFiles(pick))) {
-    if (picks.length === 1 && !firstPr) {
+  let blocker: Deferral["on"] | undefined = firstKept
+    ? { kind: "issue", number: Number(firstKept.id) }
+    : firstPr && { kind: "pr", number: firstPr.number };
+  for (const issue of picks.filter((pick) => !named.includes(pick))) {
+    if (blocker === undefined) {
       kept.push(issue);
-    } else if (firstKept) {
-      deferrals.set(issue, { on: { kind: "issue", number: Number(firstKept.id) }, linked: true });
-    } else if (firstPr) {
-      deferrals.set(issue, { on: { kind: "pr", number: firstPr.number }, linked: false });
+      blocker = { kind: "issue", number: Number(issue.id) };
     } else {
-      // With no open PR, the first branch kept this pick unless the round has
-      // another, so the find can't miss.
-      const other = picks.find((pick) => pick !== issue)!;
-      deferrals.set(issue, { on: { kind: "issue", number: Number(other.id) }, linked: false });
+      deferrals.set(issue, { on: blocker, linked: false });
     }
   }
 
-  for (const issue of picks) {
-    const deferral = deferrals.get(issue);
-    if (!deferral) continue;
+  // Every read before any write: a deferral comment can't be checked, so
+  // nothing is posted or built on a guess.
+  const deferred = picks.filter((issue) => deferrals.has(issue));
+  const commented = new Set(deferred.filter((issue) => github.commented(Number(issue.id))));
+
+  const holds: OverlapHold[] = [];
+  for (const issue of deferred) {
+    const deferral = deferrals.get(issue)!;
     const id = Number(issue.id);
     const ref = `#${deferral.on.number}`;
-    if (deferral.linked) {
-      try {
-        github.addBlockedBy(id, deferral.on.number);
-      } catch (error) {
-        // Still deferred: building it beside the pick it overlaps is the
-        // conflict this check exists to stop.
-        log(`  ⚠ #${id} couldn't be linked as blocked by ${ref} (${error}); it's deferred for this run only.`);
-        deferral.linked = false;
-      }
-    }
+    holds.push({ id, behind: deferral.on });
     report.record({ kind: "issue", number: id, outcome: "deferred", detail: `behind ${ref}` });
     const why = deferral.file === undefined ? "it names no files" : deferral.file;
     log(`  ⏸ The overlap check defers #${id} behind ${ref} (${why}).`);
+    if (commented.has(issue)) continue;
     try {
       github.comment(id, overlapComment(deferral));
     } catch (error) {
@@ -164,13 +182,14 @@ export function deferOverlaps(
     }
   }
 
-  return { kept: picks.filter((issue) => kept.includes(issue)), holds: [] };
+  return { kept: picks.filter((issue) => kept.includes(issue)), holds };
 }
 
 // The numbers of the held issues whose hold lasts the rest of the run: those
 // behind a pull request, and those behind a pick that opened a PR (`published`
 // holds those picks' numbers). A hold behind a pick the critique deferred, or
-// whose build opened no PR, is released.
-export function lastingHolds(_holds: readonly OverlapHold[], _published: ReadonlySet<number>): number[] {
-  throw new Error("Not implemented");
+// whose build opened no PR, is released, so the held pick can be planned again
+// in a later round of this run rather than wait out the run for nothing (#425).
+export function lastingHolds(holds: readonly OverlapHold[], published: ReadonlySet<number>): number[] {
+  return holds.filter(({ behind }) => behind.kind === "pr" || published.has(behind.number)).map((hold) => hold.id);
 }

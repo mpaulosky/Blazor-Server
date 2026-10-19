@@ -2,7 +2,7 @@
 
 A planner has picked the issues below to build in parallel this round, each on its own branch from `main`.
 
-The picked issues:
+The picked issues. Each one's `files` lists the paths the planner expects it to change, which may miss some:
 
 <picked-json>
 
