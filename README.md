@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.176](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.176) | 2026-10-19 | feat(sandcastle): Don't build two issues at once that change the same file | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-423-feat-sandcastle-don-t-build-two-issues-at-once-that-change-the-same-file.md) |
 | [v0.0.175](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.175) | 2026-10-19 | fix(sandcastle): Give the sandbox the host's git identity before the follow-up pass merges main | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-420-fix-sandcastle-give-the-sandbox-the-host-s-git-identity-before-the-follow-up-pass-merges-main.md) |
 | [v0.0.174](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.174) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-417-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.173](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.173) | 2026-10-18 | chore(deps): Have Dependabot ignore claude-code-action | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-414-chore-deps-have-dependabot-ignore-claude-code-action.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.169](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.169) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-403-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.168](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.168) | 2026-10-16 | build(deps): Update NuGet packages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-401-build-deps-update-nuget-packages.md) |
 | [v0.0.167](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.167) | 2026-10-16 | build(deps): Pin MessagePack 2.5.307 past GHSA-qhrr-8q5h-9q3h | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-399-build-deps-pin-messagepack-2-5-307-past-ghsa-qhrr-8q5h-9q3h.md) |
-| [v0.0.166](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.166) | 2026-10-15 | feat(ui): Add the accent touches: the title gradient, StatTile, the Profile table header and the browser chrome | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-15-pr-396-feat-ui-add-the-accent-touches-the-title-gradient-stattile-the-profile-table-header-and-the-browser-chrome.md) |
 
 <!-- RELEASES_END -->
 
