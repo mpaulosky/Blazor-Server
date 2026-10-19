@@ -364,14 +364,43 @@ export async function createCheckedSandbox(branch: string, host: CheckedSandboxH
   if (problems.length > 0) {
     throw new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`);
   }
-  return host.createSandbox(branch);
+  const sandbox = await host.createSandbox(branch);
+  try {
+    await setGitIdentity(sandbox, host.gitIdentity());
+  } catch (error) {
+    await sandbox.close();
+    throw error;
+  }
+  return sandbox;
+}
+
+// Sets `identity` as the sandbox's global git user.name and user.email, each
+// only when the host has it, as @ai-hero/sandcastle's "Setting up sandbox"
+// step does. A failed `git config` throws rather than leave a merge to fail
+// later without a committer identity.
+async function setGitIdentity(sandbox: sandcastle.Sandbox, identity: { name: string | undefined; email: string | undefined }): Promise<void> {
+  for (const [key, value] of [["user.name", identity.name], ["user.email", identity.email]] as const) {
+    if (value === undefined) continue;
+    const set = await sandbox.exec(`git config --global ${key} ${shellWord(value)}`);
+    if (set.exitCode !== 0) {
+      throw new Error(`setting git ${key} in the sandbox failed: ${set.stderr.trim()}`);
+    }
+  }
+}
+
+// The host's git config value for `key`, or undefined when it's unset or
+// empty: git exits non-zero for an unset key.
+function hostGitConfig(key: string): string | undefined {
+  try {
+    return git("config", key) || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const liveCheckedSandboxHost: CheckedSandboxHost = {
   createSandbox: (branch) => sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree }),
-  gitIdentity: () => {
-    throw new Error("Not implemented");
-  },
+  gitIdentity: () => ({ name: hostGitConfig("user.name"), email: hostGitConfig("user.email") }),
 };
 
 const liveHost: BuildHost = {
