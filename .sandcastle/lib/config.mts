@@ -254,6 +254,10 @@ export const BUILD_FAILURE_CAP = 2;
 // round finds it again to check whether every child has finished.
 export const UMBRELLA_MARKER = "<!-- sandcastle:umbrella -->";
 
+// The HTML comment marking the overlap check's deferral comment on an issue
+// (see lib/overlap.mts), so a later run finds it and doesn't post another.
+export const OVERLAP_MARKER = "<!-- sandcastle:overlap-deferred -->";
+
 // Hooks run inside the sandbox before the agent starts each iteration.
 // pnpm install ensures the sandbox always has fresh dependencies. The copied
 // node_modules records the host's pnpm store, so pnpm may rebuild it against

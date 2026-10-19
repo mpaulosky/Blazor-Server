@@ -12,10 +12,12 @@
 import {
   addBlockedBy,
   commentOnIssue,
+  hostCommentedWith,
   openPullRequestsIntoMain,
   pullRequestFiles,
   type OpenPullRequest,
 } from "./github.mts";
+import { OVERLAP_MARKER } from "./config.mts";
 import type { PlannedIssue } from "./plan.mts";
 import { outcomeReport, type OutcomeReport } from "./report.mts";
 
@@ -27,6 +29,9 @@ export type OverlapGitHub = {
   pullRequestFiles(pr: number): string[];
   addBlockedBy(issue: number, blocker: number): void;
   comment(issue: number, body: string): void;
+  // Whether the host already posted an overlap deferral comment (OVERLAP_MARKER)
+  // on the issue, so a later run doesn't post another.
+  commented(issue: number): boolean;
 };
 
 const liveGitHub: OverlapGitHub = {
@@ -34,6 +39,7 @@ const liveGitHub: OverlapGitHub = {
   pullRequestFiles,
   addBlockedBy,
   comment: commentOnIssue,
+  commented: (issue) => hostCommentedWith(issue, OVERLAP_MARKER),
 };
 
 // Why a pick waits: the shared path (none for a pick with no files), the issue
@@ -58,6 +64,13 @@ export function overlapComment({ file, on, linked }: Deferral): string {
   );
 }
 
+// A pick the check held back, and what it waits on.
+export type OverlapHold = { id: number; behind: { kind: "issue" | "pr"; number: number } };
+
+// The picks still to build this round, in the planner's order, and the holds on
+// the rest.
+export type OverlapResult = { kept: PlannedIssue[]; holds: OverlapHold[] };
+
 // Return the picks still to build this round, in the planner's order. Each
 // deferred pick gets one comment naming the shared file and the PR or issue it
 // waits on, and reaches the run report as "deferred". A pick deferred behind a
@@ -69,7 +82,7 @@ export function deferOverlaps(
   github: OverlapGitHub = liveGitHub,
   log: (line: string) => void = console.log,
   report: OutcomeReport = outcomeReport,
-): PlannedIssue[] {
+): OverlapResult {
   const openPrs = github
     .openPullRequestsIntoMain()
     .map((pr) => ({ number: pr.number, files: new Set(github.pullRequestFiles(pr.number)) }));
@@ -151,5 +164,13 @@ export function deferOverlaps(
     }
   }
 
-  return picks.filter((issue) => kept.includes(issue));
+  return { kept: picks.filter((issue) => kept.includes(issue)), holds: [] };
+}
+
+// The numbers of the held issues whose hold lasts the rest of the run: those
+// behind a pull request, and those behind a pick that opened a PR (`published`
+// holds those picks' numbers). A hold behind a pick the critique deferred, or
+// whose build opened no PR, is released.
+export function lastingHolds(_holds: readonly OverlapHold[], _published: ReadonlySet<number>): number[] {
+  throw new Error("Not implemented");
 }

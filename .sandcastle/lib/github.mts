@@ -798,11 +798,25 @@ export function commentOnPullRequest(
   ghWithStderr(run, ["pr", "comment", String(number), "--repo", repo, "--body-file", "-"], body);
 }
 
-// The paths an open PR changes.
-export function pullRequestFiles(pr: number): string[] {
-  return JSON.parse(
-    sh(process.cwd(), "gh", "pr", "view", String(pr), "--repo", repoName(), "--json", "files", "--jq", "[.files[].path]"),
-  ) as string[];
+// Every path an open PR changes, from all pages of its file list.
+export function pullRequestFiles(
+  _pr: number,
+  _run: typeof execFileSync = execFileSync,
+  _repo: string = repoName(),
+): string[] {
+  throw new Error("Not implemented");
+}
+
+// Whether the host (`poster`) has commented on the issue or PR `number` with a
+// body that carries `marker`.
+export function hostCommentedWith(
+  _number: number,
+  _marker: string,
+  _run: typeof execFileSync = execFileSync,
+  _repo: string = repoName(),
+  _poster: string = (signedInLogin ??= hostLogin(_run)),
+): boolean {
+  throw new Error("Not implemented");
 }
 
 // Any issue's body, or "" when it has none.

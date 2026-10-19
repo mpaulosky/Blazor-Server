@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { OPTIONAL_ROLES } from "./config.mts";
-import { readyPicks, resolveRoles } from "./plan.mts";
+import { pickIssues, readyPicks, resolveFiles, resolveRoles, unpickedReady } from "./plan.mts";
+import type { SandcastleIssue } from "./github.mts";
 
 describe("readyPicks", () => {
   const ready = [{ number: 4 }, { number: 5 }];
@@ -79,5 +80,119 @@ describe("plan-prompt.md", () => {
   it("asks the planner for a files list per pick", () => {
     assert.match(prompt, /`files`/);
     assert.match(prompt, /"files": \[/);
+  });
+});
+
+// AC 3: the planner's `files` are made into clean repo-relative paths.
+describe("resolveFiles", () => {
+  const root = "/home/agent/workspace";
+
+  it("turns an absolute path under the repo root into a repo-relative one", () => {
+    assert.deepEqual(resolveFiles([`${root}/.sandcastle/lib/build.mts`], root), [".sandcastle/lib/build.mts"]);
+  });
+
+  it("uses the sandbox's checkout as the root by default", () => {
+    assert.deepEqual(resolveFiles(["/home/agent/workspace/.sandcastle/lib/build.mts"]), [".sandcastle/lib/build.mts"]);
+  });
+
+  it("leaves a path that is already repo-relative as it is", () => {
+    assert.deepEqual(resolveFiles(["src/UI/Program.cs"], root), ["src/UI/Program.cs"]);
+  });
+
+  it("drops a leading ./", () => {
+    assert.deepEqual(resolveFiles(["./lib/plan.mts"], root), ["lib/plan.mts"]);
+  });
+
+  it("drops trailing slashes, so a folder is a bare path", () => {
+    assert.deepEqual(resolveFiles(["src/UI/", "docs//"], root), ["src/UI", "docs"]);
+  });
+
+  it("trims surrounding spaces", () => {
+    assert.deepEqual(resolveFiles(["  lib/plan.mts \t"], root), ["lib/plan.mts"]);
+  });
+
+  it("drops blank entries", () => {
+    assert.deepEqual(resolveFiles(["", "   ", "a.mts"], root), ["a.mts"]);
+  });
+
+  it("drops an entry that is only a ./ or the repo root itself", () => {
+    assert.deepEqual(resolveFiles(["./", root, `${root}/`, "a.mts"], root), ["a.mts"]);
+  });
+
+  it("drops an entry with a line break or other control character", () => {
+    assert.deepEqual(
+      resolveFiles(["a.mts\n::error::injected", "b\r.mts", "c\u0000.mts", "d\u001b[31m.mts", "e\u007f.mts", "ok.mts"], root),
+      ["ok.mts"],
+    );
+  });
+
+  it("drops an absolute path outside the repo root rather than guess at it", () => {
+    assert.deepEqual(resolveFiles(["/etc/passwd", "/home/agent/workspace-other/a.mts", "a.mts"], root), ["a.mts"]);
+  });
+
+  it("keeps each path once", () => {
+    assert.deepEqual(resolveFiles(["a.mts", `${root}/a.mts`, "./a.mts"], root), ["a.mts"]);
+  });
+
+  it("reads a missing list as an empty one", () => {
+    assert.deepEqual(resolveFiles(undefined, root), []);
+  });
+});
+
+describe("readyPicks files", () => {
+  it("resolves each pick's files, so the overlap check compares clean paths", () => {
+    const picks = readyPicks(
+      [{ id: "4", title: "A", files: ["/home/agent/workspace/.sandcastle/lib/build.mts", "./x.mts", ""] }],
+      [{ number: 4 }],
+      () => {},
+    );
+
+    assert.deepEqual(picks[0]!.files, [".sandcastle/lib/build.mts", "x.mts"]);
+  });
+
+  it("leaves a pick that named no files without any, so it is still treated as touching anything", () => {
+    const picks = readyPicks([{ id: "4", title: "A" }], [{ number: 4 }], () => {});
+
+    assert.equal((picks[0]!.files ?? []).length, 0);
+  });
+});
+
+// AC 5: the critique gets each pick's files, and an overlap-deferred pick isn't
+// passed to it as unpicked.
+describe("pickIssues", () => {
+  const issue = (number: number): SandcastleIssue =>
+    ({ number, title: `Issue ${number}`, body: "", labels: [], comments: [] }) as unknown as SandcastleIssue;
+
+  it("gives each kept pick the files the planner named", () => {
+    const picks = pickIssues([{ id: "4", title: "A", files: ["a.mts", "b/"] }], [issue(4), issue(5)]);
+
+    assert.deepEqual(picks.map((pick) => pick.number), [4]);
+    assert.deepEqual(picks[0]!.files, ["a.mts", "b"]);
+  });
+
+  it("gives a pick that named no files an empty list", () => {
+    const picks = pickIssues([{ id: "4", title: "A" }], [issue(4)]);
+
+    assert.deepEqual(picks[0]!.files, []);
+  });
+
+  it("resolves each pick's optional roles from the planner's raw field", () => {
+    const picks = pickIssues([{ id: "4", title: "A", roles: ["scribe"] }, { id: "5", title: "B" }], [issue(4), issue(5)]);
+
+    assert.deepEqual(picks[0]!.roles, ["scribe"]);
+    assert.deepEqual(picks[1]!.roles, [...OPTIONAL_ROLES]);
+  });
+});
+
+describe("unpickedReady", () => {
+  const issue = (number: number) => ({ number, title: `Issue ${number}` }) as unknown as SandcastleIssue;
+
+  it("leaves out every issue the planner picked, including one the overlap check then deferred", () => {
+    const ready = [issue(1), issue(2), issue(3)];
+
+    // #2 was planned and then deferred by the overlap check; #3 was never picked.
+    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }, { id: "2", title: "B" }]);
+
+    assert.deepEqual(unpicked.map((entry) => entry.number), [3]);
   });
 });

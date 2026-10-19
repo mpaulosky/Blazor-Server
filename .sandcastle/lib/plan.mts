@@ -81,3 +81,30 @@ export function readyPicks(
     return true;
   });
 }
+
+// Where the repository is checked out inside a sandbox, so an absolute path the
+// planner read there can be made repo-relative.
+export const SANDBOX_REPO_ROOT = "/home/agent/workspace";
+
+// The planner's `files` as clean repo-relative paths the overlap check can
+// compare: an absolute path under `root` made relative, a leading `./` and
+// trailing slashes dropped, and blanks, entries with control characters and
+// paths outside `root` left out. A missing list is an empty one.
+export function resolveFiles(_files: readonly string[] | undefined, _root: string = SANDBOX_REPO_ROOT): string[] {
+  throw new Error("Not implemented");
+}
+
+// The ready issues the planner didn't pick: not an overlap-deferred pick, which
+// the planner did pick and the host held back.
+export function unpickedReady(_ready: readonly SandcastleIssue[], _planned: readonly PlannedIssue[]): SandcastleIssue[] {
+  throw new Error("Not implemented");
+}
+
+// The issue each kept pick stands for, with the optional roles resolved from the
+// planner's raw `roles` and the `files` it named, so the critique sees them.
+export function pickIssues(
+  _kept: readonly PlannedIssue[],
+  _ready: readonly SandcastleIssue[],
+): (SandcastleIssue & { roles: OptionalRole[]; files: string[] })[] {
+  throw new Error("Not implemented");
+}

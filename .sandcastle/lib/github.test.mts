@@ -21,6 +21,7 @@ import {
   handBack,
   hasLabel,
   headChecksOf,
+  hostCommentedWith,
   hostLogin,
   issueEvents,
   issueLabels,
@@ -33,6 +34,7 @@ import {
   openIssuesWithComment,
   openPullRequest,
   openPullRequestsForSweep,
+  pullRequestFiles,
   ownerApproved,
   pushAccess,
   removeIssueLabel,
@@ -1509,5 +1511,68 @@ describe("addPullRequestLabel", () => {
     addPullRequestLabel(42, "sandcastle:needs-human", run, "o/r");
 
     assert.deepEqual(calls[0]!.args, ["pr", "edit", "42", "--repo", "o/r", "--add-label", "sandcastle:needs-human"]);
+  });
+});
+
+// AC 4: a PR's file list is read from every page, not only the first 100 paths.
+describe("pullRequestFiles", () => {
+  it("reads the PR's files from the paginated REST endpoint", () => {
+    const { calls, run } = recordingGh(['"a.mts"\n"src/b.cs"\n']);
+
+    const files = pullRequestFiles(7, run, "o/r");
+
+    assert.deepEqual(files, ["a.mts", "src/b.cs"]);
+    assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/pulls/7/files"]);
+  });
+
+  it("returns every path of a PR that changes more than 100, across pages", () => {
+    const page = (from: number, to: number) =>
+      Array.from({ length: to - from }, (_, i) => JSON.stringify(`dir/file${from + i}.txt`)).join("\n");
+    // --paginate prints each page's output in turn, with a blank line between.
+    const { run } = recordingGh([`${page(0, 100)}\n\n${page(100, 250)}\n`]);
+
+    const files = pullRequestFiles(7, run, "o/r");
+
+    assert.equal(files.length, 250);
+    assert.equal(files[249], "dir/file249.txt");
+  });
+
+  it("returns no paths for a PR that changes nothing", () => {
+    const { run } = recordingGh([""]);
+
+    assert.deepEqual(pullRequestFiles(7, run, "o/r"), []);
+  });
+
+  it("throws when gh fails, so the caller doesn't treat the PR as touching nothing", () => {
+    const run = (() => {
+      throw new Error("gh down");
+    }) as unknown as typeof execFileSync;
+
+    assert.throws(() => pullRequestFiles(7, run, "o/r"));
+  });
+});
+
+// AC 6: the overlap check finds its own earlier deferral comment by its marker.
+describe("hostCommentedWith", () => {
+  const marker = "<!-- sandcastle:overlap-deferred -->";
+  const comment = (body: string, author: string) => JSON.stringify({ body, author });
+
+  it("is true when the host posted a comment carrying the marker", () => {
+    const { calls, run } = recordingGh([[comment("hello", "other"), comment(`${marker}\nDeferred.`, "host")].join("\n")]);
+
+    assert.equal(hostCommentedWith(9, marker, run, "o/r", "host"), true);
+    assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/issues/9/comments"]);
+  });
+
+  it("is false when only someone else pasted the marker", () => {
+    const { run } = recordingGh([comment(`${marker} pasted`, "stranger")]);
+
+    assert.equal(hostCommentedWith(9, marker, run, "o/r", "host"), false);
+  });
+
+  it("is false when no comment carries the marker", () => {
+    const { run } = recordingGh([comment("unrelated", "host")]);
+
+    assert.equal(hostCommentedWith(9, marker, run, "o/r", "host"), false);
   });
 });

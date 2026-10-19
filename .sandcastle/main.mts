@@ -347,7 +347,7 @@ try {
     // In code, before the critique: two builds of one file conflict once the
     // first merges (#421). The critique still runs on what's left, for
     // dependencies and for overlaps of modules rather than paths.
-    const unshared = deferOverlaps(planned);
+    const { kept: unshared } = deferOverlaps(planned);
     const unsharedIds = new Set(unshared.map((issue) => issue.id));
     for (const issue of planned) {
       if (!unsharedIds.has(issue.id)) overlapDeferred.add(Number(issue.id));
