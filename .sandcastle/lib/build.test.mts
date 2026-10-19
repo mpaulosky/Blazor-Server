@@ -1756,8 +1756,9 @@ function identityCheckingSandbox() {
 function checkedSandboxHost(
   sandbox: Sandbox,
   identity: { name: string | undefined; email: string | undefined },
+  worktreeProblems: string[] = [],
 ): CheckedSandboxHost {
-  return { createSandbox: async () => sandbox, gitIdentity: () => identity };
+  return { createSandbox: async () => sandbox, gitIdentity: () => identity, worktreeProblems: () => worktreeProblems };
 }
 
 describe("createCheckedSandbox", () => {
@@ -1801,6 +1802,58 @@ describe("createCheckedSandbox", () => {
     await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: undefined, email: undefined }));
 
     assert.deepEqual(execCalls, []);
+  });
+
+  // A CI runner often has user.email configured but not user.name.
+  it("sets only the email when the host has a git user.email but no user.name", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: undefined, email: "ada@example.com" }));
+
+    assert.deepEqual(execCalls, ["git config --global user.email 'ada@example.com'"]);
+  });
+
+  it("sets only the name when the host has a git user.name but no user.email", async () => {
+    const { sandbox, execCalls } = identityCheckingSandbox();
+
+    await createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: undefined }));
+
+    assert.deepEqual(execCalls, ["git config --global user.name 'Ada Lovelace'"]);
+  });
+
+  it("leaves the worktree and its sandbox in place, without closing it, when setting the identity fails and the worktree no longer points at this repository", async () => {
+    let closed = 0;
+    const sandbox = {
+      worktreePath: "/worktree",
+      exec: async () => ({ stdout: "", stderr: "error: could not lock config file", exitCode: 255 }),
+      close: async () => {
+        closed++;
+      },
+    } as unknown as Sandbox;
+
+    await assert.rejects(
+      createCheckedSandbox(
+        "fix/419-identity",
+        checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" }, ["/worktree/.git doesn't point into /repo/.git/worktrees"]),
+      ),
+      /setting git user\.name in the sandbox failed/,
+    );
+    assert.equal(closed, 0);
+  });
+
+  it("throws the error that setting the identity failed with, not the one from closing the sandbox", async () => {
+    const sandbox = {
+      worktreePath: "/worktree",
+      exec: async () => ({ stdout: "", stderr: "error: could not lock config file", exitCode: 255 }),
+      close: async () => {
+        throw new Error("close blew up");
+      },
+    } as unknown as Sandbox;
+
+    await assert.rejects(
+      createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" })),
+      /setting git user\.name in the sandbox failed: error: could not lock config file/,
+    );
   });
 
   it("closes the sandbox and throws when setting the host's identity in it fails, rather than hand it over", async () => {

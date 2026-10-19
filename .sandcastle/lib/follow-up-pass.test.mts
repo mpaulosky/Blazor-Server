@@ -1012,6 +1012,7 @@ describe("runPass", () => {
       createCheckedSandbox(branch, {
         createSandbox: async () => identitySandbox,
         gitIdentity: () => ({ name: "Ada Lovelace", email: "ada@example.com" }),
+        worktreeProblems: () => [],
       });
 
     const outcome = await runPass(passTarget({ reasons: ["check Build Solution is red"] }), issue, BASE, passHost);

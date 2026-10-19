@@ -352,6 +352,9 @@ export type CheckedSandboxHost = {
   // Creates the live sandbox for `branch` (sandcastle.createSandbox).
   createSandbox(branch: string): Promise<sandcastle.Sandbox>;
   gitIdentity(): GitIdentity;
+  // What's wrong with how a worktree finds its repository (see
+  // lib/host-safety.mts); empty when nothing is.
+  worktreeProblems(worktreePath: string): string[];
 };
 
 // The live sandbox for `branch`, for a build and a follow-up pass
@@ -362,7 +365,7 @@ export type CheckedSandboxHost = {
 // pass merges main before any role has (#419).
 export async function createCheckedSandbox(branch: string, host: CheckedSandboxHost = liveCheckedSandboxHost): Promise<sandcastle.Sandbox> {
   const existing = worktreePathFor(process.cwd(), branch);
-  const problems = existsSync(existing) ? worktreeProblems(existing) : [];
+  const problems = existsSync(existing) ? host.worktreeProblems(existing) : [];
   if (problems.length > 0) {
     throw new Error(`the worktree left at ${existing} was tampered with: ${problems.join("; ")}`);
   }
@@ -370,7 +373,16 @@ export async function createCheckedSandbox(branch: string, host: CheckedSandboxH
   try {
     await setGitIdentity(sandbox, host.gitIdentity());
   } catch (error) {
-    await sandbox.close();
+    // Creating the sandbox ran hooks in a worktree that may hold an earlier
+    // round's agent-written code, so check it as buildMarkedIssue does before
+    // close() runs git in it. A failed close() is logged, not thrown, so the
+    // error that stopped the build stays the one reported.
+    const tampered = host.worktreeProblems(sandbox.worktreePath);
+    if (tampered.length > 0) {
+      console.error(`  ✗ left ${sandbox.worktreePath} and its sandbox in place: ${tampered.join("; ")}`);
+    } else {
+      await sandbox.close().catch((closeError) => console.error(`  ⚠ closing the sandbox failed: ${closeError}`));
+    }
     throw error;
   }
   return sandbox;
@@ -403,6 +415,7 @@ function hostGitConfig(key: string): string | undefined {
 const liveCheckedSandboxHost: CheckedSandboxHost = {
   createSandbox: (branch) => sandcastle.createSandbox({ branch, sandbox: agentSandbox(), hooks, copyToWorktree }),
   gitIdentity: () => ({ name: hostGitConfig("user.name"), email: hostGitConfig("user.email") }),
+  worktreeProblems,
 };
 
 const liveHost: BuildHost = {
