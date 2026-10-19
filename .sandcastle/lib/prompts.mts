@@ -100,8 +100,13 @@ export function intakePromptArgs(issues: SandcastleIssue[]): { ISSUES_JSON: stri
 export type InFlightPrompt = { issue: SandcastleIssue; pr: number; branch: string; files: string[] };
 
 // The round's picks, the in-flight issues and the ready issues the planner left
-// out. The critique compares the picks with each other and with the rest.
-export function critiquePromptArgs(picks: (SandcastleIssue & { files?: string[] })[], inFlight: InFlightPrompt[], unpicked: SandcastleIssue[]) {
+// out or the overlap check held back. The critique compares the picks with
+// each other and with the rest.
+export function critiquePromptArgs(
+  picks: (SandcastleIssue & { files?: string[] })[],
+  inFlight: InFlightPrompt[],
+  unpicked: (SandcastleIssue & { note?: string })[],
+) {
   return {
     PICKED_JSON: JSON.stringify(picks),
     IN_FLIGHT_JSON: JSON.stringify(

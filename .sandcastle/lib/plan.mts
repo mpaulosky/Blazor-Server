@@ -115,6 +115,11 @@ export function resolveFiles(files: readonly string[] | undefined, root: string 
   return [...resolved];
 }
 
+// The note on a held issue in the critique's unpicked list, which
+// critique-prompt.md explains: the planner picked it, but it waits this round
+// behind a pick or pull request that changes the same file.
+const HELD_NOTE = "Held back this round by the overlap check: it shares a file with another pick or an open pull request. It's still work to come.";
+
 // The ready issues the critique should treat as unpicked work: those the
 // planner left out, and the picks the overlap check held back this round
 // (`held`, their issue numbers), each with a `note` saying so. A kept pick, one
@@ -126,7 +131,11 @@ export function unpickedReady(
   kept: readonly PlannedIssue[],
   held: readonly number[],
 ): (SandcastleIssue & { note?: string })[] {
-  throw new Error("Not implemented");
+  const keptIds = new Set(kept.map((issue) => issue.id));
+  const heldIds = new Set(held);
+  return ready
+    .filter((issue) => !keptIds.has(String(issue.number)))
+    .map((issue) => (heldIds.has(issue.number) ? { ...issue, note: HELD_NOTE } : issue));
 }
 
 // The issue each kept pick stands for, with the optional roles resolved from the

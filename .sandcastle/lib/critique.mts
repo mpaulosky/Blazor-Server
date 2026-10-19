@@ -46,8 +46,9 @@ export type InFlightIssue = { issue: SandcastleIssue; pr: OpenPullRequest };
 export type CritiqueInput = {
   picks: SandcastleIssue[];
   inFlight: InFlightIssue[];
-  // The ready issues the planner didn't pick.
-  unpicked: SandcastleIssue[];
+  // The ready issues the planner didn't pick, and the picks the overlap check
+  // held back, each with a note saying so (lib/plan.mts#unpickedReady).
+  unpicked: (SandcastleIssue & { note?: string })[];
 };
 
 // The GitHub reads and writes the critique needs; tests pass a stub. Each one

@@ -373,8 +373,9 @@ try {
       // by issue number rather than widen the critique's own types for a field
       // it never reads.
       const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
-      // A pick the overlap check deferred was picked, not left out, so it
-      // isn't passed as unpicked work that a pick might depend on (#425).
+      // A pick the overlap check held back is still work to come, so it's
+      // passed as unpicked, with a note, for the critique's dependency check:
+      // a kept pick that needs it is deferred behind it (#428).
       const critiqued = await critiqueRound({
         picks,
         inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),

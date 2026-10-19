@@ -18,7 +18,8 @@ The in-flight issues. Each one already has an open pull request waiting for revi
 
 </in-flight-json>
 
-The ready issues the planner didn't pick this round:
+The ready issues the planner didn't pick this round. One with a `note` saying it's held was picked, but the host's overlap check held it back this round because it shares a file
+with another pick or an open pull request. It's still open work, so it counts for the dependency check below:
 
 <unpicked-json>
 
