@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-19 | [fix(sandcastle): Give the sandbox the host's git identity before the follow-up pass merges main](2026-10-19-pr-420-fix-sandcastle-give-the-sandbox-the-host-s-git-identity-before-the-follow-up-pass-merges-main.md) | release,automation |
 | 2026-10-18 | [chore: Re-apply the repo-ci-baseline Template](2026-10-18-pr-417-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-18 | [chore(deps): Have Dependabot ignore claude-code-action](2026-10-18-pr-414-chore-deps-have-dependabot-ignore-claude-code-action.md) | release,automation |
 | 2026-10-18 | [fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5](2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md) | release,automation |
