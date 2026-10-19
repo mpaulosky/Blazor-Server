@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { OPTIONAL_ROLES } from "./config.mts";
 import { readyPicks, resolveRoles } from "./plan.mts";
@@ -67,5 +68,16 @@ describe("resolveRoles", () => {
 
   it("drops a repeated role rather than running it twice", () => {
     assert.deepEqual(resolveRoles(["ui", "ui"]), ["ui"]);
+  });
+});
+
+// AC of #421: plan-prompt.md asks the planner for each pick's `files`, the
+// paths it expects the issue to change, which the host defers overlaps on.
+describe("plan-prompt.md", () => {
+  const prompt = readFileSync(new URL("../plan-prompt.md", import.meta.url), "utf8");
+
+  it("asks the planner for a files list per pick", () => {
+    assert.match(prompt, /`files`/);
+    assert.match(prompt, /"files": \[/);
   });
 });

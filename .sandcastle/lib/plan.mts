@@ -15,8 +15,14 @@ import { agentSandbox } from "./skills.mts";
 // (not an array, or naming a role resolveRoles doesn't recognise) must fall
 // back to every optional role, not abort the whole plan the way a schema
 // mismatch would (see "Phase 4: Plan" in docs/plans/sandcastle-workflow.md).
+// `files` is the planner's prediction of the paths the issue will change; the
+// host defers overlapping picks on it (see lib/overlap.mts). It's optional so
+// a plan without it still parses: a pick with no files is treated as touching
+// anything.
 const planSchema = z.object({
-  issues: z.array(z.object({ id: z.string(), title: z.string(), roles: z.unknown().optional() })),
+  issues: z.array(
+    z.object({ id: z.string(), title: z.string(), roles: z.unknown().optional(), files: z.array(z.string()).optional() }),
+  ),
 });
 
 export type PlannedIssue = z.infer<typeof planSchema>["issues"][number];

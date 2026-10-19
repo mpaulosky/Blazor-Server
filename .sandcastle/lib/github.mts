@@ -198,9 +198,23 @@ export function sameRepository<T extends Pick<ListedPullRequest, "isCrossReposit
 // branches. gh pages through results up to --limit, so the cap sits far above
 // any real queue: a PR missed here would let its issue be built twice.
 export function openPullRequests(): OpenPullRequest[] {
+  return listOpenPullRequests();
+}
+
+// The open pull requests into main from this repository's branches, whoever
+// opened them and whichever queue built them, for the overlap check
+// (lib/overlap.mts, #421). A fork's PR is left out, as in openPullRequests: it
+// would let an outsider hold any issue back by touching its files.
+export function openPullRequestsIntoMain(): OpenPullRequest[] {
+  return listOpenPullRequests("--base", "main");
+}
+
+// The open pull requests from this repository's branches that also match the
+// extra gh pr list filters.
+function listOpenPullRequests(...filters: string[]): OpenPullRequest[] {
   const listed = JSON.parse(
     sh(
-      process.cwd(), "gh", "pr", "list", "--repo", repoName(), "--state", "open", "--limit", "1000",
+      process.cwd(), "gh", "pr", "list", "--repo", repoName(), "--state", "open", ...filters, "--limit", "1000",
       "--json", "number,headRefName,isCrossRepository",
     ),
   ) as ListedPullRequest[];
