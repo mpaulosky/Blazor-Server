@@ -205,8 +205,8 @@ describe("unpickedReady", () => {
 
     assert.deepEqual(unpicked.map((entry) => entry.number), [2, 3]);
     const [held, other] = unpicked;
-    assert.match(String((held as { note?: string }).note), /held/i);
-    assert.equal((other as { note?: string }).note, undefined, "an issue that isn't held carries no note");
+    assert.match(String(held?.note), /held/i);
+    assert.equal(other?.note, undefined, "an issue that isn't held carries no note");
   });
 
   it("never passes a kept pick as unpicked, even when it is also named as held", () => {

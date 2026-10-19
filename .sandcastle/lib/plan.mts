@@ -4,7 +4,7 @@ import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { hooks, OPTIONAL_ROLES, type OptionalRole } from "./config.mts";
 import type { SandcastleIssue } from "./github.mts";
-import { plannerPromptArgs } from "./prompts.mts";
+import { plannerPromptArgs, type UnpickedIssue } from "./prompts.mts";
 import { agentSandbox } from "./skills.mts";
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts
@@ -130,7 +130,7 @@ export function unpickedReady(
   ready: readonly SandcastleIssue[],
   kept: readonly PlannedIssue[],
   held: readonly number[],
-): (SandcastleIssue & { note?: string })[] {
+): UnpickedIssue[] {
   const keptIds = new Set(kept.map((issue) => issue.id));
   const heldIds = new Set(held);
   return ready
