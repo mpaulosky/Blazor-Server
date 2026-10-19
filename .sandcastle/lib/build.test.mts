@@ -1802,4 +1802,21 @@ describe("createCheckedSandbox", () => {
 
     assert.deepEqual(execCalls, []);
   });
+
+  it("closes the sandbox and throws when setting the host's identity in it fails, rather than hand it over", async () => {
+    let closed = 0;
+    const sandbox = {
+      worktreePath: "/worktree",
+      exec: async () => ({ stdout: "", stderr: "error: could not lock config file", exitCode: 255 }),
+      close: async () => {
+        closed++;
+      },
+    } as unknown as Sandbox;
+
+    await assert.rejects(
+      createCheckedSandbox("fix/419-identity", checkedSandboxHost(sandbox, { name: "Ada Lovelace", email: "ada@example.com" })),
+      /setting git user\.name in the sandbox failed: error: could not lock config file/,
+    );
+    assert.equal(closed, 1);
+  });
 });
