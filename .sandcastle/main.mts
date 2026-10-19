@@ -138,8 +138,8 @@ import { cacheHostLogin, ensureLabels, openPullRequests, repoName } from "./lib/
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { runLimits } from "./lib/limits.mts";
-import { deferOverlaps } from "./lib/overlap.mts";
-import { planRound, resolveRoles } from "./lib/plan.mts";
+import { deferOverlaps, lastingHolds } from "./lib/overlap.mts";
+import { pickIssues, planRound, unpickedReady } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import {
   handBackReport,
@@ -242,10 +242,11 @@ try {
 
   startedUp = true;
 
-  // The picks the overlap check deferred this run. One deferred behind a pull
-  // request has no "blocked by" link for the gate to hold it back with, so
-  // without this the planner would pick it, and the host comment on it, again
-  // every round.
+  // The picks the overlap check held back for the rest of this run: those
+  // behind a pull request, and those behind a pick that opened one (see
+  // lib/overlap.mts#lastingHolds). Neither has a "blocked by" link for the gate
+  // to hold it back with, so without this the planner would pick it again
+  // every round. A hold behind a pick that opened no PR isn't kept (#425).
   const overlapDeferred = new Set<number>();
 
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
@@ -347,92 +348,100 @@ try {
     // In code, before the critique: two builds of one file conflict once the
     // first merges (#421). The critique still runs on what's left, for
     // dependencies and for overlaps of modules rather than paths.
-    const unshared = deferOverlaps(planned);
-    const unsharedIds = new Set(unshared.map((issue) => issue.id));
-    for (const issue of planned) {
-      if (!unsharedIds.has(issue.id)) overlapDeferred.add(Number(issue.id));
-    }
-
-    if (unshared.length === 0) {
-      console.log("The overlap check deferred every pick. Moving on to the next round.");
-      continue;
-    }
-
-    // planRound keeps only ids from the ready list, so the lookup can't miss.
-    // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
-    // planner's raw roles field, resolved to a safe list by resolveRoles
-    // (lib/plan.mts), which falls back to every optional role when it's
-    // missing or invalid.
-    const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
-    const picks = unshared.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
-
-    // -----------------------------------------------------------------------
-    // Phase 1b: Critique
-    // -----------------------------------------------------------------------
-    // critiqueRound only filters the picks, so its SandcastleIssue[] return
-    // type is narrower than what it's given; put each kept pick's roles back
-    // by issue number rather than widen the critique's own types for a field
-    // it never reads.
-    const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
-    const pickedNumbers = new Set(picks.map((issue) => issue.number));
-    const critiqued = await critiqueRound({
-      picks,
-      inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
-      unpicked: ready.filter((issue) => !pickedNumbers.has(issue.number)),
-    });
-    const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
-
-    if (issues.length === 0) {
-      // Each deferral added a "blocked by" link, so the next round's gate
-      // holds those issues back and the planner picks from what's left.
-      console.log("The critique deferred every pick. Moving on to the next round.");
-      continue;
-    }
-
-    // -----------------------------------------------------------------------
-    // Phase 2: Execute + Review
-    //
-    // Promise.allSettled means one failing pipeline doesn't cancel the others.
-    // -----------------------------------------------------------------------
-    const base = fetchMain();
-    const work = prepareBranches(issues);
-
-    console.log(
-      `Planning complete. ${work.length} issue(s) to work in parallel:`,
-    );
-    for (const { issue, branch } of work) {
-      const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
-      console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
-    }
-
-    const settled = await Promise.allSettled(
-      work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
-    );
-
-    // Log any agents that threw (network error, sandbox crash, timeout, etc.).
-    // A clean stop is named in the round summary instead.
-    for (const [i, outcome] of settled.entries()) {
-      if (outcome.status === "rejected" && !(outcome.reason instanceof UncountedStopError)) {
-        console.error(
-          `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
-        );
+    const { kept: unshared, holds } = deferOverlaps(planned);
+    // The picks whose builds opened a PR this round. A hold behind any other
+    // pick is released once the round ends, whichever way it ends (#425).
+    let published: ReadonlySet<number> = new Set();
+    try {
+      if (unshared.length === 0) {
+        console.log("The overlap check deferred every pick. Moving on to the next round.");
+        continue;
       }
-    }
 
-    const summary = roundSummary(work, settled);
-    for (const line of summary.lines) {
-      console.log(line);
-    }
-    for (const entry of roundOutcomes(work, settled)) {
-      outcomeReport.record(entry);
-    }
+      // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
+      // planner's raw roles field, resolved to a safe list by resolveRoles
+      // (lib/plan.mts), which falls back to every optional role when it's
+      // missing or invalid. Its files go along, since the critique's prompt
+      // says each pick carries them (#425).
+      const picks = pickIssues(unshared, ready);
 
-    if (summary.stop !== undefined) {
-      // Nothing reached a PR, so the next plan would pick the same issues and
-      // repeat the same round: stop and let a human look. Or a build stopped
-      // cleanly on the time budget or usage limit, so nothing more can start.
-      console.log(summary.stop);
-      break;
+      // -----------------------------------------------------------------------
+      // Phase 1b: Critique
+      // -----------------------------------------------------------------------
+      // critiqueRound only filters the picks, so its SandcastleIssue[] return
+      // type is narrower than what it's given; put each kept pick's roles back
+      // by issue number rather than widen the critique's own types for a field
+      // it never reads.
+      const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
+      // A pick the overlap check deferred was picked, not left out, so it
+      // isn't passed as unpicked work that a pick might depend on (#425).
+      const critiqued = await critiqueRound({
+        picks,
+        inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
+        unpicked: unpickedReady(ready, planned),
+      });
+      const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
+
+      if (issues.length === 0) {
+        // Each deferral added a "blocked by" link, so the next round's gate
+        // holds those issues back and the planner picks from what's left.
+        console.log("The critique deferred every pick. Moving on to the next round.");
+        continue;
+      }
+
+      // -----------------------------------------------------------------------
+      // Phase 2: Execute + Review
+      //
+      // Promise.allSettled means one failing pipeline doesn't cancel the others.
+      // -----------------------------------------------------------------------
+      const base = fetchMain();
+      const work = prepareBranches(issues);
+
+      console.log(
+        `Planning complete. ${work.length} issue(s) to work in parallel:`,
+      );
+      for (const { issue, branch } of work) {
+        const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
+        console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
+      }
+
+      const settled = await Promise.allSettled(
+        work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
+      );
+
+      // Log any agents that threw (network error, sandbox crash, timeout, etc.).
+      // A clean stop is named in the round summary instead.
+      for (const [i, outcome] of settled.entries()) {
+        if (outcome.status === "rejected" && !(outcome.reason instanceof UncountedStopError)) {
+          console.error(
+            `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
+          );
+        }
+      }
+
+      const summary = roundSummary(work, settled);
+      for (const line of summary.lines) {
+        console.log(line);
+      }
+      for (const entry of roundOutcomes(work, settled)) {
+        outcomeReport.record(entry);
+      }
+      published = new Set(
+        work.flatMap(({ issue }, i) => {
+          const outcome = settled[i];
+          return outcome?.status === "fulfilled" && outcome.value.prUrl ? [issue.number] : [];
+        }),
+      );
+
+      if (summary.stop !== undefined) {
+        // Nothing reached a PR, so the next plan would pick the same issues and
+        // repeat the same round: stop and let a human look. Or a build stopped
+        // cleanly on the time budget or usage limit, so nothing more can start.
+        console.log(summary.stop);
+        break;
+      }
+    } finally {
+      for (const id of lastingHolds(holds, published)) overlapDeferred.add(id);
     }
   }
   // A loop that ended on the time budget or the usage limit (no new round,

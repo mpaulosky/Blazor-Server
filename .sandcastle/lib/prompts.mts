@@ -101,7 +101,7 @@ export type InFlightPrompt = { issue: SandcastleIssue; pr: number; branch: strin
 
 // The round's picks, the in-flight issues and the ready issues the planner left
 // out. The critique compares the picks with each other and with the rest.
-export function critiquePromptArgs(picks: SandcastleIssue[], inFlight: InFlightPrompt[], unpicked: SandcastleIssue[]) {
+export function critiquePromptArgs(picks: (SandcastleIssue & { files?: string[] })[], inFlight: InFlightPrompt[], unpicked: SandcastleIssue[]) {
   return {
     PICKED_JSON: JSON.stringify(picks),
     IN_FLIGHT_JSON: JSON.stringify(

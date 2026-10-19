@@ -197,6 +197,12 @@ describe("critiquePromptArgs", () => {
     assert.deepEqual(JSON.parse(args.UNPICKED_JSON).map((i: { number: number }) => i.number), [4]);
   });
 
+  it("gives the critique each pick's files, which its prompt says every pick carries", () => {
+    const args = critiquePromptArgs([{ ...issue, files: ["src/A.cs", "docs"] }], [], []);
+
+    assert.deepEqual(JSON.parse(args.PICKED_JSON)[0].files, ["src/A.cs", "docs"]);
+  });
+
   it("includes no one's comments but the owner's", () => {
     const args = critiquePromptArgs([issue], [inFlight], [issue]);
 

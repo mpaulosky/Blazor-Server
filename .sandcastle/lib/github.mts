@@ -798,11 +798,40 @@ export function commentOnPullRequest(
   ghWithStderr(run, ["pr", "comment", String(number), "--repo", repo, "--body-file", "-"], body);
 }
 
-// The paths an open PR changes.
-export function pullRequestFiles(pr: number): string[] {
-  return JSON.parse(
-    sh(process.cwd(), "gh", "pr", "view", String(pr), "--repo", repoName(), "--json", "files", "--jq", "[.files[].path]"),
+// Every path an open PR changes, from all pages of its file list. The REST
+// endpoint pages with --paginate, where `gh pr view --json files` may stop at
+// the first 100 paths, so a larger PR was checked against part of its list
+// and the overlap check failed open (#425). A renamed file counts under its
+// old path too, since a branch that edits the old path conflicts with it.
+export function pullRequestFiles(
+  pr: number,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+): string[] {
+  return jsonLines(
+    ghWithStderr(run, [
+      "api", "--paginate", `repos/${repo}/pulls/${pr}/files`,
+      "--jq", ".[] | (.filename, (.previous_filename // empty)) | @json",
+    ]),
   ) as string[];
+}
+
+// Whether the host (`poster`) has commented on the issue or PR `number` with a
+// body that carries `marker`. Only the host's own comments count: anyone can
+// comment on a public issue, and a pasted marker mustn't stand in for one. The
+// overlap check reads it so a pick deferred again in a later run isn't
+// commented on every run (#425).
+export function hostCommentedWith(
+  number: number,
+  marker: string,
+  run: typeof execFileSync = execFileSync,
+  repo: string = repoName(),
+  poster: string = (signedInLogin ??= hostLogin(run)),
+): boolean {
+  const comments = jsonLines(
+    ghWithStderr(run, ["api", "--paginate", `repos/${repo}/issues/${number}/comments`, "--jq", ".[] | {body, author: .user.login} | @json"]),
+  ) as { body: string; author: string }[];
+  return comments.some((comment) => comment.author === poster && comment.body.includes(marker));
 }
 
 // Any issue's body, or "" when it has none.

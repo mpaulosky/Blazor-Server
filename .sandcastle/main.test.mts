@@ -368,3 +368,27 @@ describe("main.mts's overlap wiring", () => {
     assert.ok(planCall < overlapCall && overlapCall < critiqueCall, "main.mts doesn't check overlaps between the plan and the critique");
   });
 });
+
+// #425: a hold behind a pick that is deferred or opens no PR is released, the
+// critique gets each pick's files, and an overlap-deferred pick isn't passed to
+// it as unpicked.
+describe("main.mts's overlap follow-ups", () => {
+  const mainMts = read(".sandcastle/main.mts");
+
+  it("releases the holds behind picks that opened no pull request, after the build", () => {
+    const holdsCall = mainMts.indexOf("lastingHolds(");
+
+    assert.notEqual(holdsCall, -1, "main.mts doesn't call lastingHolds(");
+    assert.ok(mainMts.indexOf("critiqueRound(") < holdsCall, "main.mts decides the holds before the critique");
+    assert.ok(mainMts.indexOf("buildIssue(") < holdsCall, "main.mts decides the holds before the build");
+  });
+
+  it("builds the critique's picks with their files", () => {
+    assert.match(mainMts, /pickIssues\(/);
+  });
+
+  it("doesn't pass an overlap-deferred pick to the critique as unpicked", () => {
+    assert.match(mainMts, /unpickedReady\(/);
+    assert.doesNotMatch(mainMts, /unpicked: ready\.filter/);
+  });
+});

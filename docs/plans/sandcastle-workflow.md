@@ -204,9 +204,13 @@ Decided in [What the plan critique (rubber duck) checks and may change](https://
 
 **The host's overlap check runs first** (`lib/overlap.mts`, [#421](https://github.com/mpaulosky/Blazor-Server/issues/421)), in code with no agent.
 It defers a pick whose `files` share a path with a pick kept earlier in the planner's order, or with any open PR into main from this repository's branches, whoever opened it.
-A pick with no `files` is treated as touching anything: it's built only as the round's only pick with no open PR into main.
-Each deferral gets one comment naming the file and the issue or PR it waits on. One behind an issue built this round is also linked as blocked by it.
-One behind a PR has no link, so the host holds it back for the rest of the run instead. The critique then judges what's left.
+The host makes each path repo-relative first (`resolveFiles` in `lib/plan.mts`), dropping blanks and entries with control characters, and a folder covers the paths under it.
+A PR's paths are read from every page of its file list.
+A pick with no `files` is treated as touching anything: it waits behind the first kept pick or open PR, and with neither, the first such pick is built and the rest wait behind it.
+Each deferral gets one comment naming the file and the issue or PR it waits on, found again by its marker so a later run doesn't post another. No deferral is linked as blocked.
+Instead the host holds the pick back for the rest of the run when it waits on a PR, or on a pick that opened one.
+A hold behind a pick the critique defers, or whose build opens no PR, is released at the end of the round ([#425](https://github.com/mpaulosky/Blazor-Server/issues/425)).
+The critique then judges what's left, with each pick's `files`.
 
 The critique checks one thing: whether the round's parallel set is safe, meaning no file or module overlap between picks, and no pick depending on an API or decision another open issue
 will establish. Its only power is to **defer** a pick.
