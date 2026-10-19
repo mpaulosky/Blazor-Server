@@ -311,16 +311,15 @@ try {
     // -----------------------------------------------------------------------
     // Phase 0b: Gate
     // -----------------------------------------------------------------------
-    const gated = gateIssues();
-    const { blocked } = gated;
+    const { ready: unblocked, blocked } = gateIssues();
 
     for (const { issue, reasons } of blocked) {
       console.log(`  ⏸ #${issue.number} is held back: ${reasons.join("; ")}`);
     }
-    for (const issue of gated.ready.filter((ready) => overlapDeferred.has(ready.number))) {
+    for (const issue of unblocked.filter((candidate) => overlapDeferred.has(candidate.number))) {
       console.log(`  ⏸ #${issue.number} is held back: the overlap check deferred it earlier in this run`);
     }
-    const ready = gated.ready.filter((issue) => !overlapDeferred.has(issue.number));
+    const ready = unblocked.filter((issue) => !overlapDeferred.has(issue.number));
 
     if (ready.length === 0) {
       console.log(
@@ -342,11 +341,6 @@ try {
       break;
     }
 
-    // planRound keeps only ids from the ready list, so the lookup can't miss.
-    // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
-    // planner's raw roles field, resolved to a safe list by resolveRoles
-    // (lib/plan.mts), which falls back to every optional role when it's
-    // missing or invalid.
     // -----------------------------------------------------------------------
     // Phase 1a: Overlap
     // -----------------------------------------------------------------------
@@ -364,6 +358,11 @@ try {
       continue;
     }
 
+    // planRound keeps only ids from the ready list, so the lookup can't miss.
+    // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
+    // planner's raw roles field, resolved to a safe list by resolveRoles
+    // (lib/plan.mts), which falls back to every optional role when it's
+    // missing or invalid.
     const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
     const picks = unshared.map((issue) => ({ ...readyById.get(issue.id)!, roles: resolveRoles(issue.roles) }));
 

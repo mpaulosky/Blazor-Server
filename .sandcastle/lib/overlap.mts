@@ -83,15 +83,20 @@ export function deferOverlaps(
   const kept: PlannedIssue[] = [];
   const deferrals = new Map<PlannedIssue, Deferral>();
 
-  for (const issue of picks.filter(hasFiles)) {
-    let deferral: Deferral | undefined;
-    for (const file of issue.files) {
+  // The first of the pick's files that a kept pick or an open PR changes. A
+  // kept pick wins over a PR on the same file, since only a pick can be linked.
+  const firstOverlap = (files: readonly string[]): Deferral | undefined => {
+    for (const file of files) {
       const earlier = claimed.get(file);
+      if (earlier !== undefined) return { file, on: { kind: "issue", number: earlier }, linked: true };
       const pr = openPrs.find((open) => open.files.has(file));
-      if (earlier !== undefined) deferral = { file, on: { kind: "issue", number: earlier }, linked: true };
-      else if (pr) deferral = { file, on: { kind: "pr", number: pr.number }, linked: false };
-      if (deferral) break;
+      if (pr) return { file, on: { kind: "pr", number: pr.number }, linked: false };
     }
+    return undefined;
+  };
+
+  for (const issue of picks.filter(hasFiles)) {
+    const deferral = firstOverlap(issue.files);
     if (deferral) {
       deferrals.set(issue, deferral);
       continue;
@@ -114,6 +119,8 @@ export function deferOverlaps(
     } else if (firstPr) {
       deferrals.set(issue, { on: { kind: "pr", number: firstPr.number }, linked: false });
     } else {
+      // With no open PR, the first branch kept this pick unless the round has
+      // another, so the find can't miss.
       const other = picks.find((pick) => pick !== issue)!;
       deferrals.set(issue, { on: { kind: "issue", number: Number(other.id) }, linked: false });
     }
