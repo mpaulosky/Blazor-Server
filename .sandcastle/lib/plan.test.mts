@@ -187,12 +187,31 @@ describe("pickIssues", () => {
 describe("unpickedReady", () => {
   const issue = (number: number) => ({ number, title: `Issue ${number}` }) as unknown as SandcastleIssue;
 
-  it("leaves out every issue the planner picked, including one the overlap check then deferred", () => {
+  it("leaves out every pick that goes to the critique", () => {
     const ready = [issue(1), issue(2), issue(3)];
 
-    // #2 was planned and then deferred by the overlap check; #3 was never picked.
-    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }, { id: "2", title: "B" }]);
+    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }, { id: "2", title: "B" }], []);
 
     assert.deepEqual(unpicked.map((entry) => entry.number), [3]);
+  });
+
+  // #428: the critique's dependency check is the safety net for a dependency
+  // the planner missed, and a held issue is work still to come.
+  it("passes an overlap-held issue as unpicked, with a note that it's held", () => {
+    const ready = [issue(1), issue(2), issue(3)];
+
+    // #2 was planned and held behind #1 by the overlap check; #3 was never picked.
+    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }], [2]);
+
+    assert.deepEqual(unpicked.map((entry) => entry.number), [2, 3]);
+    const [held, other] = unpicked;
+    assert.match(String((held as { note?: string }).note), /held/i);
+    assert.equal((other as { note?: string }).note, undefined, "an issue that isn't held carries no note");
+  });
+
+  it("never passes a kept pick as unpicked, even when it is also named as held", () => {
+    const unpicked = unpickedReady([issue(1), issue(2)], [{ id: "1", title: "A" }], [1]);
+
+    assert.deepEqual(unpicked.map((entry) => entry.number), [2]);
   });
 });

@@ -310,6 +310,28 @@ describe("critiqueRound", () => {
     assert.deepEqual(JSON.parse(args!.UNPICKED_JSON).map((i: SandcastleIssue) => i.number), [3]);
   });
 
+  // #428: a pick that depends on an overlap-held issue is deferred behind it.
+  it("defers a pick behind an overlap-held issue passed as unpicked, and runs the critique for it", async () => {
+    const gh = github();
+    const { log } = capture();
+    let args: CritiquePromptArgs | undefined;
+    const held = { ...issue(2), note: "Held back this round by the overlap check." };
+
+    const kept = await critiqueRound(
+      { picks: [issue(1), issue(3)], inFlight: [], unpicked: [held] },
+      async (promptArgs) => {
+        args = promptArgs;
+        return [{ id: "1", verdict: "keep", reason: "no overlap" }, defer(3, 2, "needs the API #2 adds")];
+      },
+      gh.stub,
+      log,
+    );
+
+    assert.deepEqual(JSON.parse(args!.UNPICKED_JSON).map((i: SandcastleIssue) => i.number), [2]);
+    assert.deepEqual(kept.map((i) => i.number), [1]);
+    assert.deepEqual(gh.links, [[3, 2]]);
+  });
+
   it("applies the critique's verdicts to the picks", async () => {
     const gh = github();
     const { log } = capture();

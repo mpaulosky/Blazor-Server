@@ -391,4 +391,9 @@ describe("main.mts's overlap follow-ups", () => {
     assert.match(mainMts, /unpickedReady\(/);
     assert.doesNotMatch(mainMts, /unpicked: ready\.filter/);
   });
+
+  // #428: the critique's dependency check must see the held issues.
+  it("passes the round's overlap holds to unpickedReady, so the critique sees the held issues", () => {
+    assert.match(mainMts, /unpickedReady\([^)]*holds/);
+  });
 });

@@ -378,7 +378,7 @@ try {
       const critiqued = await critiqueRound({
         picks,
         inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
-        unpicked: unpickedReady(ready, planned),
+        unpicked: unpickedReady(ready, unshared, holds.map((hold) => hold.id)),
       });
       const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
 

@@ -282,13 +282,51 @@ describe("deferOverlaps", () => {
     assert.deepEqual(gh.comments.map(([id]) => id), [3]);
   });
 
-  it("throws when the existing comments can't be read, so nothing is built on a guess", () => {
+  // #428: a transient gh error on the comments read doesn't end the run.
+  it("still defers a pick whose comments can't be read, logs a warning, and doesn't throw", () => {
     const gh = github();
     gh.stub.commented = () => {
-      throw new Error("gh failed");
+      throw new Error("gh: HTTP 502");
+    };
+    const report = new OutcomeReport();
+    const lines: string[] = [];
+
+    const { kept, holds } = deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"])], gh.stub, (line) => lines.push(line), report);
+
+    assert.deepEqual(ids(kept), ["1"]);
+    assert.deepEqual(holds, [{ id: 2, behind: { kind: "issue", number: 1 } }]);
+    assert.deepEqual(report.items().filter((entry) => entry.outcome === "deferred").map((entry) => entry.number), [2]);
+    assert.ok(lines.some((line) => line.includes("⚠") && line.includes("#2") && line.includes("HTTP 502")), lines.join("\n"));
+  });
+
+  it("skips only the comment of the pick whose comments can't be read", () => {
+    const gh = github();
+    gh.stub.commented = (id) => {
+      if (id === 2) throw new Error("gh: HTTP 502");
+      return false;
     };
 
-    assert.throws(() => deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"])], gh.stub, () => {}), /gh failed/);
+    const { holds } = deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"]), pick(3, ["a.mts"])], gh.stub, () => {});
+
+    assert.deepEqual(holds.map((hold) => hold.id), [2, 3]);
+    assert.deepEqual(gh.comments.map(([id]) => id), [3]);
+  });
+
+  it("reads every pick's comments before writing any, even when one read fails", () => {
+    const order: string[] = [];
+    const gh = github();
+    gh.stub.commented = (id) => {
+      order.push(`read ${id}`);
+      if (id === 2) throw new Error("gh: HTTP 502");
+      return false;
+    };
+    gh.stub.comment = (id) => {
+      order.push(`write ${id}`);
+    };
+
+    deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"]), pick(3, ["a.mts"])], gh.stub, () => {});
+
+    assert.deepEqual(order, ["read 2", "read 3", "write 3"]);
   });
 });
 

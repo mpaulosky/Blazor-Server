@@ -115,13 +115,18 @@ export function resolveFiles(files: readonly string[] | undefined, root: string 
   return [...resolved];
 }
 
-// The ready issues the planner didn't pick: not an overlap-deferred pick, which
-// the planner did pick and the host held back. The critique reads these as
-// issues that may establish something a pick needs, so a deferred pick listed
-// here would look like other work still to come (#425).
-export function unpickedReady(ready: readonly SandcastleIssue[], planned: readonly PlannedIssue[]): SandcastleIssue[] {
-  const plannedIds = new Set(planned.map((issue) => issue.id));
-  return ready.filter((issue) => !plannedIds.has(String(issue.number)));
+// The ready issues the critique should treat as unpicked work: those the
+// planner left out, and the picks the overlap check held back this round
+// (`held`, their issue numbers), each with a `note` saying so. A kept pick, one
+// of `kept`, is excluded. The critique's dependency check covers an unpicked
+// ready issue, and a held issue is work still to come, so a pick that depends
+// on one can be deferred behind it (#428).
+export function unpickedReady(
+  ready: readonly SandcastleIssue[],
+  kept: readonly PlannedIssue[],
+  held: readonly number[],
+): (SandcastleIssue & { note?: string })[] {
+  throw new Error("Not implemented");
 }
 
 // The issue each kept pick stands for, with the optional roles resolved from the
