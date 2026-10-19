@@ -80,8 +80,10 @@ export function overlapComment({ file, on, linked }: Deferral): string {
   ].join("\n\n");
 }
 
-// A pick the check held back, and what it waits on.
-export type OverlapHold = { id: number; behind: { kind: "issue" | "pr"; number: number } };
+// A pick the check held back, what it waits on, and the shared path (none for
+// a pick that named no files, which waits behind the first kept pick or open
+// pull request without sharing any file).
+export type OverlapHold = { id: number; behind: { kind: "issue" | "pr"; number: number }; file?: string };
 
 // The picks still to build this round, in the planner's order, and the holds on
 // the rest.
@@ -186,7 +188,7 @@ export function deferOverlaps(
   const holds: OverlapHold[] = [];
   for (const { id, deferral } of deferred) {
     const ref = `#${deferral.on.number}`;
-    holds.push({ id, behind: deferral.on });
+    holds.push(deferral.file === undefined ? { id, behind: deferral.on } : { id, behind: deferral.on, file: deferral.file });
     report.record({ kind: "issue", number: id, outcome: "deferred", detail: `behind ${ref}` });
     const why = deferral.file === undefined ? "it names no files" : deferral.file;
     log(`  ⏸ The overlap check defers #${id} behind ${ref} (${why}).`);

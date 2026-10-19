@@ -189,8 +189,8 @@ describe("deferOverlaps", () => {
     const { holds } = deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"]), pick(3, ["p.md"])], gh.stub, () => {});
 
     assert.deepEqual(holds, [
-      { id: 2, behind: { kind: "issue", number: 1 } },
-      { id: 3, behind: { kind: "pr", number: 90 } },
+      { id: 2, behind: { kind: "issue", number: 1 }, file: "a.mts" },
+      { id: 3, behind: { kind: "pr", number: 90 }, file: "p.md" },
     ]);
   });
 
@@ -294,7 +294,7 @@ describe("deferOverlaps", () => {
     const { kept, holds } = deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"])], gh.stub, (line) => lines.push(line), report);
 
     assert.deepEqual(ids(kept), ["1"]);
-    assert.deepEqual(holds, [{ id: 2, behind: { kind: "issue", number: 1 } }]);
+    assert.deepEqual(holds, [{ id: 2, behind: { kind: "issue", number: 1 }, file: "a.mts" }]);
     assert.deepEqual(report.items().filter((entry) => entry.outcome === "deferred").map((entry) => entry.number), [2]);
     assert.ok(lines.some((line) => line.includes("⚠") && line.includes("#2") && line.includes("HTTP 502")), lines.join("\n"));
   });
@@ -327,6 +327,28 @@ describe("deferOverlaps", () => {
     deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"]), pick(3, ["a.mts"])], gh.stub, () => {});
 
     assert.deepEqual(order, ["read 2", "read 3", "write 3"]);
+  });
+
+  // A failed read of the open PRs or their files can't be guessed around: the
+  // check would build on an overlap it couldn't see.
+  it("throws and posts no comment when the open pull requests can't be read", () => {
+    const gh = github();
+    gh.stub.openPullRequestsIntoMain = () => {
+      throw new Error("gh: HTTP 502");
+    };
+
+    assert.throws(() => deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"])], gh.stub, () => {}), /HTTP 502/);
+    assert.deepEqual(gh.comments, []);
+  });
+
+  it("throws and posts no comment when an open pull request's files can't be read", () => {
+    const gh = github({ 90: ["a.mts"] });
+    gh.stub.pullRequestFiles = () => {
+      throw new Error("gh: HTTP 502");
+    };
+
+    assert.throws(() => deferOverlaps([pick(1, ["a.mts"]), pick(2, ["b.mts"])], gh.stub, () => {}), /HTTP 502/);
+    assert.deepEqual(gh.comments, []);
   });
 });
 

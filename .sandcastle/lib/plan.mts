@@ -4,6 +4,7 @@ import { z } from "zod";
 import { runRole } from "./agents.mts";
 import { hooks, OPTIONAL_ROLES, type OptionalRole } from "./config.mts";
 import type { SandcastleIssue } from "./github.mts";
+import type { OverlapHold } from "./overlap.mts";
 import { plannerPromptArgs, type UnpickedIssue } from "./prompts.mts";
 import { agentSandbox } from "./skills.mts";
 
@@ -117,25 +118,36 @@ export function resolveFiles(files: readonly string[] | undefined, root: string 
 
 // The note on a held issue in the critique's unpicked list, which
 // critique-prompt.md explains: the planner picked it, but it waits this round
-// behind a pick or pull request that changes the same file.
-const HELD_NOTE = "Held back this round by the overlap check: it shares a file with another pick or an open pull request. It's still work to come.";
+// behind a pick or pull request, either because they share a file or because
+// the planner named no files for it (so it may touch anything).
+export function heldNote({ behind, file }: OverlapHold): string {
+  const what = `${behind.kind === "issue" ? "pick" : "open pull request"} #${behind.number}`;
+  const why =
+    file === undefined
+      ? `it names no files, so it may touch anything ${what} changes`
+      : `it shares \`${file}\` with ${what}`;
+  return `Held back this round by the overlap check, waiting on ${what}: ${why}. It's still work to come.`;
+}
 
 // The ready issues the critique should treat as unpicked work: those the
 // planner left out, and the picks the overlap check held back this round
-// (`held`, their issue numbers), each with a `note` saying so. A kept pick, one
-// of `kept`, is excluded. The critique's dependency check covers an unpicked
+// (`holds`), each with a `note` saying what it waits on. A kept pick, one of
+// `kept`, is excluded. The critique's dependency check covers an unpicked
 // ready issue, and a held issue is work still to come, so a pick that depends
 // on one can be deferred behind it (#428).
 export function unpickedReady(
   ready: readonly SandcastleIssue[],
   kept: readonly PlannedIssue[],
-  held: readonly number[],
+  holds: readonly OverlapHold[],
 ): UnpickedIssue[] {
   const keptIds = new Set(kept.map((issue) => issue.id));
-  const heldIds = new Set(held);
+  const holdsById = new Map(holds.map((hold) => [hold.id, hold]));
   return ready
     .filter((issue) => !keptIds.has(String(issue.number)))
-    .map((issue) => (heldIds.has(issue.number) ? { ...issue, note: HELD_NOTE } : issue));
+    .map((issue) => {
+      const hold = holdsById.get(issue.number);
+      return hold === undefined ? issue : { ...issue, note: heldNote(hold) };
+    });
 }
 
 // The issue each kept pick stands for, with the optional roles resolved from the

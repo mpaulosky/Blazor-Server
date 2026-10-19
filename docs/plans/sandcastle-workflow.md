@@ -208,9 +208,9 @@ The host makes each path repo-relative first (`resolveFiles` in `lib/plan.mts`),
 A PR's paths are read from every page of its file list.
 A pick with no `files` is treated as touching anything: it waits behind the first kept pick or open PR, and with neither, the first such pick is built and the rest wait behind it.
 Each deferral gets one comment naming the file and the issue or PR it waits on, found again by its marker so a later run doesn't post another. No deferral is linked as blocked.
-When a pick's comments can't be read, it's still deferred, and only its comment is skipped, with a warning ([#428](https://github.com/mpaulosky/Blazor-Server/issues/428)).
 Instead the host holds the pick back for the rest of the run when it waits on a PR, or on a pick that opened one.
 A hold behind a pick the critique defers, or whose build opens no PR, is released at the end of the round ([#425](https://github.com/mpaulosky/Blazor-Server/issues/425)).
+When a pick's comments can't be read, it's still deferred, and only its comment is skipped, with a warning ([#428](https://github.com/mpaulosky/Blazor-Server/issues/428)).
 The critique then judges what's left, with each pick's `files`.
 It gets the held picks among the unpicked ready issues, each with a note that it's held, so a pick that depends on one is deferred behind it ([#428](https://github.com/mpaulosky/Blazor-Server/issues/428)).
 

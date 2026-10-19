@@ -201,7 +201,7 @@ describe("unpickedReady", () => {
     const ready = [issue(1), issue(2), issue(3)];
 
     // #2 was planned and held behind #1 by the overlap check; #3 was never picked.
-    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }], [2]);
+    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }], [{ id: 2, behind: { kind: "issue", number: 1 }, file: "a.mts" }]);
 
     assert.deepEqual(unpicked.map((entry) => entry.number), [2, 3]);
     const [held, other] = unpicked;
@@ -209,8 +209,23 @@ describe("unpickedReady", () => {
     assert.equal(other?.note, undefined, "an issue that isn't held carries no note");
   });
 
+  it("says what a held issue shares and waits on when it shares a file", () => {
+    const [held] = unpickedReady([issue(2)], [], [{ id: 2, behind: { kind: "pr", number: 90 }, file: "src/UI/Program.cs" }]);
+
+    assert.match(String(held?.note), /src\/UI\/Program\.cs/);
+    assert.match(String(held?.note), /pull request #90/);
+  });
+
+  it("doesn't claim a shared file for a held issue that named no files", () => {
+    const [held] = unpickedReady([issue(2)], [], [{ id: 2, behind: { kind: "issue", number: 1 } }]);
+
+    assert.match(String(held?.note), /names no files/);
+    assert.match(String(held?.note), /pick #1/);
+    assert.doesNotMatch(String(held?.note), /shares/);
+  });
+
   it("never passes a kept pick as unpicked, even when it is also named as held", () => {
-    const unpicked = unpickedReady([issue(1), issue(2)], [{ id: "1", title: "A" }], [1]);
+    const unpicked = unpickedReady([issue(1), issue(2)], [{ id: "1", title: "A" }], [{ id: 1, behind: { kind: "issue", number: 1 } }]);
 
     assert.deepEqual(unpicked.map((entry) => entry.number), [2]);
   });
