@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.177">v0.0.177</a></td>
+                <td>2026-10-19</td>
+                <td>fix(sandcastle): Fix the same-file overlap check&#x27;s review findings</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-426-fix-sandcastle-fix-the-same-file-overlap-check-s-review-findings.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.176">v0.0.176</a></td>
                 <td>2026-10-19</td>
                 <td>feat(sandcastle): Don&#x27;t build two issues at once that change the same file</td>
@@ -282,12 +288,6 @@
                 <td>build(deps): Update NuGet packages</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-401-build-deps-update-nuget-packages.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.167">v0.0.167</a></td>
-                <td>2026-10-16</td>
-                <td>build(deps): Pin MessagePack 2.5.307 past GHSA-qhrr-8q5h-9q3h</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-399-build-deps-pin-messagepack-2-5-307-past-ghsa-qhrr-8q5h-9q3h.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-19">19 Oct 2026</time><span class="post-tag">v0.0.177</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-426-fix-sandcastle-fix-the-same-file-overlap-check-s-review-findings.md">fix(sandcastle): Fix the same-file overlap check&#x27;s review findings</a></h3>
+              <p class="post-excerpt">The same-file overlap check from #421 stops Sandcastle from building, in the same run, two issues that change the same file. It merged with six review findings still open. Because of them it could…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/426">PR #426</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-19">19 Oct 2026</time><span class="post-tag">v0.0.176</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-401-build-deps-update-nuget-packages.md">build(deps): Update NuGet packages</a></h3>
               <p class="post-excerpt">Requested by Matthew · project thread</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/401">PR #401</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-16">16 Oct 2026</time><span class="post-tag">v0.0.167</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-16-pr-399-build-deps-pin-messagepack-2-5-307-past-ghsa-qhrr-8q5h-9q3h.md">build(deps): Pin MessagePack 2.5.307 past GHSA-qhrr-8q5h-9q3h</a></h3>
-              <p class="post-excerpt">Aspire brings in MessagePack 2.5.302, which advisory GHSA-qhrr-8q5h-9q3h covers (moderate: nested arrays can blow past buffer length limits). The fix first ships in 2.5.303. dotnet list package…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/399">PR #399</a></p>
             </article>
           </li>
         </ul>
