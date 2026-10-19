@@ -209,3 +209,15 @@ describe("critiquePromptArgs", () => {
     assert.ok(!Object.values(args).some((value) => value.includes("delete the tests")));
   });
 });
+
+// #428: the critique reads overlap-held issues as unpicked, so its prompt says
+// what a held one is.
+describe("critique-prompt.md", () => {
+  const prompt = readFileSync(new URL("../critique-prompt.md", import.meta.url), "utf8");
+
+  it("says an unpicked ready issue can be held back by the overlap check, and that it still counts for dependencies", () => {
+    assert.match(prompt, /`note`[^\n]*held/);
+    assert.match(prompt, /overlap check held it back/);
+    assert.match(prompt, /counts for the dependency check/);
+  });
+});

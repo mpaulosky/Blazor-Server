@@ -138,7 +138,7 @@ import { cacheHostLogin, ensureLabels, openPullRequests, repoName } from "./lib/
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { runLimits } from "./lib/limits.mts";
-import { deferOverlaps, lastingHolds } from "./lib/overlap.mts";
+import { carriedHold, deferOverlaps, lastingHolds, pullRequestNumber, type OverlapHold } from "./lib/overlap.mts";
 import { pickIssues, planRound, unpickedReady } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import {
@@ -247,7 +247,9 @@ try {
   // lib/overlap.mts#lastingHolds). Neither has a "blocked by" link for the gate
   // to hold it back with, so without this the planner would pick it again
   // every round. A hold behind a pick that opened no PR isn't kept (#425).
-  const overlapDeferred = new Set<number>();
+  // Each is kept with its hold, so the critique still sees a lasting hold
+  // as unpicked work to come in every later round (#428).
+  const overlapDeferred = new Map<number, OverlapHold>();
 
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // No new round once the budget has passed or the usage limit was hit.
@@ -352,6 +354,8 @@ try {
     // The picks whose builds opened a PR this round. A hold behind any other
     // pick is released once the round ends, whichever way it ends (#425).
     let published: ReadonlySet<number> = new Set();
+    // The PR each published pick opened, by the pick's number.
+    let publishedPrs: ReadonlyMap<number, number> = new Map();
     try {
       if (unshared.length === 0) {
         console.log("The overlap check deferred every pick. Moving on to the next round.");
@@ -373,12 +377,15 @@ try {
       // by issue number rather than widen the critique's own types for a field
       // it never reads.
       const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
-      // A pick the overlap check deferred was picked, not left out, so it
-      // isn't passed as unpicked work that a pick might depend on (#425).
+      // A pick the overlap check held back is still work to come, so it's
+      // passed as unpicked, with a note, for the critique's dependency check:
+      // a kept pick that needs it is deferred behind it (#428). That covers
+      // this round's holds and the lasting ones from earlier rounds, which
+      // `ready` no longer lists but `unblocked` does.
       const critiqued = await critiqueRound({
         picks,
         inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
-        unpicked: unpickedReady(ready, planned),
+        unpicked: unpickedReady(unblocked, unshared, [...overlapDeferred.values(), ...holds]),
       });
       const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
 
@@ -433,6 +440,15 @@ try {
         }),
       );
 
+      publishedPrs = new Map(
+        work.flatMap(({ issue }, i) => {
+          const outcome = settled[i];
+          const number =
+            outcome?.status === "fulfilled" && outcome.value.prUrl ? pullRequestNumber(outcome.value.prUrl) : undefined;
+          return number === undefined ? [] : [[issue.number, number] as const];
+        }),
+      );
+
       if (summary.stop !== undefined) {
         // Nothing reached a PR, so the next plan would pick the same issues and
         // repeat the same round: stop and let a human look. Or a build stopped
@@ -441,7 +457,10 @@ try {
         break;
       }
     } finally {
-      for (const id of lastingHolds(holds, published)) overlapDeferred.add(id);
+      const lasting = new Set(lastingHolds(holds, published));
+      for (const hold of holds) {
+        if (lasting.has(hold.id)) overlapDeferred.set(hold.id, carriedHold(hold, publishedPrs));
+      }
     }
   }
   // A loop that ended on the time budget or the usage limit (no new round,

@@ -99,9 +99,19 @@ export function intakePromptArgs(issues: SandcastleIssue[]): { ISSUES_JSON: stri
 // PR changes.
 export type InFlightPrompt = { issue: SandcastleIssue; pr: number; branch: string; files: string[] };
 
+// A ready issue the critique reads as unpicked work. A pick the overlap check
+// held back carries a `note` saying so, which critique-prompt.md explains
+// (lib/plan.mts#unpickedReady, #428).
+export type UnpickedIssue = SandcastleIssue & { note?: string };
+
 // The round's picks, the in-flight issues and the ready issues the planner left
-// out. The critique compares the picks with each other and with the rest.
-export function critiquePromptArgs(picks: (SandcastleIssue & { files?: string[] })[], inFlight: InFlightPrompt[], unpicked: SandcastleIssue[]) {
+// out or the overlap check held back. The critique compares the picks with
+// each other and with the rest.
+export function critiquePromptArgs(
+  picks: (SandcastleIssue & { files?: string[] })[],
+  inFlight: InFlightPrompt[],
+  unpicked: UnpickedIssue[],
+) {
   return {
     PICKED_JSON: JSON.stringify(picks),
     IN_FLIGHT_JSON: JSON.stringify(

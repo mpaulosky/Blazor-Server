@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { OVERLAP_MARKER } from "./config.mts";
-import { deferOverlaps, lastingHolds, overlapComment, type OverlapGitHub } from "./overlap.mts";
+import { carriedHold, deferOverlaps, lastingHolds, overlapComment, pullRequestNumber, type OverlapGitHub } from "./overlap.mts";
 import type { PlannedIssue } from "./plan.mts";
 import { OutcomeReport } from "./report.mts";
 
@@ -189,8 +189,8 @@ describe("deferOverlaps", () => {
     const { holds } = deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"]), pick(3, ["p.md"])], gh.stub, () => {});
 
     assert.deepEqual(holds, [
-      { id: 2, behind: { kind: "issue", number: 1 } },
-      { id: 3, behind: { kind: "pr", number: 90 } },
+      { id: 2, behind: { kind: "issue", number: 1 }, file: "a.mts" },
+      { id: 3, behind: { kind: "pr", number: 90 }, file: "p.md" },
     ]);
   });
 
@@ -282,13 +282,73 @@ describe("deferOverlaps", () => {
     assert.deepEqual(gh.comments.map(([id]) => id), [3]);
   });
 
-  it("throws when the existing comments can't be read, so nothing is built on a guess", () => {
+  // #428: a transient gh error on the comments read doesn't end the run.
+  it("still defers a pick whose comments can't be read, logs a warning, and doesn't throw", () => {
     const gh = github();
     gh.stub.commented = () => {
-      throw new Error("gh failed");
+      throw new Error("gh: HTTP 502");
+    };
+    const report = new OutcomeReport();
+    const lines: string[] = [];
+
+    const { kept, holds } = deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"])], gh.stub, (line) => lines.push(line), report);
+
+    assert.deepEqual(ids(kept), ["1"]);
+    assert.deepEqual(holds, [{ id: 2, behind: { kind: "issue", number: 1 }, file: "a.mts" }]);
+    assert.deepEqual(report.items().filter((entry) => entry.outcome === "deferred").map((entry) => entry.number), [2]);
+    assert.ok(lines.some((line) => line.includes("⚠") && line.includes("#2") && line.includes("HTTP 502")), lines.join("\n"));
+  });
+
+  it("skips only the comment of the pick whose comments can't be read", () => {
+    const gh = github();
+    gh.stub.commented = (id) => {
+      if (id === 2) throw new Error("gh: HTTP 502");
+      return false;
     };
 
-    assert.throws(() => deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"])], gh.stub, () => {}), /gh failed/);
+    const { holds } = deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"]), pick(3, ["a.mts"])], gh.stub, () => {});
+
+    assert.deepEqual(holds.map((hold) => hold.id), [2, 3]);
+    assert.deepEqual(gh.comments.map(([id]) => id), [3]);
+  });
+
+  it("reads every pick's comments before writing any, even when one read fails", () => {
+    const order: string[] = [];
+    const gh = github();
+    gh.stub.commented = (id) => {
+      order.push(`read ${id}`);
+      if (id === 2) throw new Error("gh: HTTP 502");
+      return false;
+    };
+    gh.stub.comment = (id) => {
+      order.push(`write ${id}`);
+    };
+
+    deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"]), pick(3, ["a.mts"])], gh.stub, () => {});
+
+    assert.deepEqual(order, ["read 2", "read 3", "write 3"]);
+  });
+
+  // A failed read of the open PRs or their files can't be guessed around: the
+  // check would build on an overlap it couldn't see.
+  it("throws and posts no comment when the open pull requests can't be read", () => {
+    const gh = github();
+    gh.stub.openPullRequestsIntoMain = () => {
+      throw new Error("gh: HTTP 502");
+    };
+
+    assert.throws(() => deferOverlaps([pick(1, ["a.mts"]), pick(2, ["a.mts"])], gh.stub, () => {}), /HTTP 502/);
+    assert.deepEqual(gh.comments, []);
+  });
+
+  it("throws and posts no comment when an open pull request's files can't be read", () => {
+    const gh = github({ 90: ["a.mts"] });
+    gh.stub.pullRequestFiles = () => {
+      throw new Error("gh: HTTP 502");
+    };
+
+    assert.throws(() => deferOverlaps([pick(1, ["a.mts"]), pick(2, ["b.mts"])], gh.stub, () => {}), /HTTP 502/);
+    assert.deepEqual(gh.comments, []);
   });
 });
 
@@ -297,5 +357,37 @@ describe("overlapComment", () => {
     const body = overlapComment({ file: "a.mts", on: { kind: "pr", number: 90 }, linked: false });
 
     assert.ok(body.includes(OVERLAP_MARKER));
+  });
+});
+
+// #428: a lasting hold is stored for later rounds, where its blocker is no
+// longer a pick.
+describe("carriedHold", () => {
+  it("points a hold behind a published pick at that pick's pull request", () => {
+    const hold = { id: 2, behind: { kind: "issue" as const, number: 1 }, file: "a.mts" };
+
+    assert.deepEqual(carriedHold(hold, new Map([[1, 95]])), { id: 2, behind: { kind: "pr", number: 95 }, file: "a.mts" });
+  });
+
+  it("leaves a hold behind an open pull request as it was", () => {
+    const hold = { id: 3, behind: { kind: "pr" as const, number: 90 } };
+
+    assert.deepEqual(carriedHold(hold, new Map([[90, 95]])), hold);
+  });
+
+  it("leaves a hold behind a pick with no known pull request as it was", () => {
+    const hold = { id: 2, behind: { kind: "issue" as const, number: 1 } };
+
+    assert.deepEqual(carriedHold(hold, new Map()), hold);
+  });
+});
+
+describe("pullRequestNumber", () => {
+  it("reads the number from a pull request URL", () => {
+    assert.equal(pullRequestNumber("https://github.com/o/r/pull/95"), 95);
+  });
+
+  it("returns undefined for a URL without one", () => {
+    assert.equal(pullRequestNumber("https://github.com/o/r/issues/95"), undefined);
   });
 });

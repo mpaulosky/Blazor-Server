@@ -23,7 +23,7 @@ import {
   type OpenPullRequest,
   type SandcastleIssue,
 } from "./github.mts";
-import { critiquePromptArgs, type CritiquePromptArgs } from "./prompts.mts";
+import { critiquePromptArgs, type CritiquePromptArgs, type UnpickedIssue } from "./prompts.mts";
 import { outcomeReport, type OutcomeReport } from "./report.mts";
 import { agentSandbox } from "./skills.mts";
 
@@ -46,8 +46,9 @@ export type InFlightIssue = { issue: SandcastleIssue; pr: OpenPullRequest };
 export type CritiqueInput = {
   picks: SandcastleIssue[];
   inFlight: InFlightIssue[];
-  // The ready issues the planner didn't pick.
-  unpicked: SandcastleIssue[];
+  // The ready issues the planner didn't pick, and the picks the overlap check
+  // held back, each with a note saying so (lib/plan.mts#unpickedReady).
+  unpicked: UnpickedIssue[];
 };
 
 // The GitHub reads and writes the critique needs; tests pass a stub. Each one

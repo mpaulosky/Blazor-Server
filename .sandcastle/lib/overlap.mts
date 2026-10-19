@@ -80,8 +80,10 @@ export function overlapComment({ file, on, linked }: Deferral): string {
   ].join("\n\n");
 }
 
-// A pick the check held back, and what it waits on.
-export type OverlapHold = { id: number; behind: { kind: "issue" | "pr"; number: number } };
+// A pick the check held back, what it waits on, and the shared path (none for
+// a pick that named no files, which waits behind the first kept pick or open
+// pull request without sharing any file).
+export type OverlapHold = { id: number; behind: { kind: "issue" | "pr"; number: number }; file?: string };
 
 // The picks still to build this round, in the planner's order, and the holds on
 // the rest.
@@ -99,8 +101,9 @@ function sharesPath(a: string, b: string): boolean {
 // reaches the run report as "deferred", and gets one comment naming the shared
 // file and the PR or issue it waits on, unless the host already posted one in
 // an earlier run. The holds aren't final: main.mts keeps only lastingHolds
-// once the critique and the build have run. A failed GitHub read throws, so
-// nothing is built on an overlap the host couldn't check.
+// once the critique and the build have run. A failed read of the open PRs or
+// their files throws, so nothing is built on an overlap the host couldn't
+// check; a failed comments read only skips that pick's comment (#428).
 export function deferOverlaps(
   picks: readonly PlannedIssue[],
   github: OverlapGitHub = liveGitHub,
@@ -164,22 +167,32 @@ export function deferOverlaps(
     }
   }
 
-  // Every read before any write: a deferral comment can't be checked, so
-  // nothing is posted or built on a guess.
+  // Every read before any write. The deferral doesn't depend on the comments
+  // read, so a failed read skips only that pick's comment rather than end the
+  // run on one transient gh error (#428); not posting is the safe side, since
+  // a duplicate comment is the only other outcome.
   const deferred = picks.flatMap((issue) => {
     const deferral = deferrals.get(issue);
     return deferral ? [{ id: Number(issue.id), deferral }] : [];
   });
-  const commented = new Set(deferred.filter(({ id }) => github.commented(id)).map(({ id }) => id));
+  const skipComment = new Set<number>();
+  for (const { id, deferral } of deferred) {
+    try {
+      if (github.commented(id)) skipComment.add(id);
+    } catch (error) {
+      skipComment.add(id);
+      log(`  ⚠ #${id} is deferred behind #${deferral.on.number}, but its comments couldn't be read, so no comment is posted (${error}).`);
+    }
+  }
 
   const holds: OverlapHold[] = [];
   for (const { id, deferral } of deferred) {
     const ref = `#${deferral.on.number}`;
-    holds.push({ id, behind: deferral.on });
+    holds.push(deferral.file === undefined ? { id, behind: deferral.on } : { id, behind: deferral.on, file: deferral.file });
     report.record({ kind: "issue", number: id, outcome: "deferred", detail: `behind ${ref}` });
     const why = deferral.file === undefined ? "it names no files" : deferral.file;
     log(`  ⏸ The overlap check defers #${id} behind ${ref} (${why}).`);
-    if (commented.has(id)) continue;
+    if (skipComment.has(id)) continue;
     try {
       github.comment(id, overlapComment(deferral));
     } catch (error) {
@@ -197,4 +210,21 @@ export function deferOverlaps(
 // in a later round of this run rather than wait out the run for nothing (#425).
 export function lastingHolds(holds: readonly OverlapHold[], published: ReadonlySet<number>): number[] {
   return holds.filter(({ behind }) => behind.kind === "pr" || published.has(behind.number)).map((hold) => hold.id);
+}
+
+// A lasting hold as the later rounds of this run should see it. A hold behind a
+// pick whose build opened a PR (`prs` maps that pick's number to its PR's)
+// points at the PR instead: in later rounds the pick is no longer a pick but an
+// in-flight issue, and the critique's note must not name a pick that isn't in
+// its picked list (#428). Any other hold is returned as it was.
+export function carriedHold(hold: OverlapHold, prs: ReadonlyMap<number, number>): OverlapHold {
+  const pr = hold.behind.kind === "issue" ? prs.get(hold.behind.number) : undefined;
+  return pr === undefined ? hold : { ...hold, behind: { kind: "pr", number: pr } };
+}
+
+// The number in a pull request's URL (`https://github.com/<repo>/pull/<n>`),
+// or undefined when it has none.
+export function pullRequestNumber(url: string): number | undefined {
+  const match = /\/pull\/(\d+)(?:[/?#]|$)/.exec(url);
+  return match === null ? undefined : Number(match[1]);
 }

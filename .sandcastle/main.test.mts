@@ -370,8 +370,8 @@ describe("main.mts's overlap wiring", () => {
 });
 
 // #425: a hold behind a pick that is deferred or opens no PR is released, the
-// critique gets each pick's files, and an overlap-deferred pick isn't passed to
-// it as unpicked.
+// critique gets each pick's files, and (#428) every overlap-held pick is passed
+// to it as unpicked, with a note, rather than left out.
 describe("main.mts's overlap follow-ups", () => {
   const mainMts = read(".sandcastle/main.mts");
 
@@ -387,8 +387,23 @@ describe("main.mts's overlap follow-ups", () => {
     assert.match(mainMts, /pickIssues\(/);
   });
 
-  it("doesn't pass an overlap-deferred pick to the critique as unpicked", () => {
+  it("computes the critique's unpicked list with unpickedReady rather than filtering ready", () => {
     assert.match(mainMts, /unpickedReady\(/);
     assert.doesNotMatch(mainMts, /unpicked: ready\.filter/);
+  });
+
+  // #428: the critique's dependency check must see the held issues.
+  it("passes the round's overlap holds to unpickedReady, so the critique sees the held issues", () => {
+    assert.match(mainMts, /unpickedReady\([^;]*\.\.\.holds\b/);
+  });
+
+  // #428: a lasting hold behind a published pick is stored pointing at its pull request.
+  it("stores a lasting hold through carriedHold, so a later round's note names the pull request", () => {
+    assert.match(mainMts, /overlapDeferred\.set\(hold\.id, carriedHold\(hold, publishedPrs\)\)/);
+  });
+
+  // #428: a hold that lasts the run drops out of `ready` in later rounds, but not out of `unblocked`.
+  it("passes the lasting holds from earlier rounds, and every unblocked issue, to unpickedReady", () => {
+    assert.match(mainMts, /unpickedReady\(unblocked,[^;]*overlapDeferred\.values\(\)/);
   });
 });
