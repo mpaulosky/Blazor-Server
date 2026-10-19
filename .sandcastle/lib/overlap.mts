@@ -211,3 +211,20 @@ export function deferOverlaps(
 export function lastingHolds(holds: readonly OverlapHold[], published: ReadonlySet<number>): number[] {
   return holds.filter(({ behind }) => behind.kind === "pr" || published.has(behind.number)).map((hold) => hold.id);
 }
+
+// A lasting hold as the later rounds of this run should see it. A hold behind a
+// pick whose build opened a PR (`prs` maps that pick's number to its PR's)
+// points at the PR instead: in later rounds the pick is no longer a pick but an
+// in-flight issue, and the critique's note must not name a pick that isn't in
+// its picked list (#428). Any other hold is returned as it was.
+export function carriedHold(hold: OverlapHold, prs: ReadonlyMap<number, number>): OverlapHold {
+  const pr = hold.behind.kind === "issue" ? prs.get(hold.behind.number) : undefined;
+  return pr === undefined ? hold : { ...hold, behind: { kind: "pr", number: pr } };
+}
+
+// The number in a pull request's URL (`https://github.com/<repo>/pull/<n>`),
+// or undefined when it has none.
+export function pullRequestNumber(url: string): number | undefined {
+  const match = /\/pull\/(\d+)(?:[/?#]|$)/.exec(url);
+  return match === null ? undefined : Number(match[1]);
+}

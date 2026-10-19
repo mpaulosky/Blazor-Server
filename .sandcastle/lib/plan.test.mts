@@ -157,8 +157,8 @@ describe("readyPicks files", () => {
   });
 });
 
-// AC 5: the critique gets each pick's files, and an overlap-deferred pick isn't
-// passed to it as unpicked.
+// AC 5: the critique gets each pick's files. (Since #428 an overlap-held pick is
+// passed to it as unpicked, with a note; see unpickedReady below.)
 describe("pickIssues", () => {
   const issue = (number: number): SandcastleIssue =>
     ({ number, title: `Issue ${number}`, body: "", labels: [], comments: [] }) as unknown as SandcastleIssue;

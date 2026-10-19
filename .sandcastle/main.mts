@@ -138,7 +138,7 @@ import { cacheHostLogin, ensureLabels, openPullRequests, repoName } from "./lib/
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { runLimits } from "./lib/limits.mts";
-import { deferOverlaps, lastingHolds, type OverlapHold } from "./lib/overlap.mts";
+import { carriedHold, deferOverlaps, lastingHolds, pullRequestNumber, type OverlapHold } from "./lib/overlap.mts";
 import { pickIssues, planRound, unpickedReady } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
 import {
@@ -354,6 +354,8 @@ try {
     // The picks whose builds opened a PR this round. A hold behind any other
     // pick is released once the round ends, whichever way it ends (#425).
     let published: ReadonlySet<number> = new Set();
+    // The PR each published pick opened, by the pick's number.
+    let publishedPrs: ReadonlyMap<number, number> = new Map();
     try {
       if (unshared.length === 0) {
         console.log("The overlap check deferred every pick. Moving on to the next round.");
@@ -438,6 +440,15 @@ try {
         }),
       );
 
+      publishedPrs = new Map(
+        work.flatMap(({ issue }, i) => {
+          const outcome = settled[i];
+          const number =
+            outcome?.status === "fulfilled" && outcome.value.prUrl ? pullRequestNumber(outcome.value.prUrl) : undefined;
+          return number === undefined ? [] : [[issue.number, number] as const];
+        }),
+      );
+
       if (summary.stop !== undefined) {
         // Nothing reached a PR, so the next plan would pick the same issues and
         // repeat the same round: stop and let a human look. Or a build stopped
@@ -448,7 +459,7 @@ try {
     } finally {
       const lasting = new Set(lastingHolds(holds, published));
       for (const hold of holds) {
-        if (lasting.has(hold.id)) overlapDeferred.set(hold.id, hold);
+        if (lasting.has(hold.id)) overlapDeferred.set(hold.id, carriedHold(hold, publishedPrs));
       }
     }
   }

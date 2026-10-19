@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { OVERLAP_MARKER } from "./config.mts";
-import { deferOverlaps, lastingHolds, overlapComment, type OverlapGitHub } from "./overlap.mts";
+import { carriedHold, deferOverlaps, lastingHolds, overlapComment, pullRequestNumber, type OverlapGitHub } from "./overlap.mts";
 import type { PlannedIssue } from "./plan.mts";
 import { OutcomeReport } from "./report.mts";
 
@@ -357,5 +357,37 @@ describe("overlapComment", () => {
     const body = overlapComment({ file: "a.mts", on: { kind: "pr", number: 90 }, linked: false });
 
     assert.ok(body.includes(OVERLAP_MARKER));
+  });
+});
+
+// #428: a lasting hold is stored for later rounds, where its blocker is no
+// longer a pick.
+describe("carriedHold", () => {
+  it("points a hold behind a published pick at that pick's pull request", () => {
+    const hold = { id: 2, behind: { kind: "issue" as const, number: 1 }, file: "a.mts" };
+
+    assert.deepEqual(carriedHold(hold, new Map([[1, 95]])), { id: 2, behind: { kind: "pr", number: 95 }, file: "a.mts" });
+  });
+
+  it("leaves a hold behind an open pull request as it was", () => {
+    const hold = { id: 3, behind: { kind: "pr" as const, number: 90 } };
+
+    assert.deepEqual(carriedHold(hold, new Map([[90, 95]])), hold);
+  });
+
+  it("leaves a hold behind a pick with no known pull request as it was", () => {
+    const hold = { id: 2, behind: { kind: "issue" as const, number: 1 } };
+
+    assert.deepEqual(carriedHold(hold, new Map()), hold);
+  });
+});
+
+describe("pullRequestNumber", () => {
+  it("reads the number from a pull request URL", () => {
+    assert.equal(pullRequestNumber("https://github.com/o/r/pull/95"), 95);
+  });
+
+  it("returns undefined for a URL without one", () => {
+    assert.equal(pullRequestNumber("https://github.com/o/r/issues/95"), undefined);
   });
 });
