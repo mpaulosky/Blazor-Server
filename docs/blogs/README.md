@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-20 | [chore: Re-apply the repo-ci-baseline Template](2026-10-20-pr-432-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-19 | [fix(sandcastle): Let the critique see overlap-held issues, and don't fail the run on a comments read](2026-10-19-pr-429-fix-sandcastle-let-the-critique-see-overlap-held-issues-and-don-t-fail-the-run-on-a-comments-read.md) | release,automation |
 | 2026-10-19 | [fix(sandcastle): Fix the same-file overlap check's review findings](2026-10-19-pr-426-fix-sandcastle-fix-the-same-file-overlap-check-s-review-findings.md) | release,automation |
 | 2026-10-19 | [feat(sandcastle): Don't build two issues at once that change the same file](2026-10-19-pr-423-feat-sandcastle-don-t-build-two-issues-at-once-that-change-the-same-file.md) | release,automation |
