@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.179](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.179) | 2026-10-20 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-20-pr-432-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.178](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.178) | 2026-10-19 | fix(sandcastle): Let the critique see overlap-held issues, and don't fail the run on a comments read | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-429-fix-sandcastle-let-the-critique-see-overlap-held-issues-and-don-t-fail-the-run-on-a-comments-read.md) |
 | [v0.0.177](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.177) | 2026-10-19 | fix(sandcastle): Fix the same-file overlap check's review findings | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-426-fix-sandcastle-fix-the-same-file-overlap-check-s-review-findings.md) |
 | [v0.0.176](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.176) | 2026-10-19 | feat(sandcastle): Don't build two issues at once that change the same file | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-423-feat-sandcastle-don-t-build-two-issues-at-once-that-change-the-same-file.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.172](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.172) | 2026-10-18 | fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md) |
 | [v0.0.171](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.171) | 2026-10-18 | fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409) | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md) |
 | [v0.0.170](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.170) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-405-chore-re-apply-the-repo-ci-baseline-template.md) |
-| [v0.0.169](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.169) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-403-chore-re-apply-the-repo-ci-baseline-template.md) |
 
 <!-- RELEASES_END -->
 
