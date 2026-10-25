@@ -14,7 +14,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "zod": "^4.6.6"
+    "zod": "^4.6.7"
   },
   "engines": {
     "npm": "please-use-pnpm"
