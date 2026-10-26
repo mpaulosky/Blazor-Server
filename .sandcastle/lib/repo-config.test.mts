@@ -75,8 +75,9 @@ describe("CHECK_PATHS", () => {
 });
 
 describe("ROLE_AGENTS", () => {
-  // These roles answer with structured output, which one iteration produces: a second iteration of a role that already answered
-  // costs a whole round (the comment above ROLE_AGENTS in lib/repo-config.mts). The other roles' values are free to move.
+  // intake, planner and critique answer with structured output (Output.object), which one iteration produces: a second iteration of a
+  // role that already answered costs a whole round (the comment above ROLE_AGENTS in lib/repo-config.mts). reviewer, gate-fixer and
+  // follow-up are single-shot by design (docs/plans/sandcastle-workflow.md). The other roles' values are free to move.
   for (const role of ["intake", "planner", "critique", "reviewer", "gate-fixer", "follow-up"] as const) {
     it(`runs ${role} for one iteration`, () => {
       assert.equal(ROLE_AGENTS[role].maxIterations, 1);
