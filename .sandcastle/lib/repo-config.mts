@@ -10,28 +10,27 @@
 
 import type { OptInRole, Role, RoleAgent } from "./config.mts";
 
+const opus = "claude-opus-5-5";
 const sonnet = "claude-sonnet-5-5";
 
 // Every role's agent and budget, from the "Roles, models and budgets" table in
-// Blazor-Server's docs/plans/sandcastle-workflow.md. Every role runs Sonnet
-// (the owner moved them off Opus to cut cost; a role whose wrong answer costs a
-// whole round can be pointed back at an Opus model here). Structured-output
-// roles must stay at one iteration. A repo with Blazor components and pages
-// opts into the UI developer by uncommenting the `ui` entry at the end
-// (roles/ui.md is its prompt, and plan-prompt.md must offer the role to the
-// planner with a `ui` bullet in its ROLES list).
+// Blazor-Server's docs/plans/sandcastle-workflow.md. Opus goes where a wrong
+// answer costs a whole round; Sonnet goes where the gate, the reviewer or CI
+// checks the output anyway. Structured-output roles must stay at one iteration.
+// This repo opts into the UI developer with the `ui` entry (roles/ui.md is its
+// prompt, and plan-prompt.md offers the role to the planner).
 export const ROLE_AGENTS = {
   intake: { model: sonnet, effort: "medium", maxIterations: 1, timeoutMinutes: 15 },
-  planner: { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
+  planner: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
   critique: { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
-  architect: { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
+  architect: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
   tester: { model: sonnet, effort: "high", maxIterations: 3, timeoutMinutes: 45 },
-  backend: { model: sonnet, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
+  backend: { model: opus, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
+  ui: { model: sonnet, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
   scribe: { model: sonnet, effort: "medium", maxIterations: 1, timeoutMinutes: 15 },
-  reviewer: { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
+  reviewer: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
   "gate-fixer": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 20 },
   "follow-up": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 30 },
-//   ui: { model: sonnet, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
 } as const satisfies Record<Role, RoleAgent> & Partial<Record<OptInRole, RoleAgent>>;
 
 // Maximum number of plan→execute→merge cycles before stopping.
@@ -59,16 +58,23 @@ export const copyToWorktree = ["node_modules"];
 // The host skills the role prompts tell the agent to use, from the host
 // user's ~/.claude/skills (lib/skills.mts mounts each one read-only). None by
 // default: name a skill here only when it isn't in the worktree and you also
-// list it in a `# SKILLS` section of the tester and backend prompts (and of the
-// ui prompt, once the repo opts into that role); lib/skills.test.mts checks it.
-export const SANDBOX_SKILLS: readonly string[] = [];
+// list it in a `# SKILLS` section of the tester, backend and ui prompts;
+// lib/skills.test.mts checks it.
+export const SANDBOX_SKILLS: readonly string[] = [
+  "dotnet-tdd",
+  "dotnet-add-testing",
+  "dotnet-xunit",
+  "dotnet-testing-strategy",
+  "dotnet-project-analysis",
+  "dotnet-inspect",
+];
 
 // The CI checks scripts/gate.sh reproduces, which a follow-up pass re-runs
 // once as flaky when the gate is green on the PR's head, rather than send
 // their log to the follow-up role (lib/follow-up-pass.mts#isGateCovered).
 // Name the ci.yml jobs whose work scripts/gate.sh repeats, the repo's test
 // jobs included. A rename of one of those jobs must change this too.
-export const GATE_COVERED_CHECKS: readonly string[] = ["Build Solution"];
+export const GATE_COVERED_CHECKS: readonly string[] = ["Build Solution", "Test Suite", "markdownlint", "yamllint"];
 
 // The command the host runs in the sandbox as the gate: at each checkpoint, and
 // on a PR's head in a follow-up pass. The default is the Template's
@@ -103,7 +109,13 @@ export const REPO_SLUG = "mpaulosky/Blazor-Server";
 // its own workflows, scripts and Sandcastle tests. A re-Apply that changes only
 // Owned files passes the local review's check, so a file listed here is
 // reviewed like any other.
-export const NOT_OWNED_BASELINE_PATHS: readonly string[] = [];
+export const NOT_OWNED_BASELINE_PATHS: readonly string[] = [
+  ".github/workflows/copilot-review-sync.yml",
+  ".github/workflows/sandcastle.yml",
+  ".sandcastle/lib/code-review-skill.test.mts",
+  ".sandcastle/lib/dockerfile.test.mts",
+  ".sandcastle/lib/role-prompts.test.mts",
+];
 
 // The Template's Owned folder and the Owned files the repo carries copies of
 // at the same path from its root, which lib/overlap.mts counts as one path
