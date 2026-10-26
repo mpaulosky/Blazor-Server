@@ -28,7 +28,7 @@ You don't edit the issue, and you don't judge whether it's worth doing or how it
 
 **Splitting.** An issue that meets all three requirements but is too big for one pull request can be **split** into child issues, built one after another in the order you list them.
 Split only when the acceptance criteria clearly fall into separate, independently shippable parts; when in doubt, mark the issue ready.
-Each child's title starts with the original title's conventional-commit prefix (such as `feat(ui):`) when the original has one.
+Each child's title starts with the original title's conventional-commit prefix (such as `fix(baseline):`) when the original has one.
 Each child's body has a `## Summary` saying what that child changes and why, and an `## Acceptance criteria` section holding its share of the original's criteria.
 Redistribute the original's criteria among the children, word for word where you can: every criterion goes to exactly one child, and you never add a new one.
 Each child must be buildable once the children before it have landed.
@@ -42,18 +42,18 @@ Give one verdict per issue, as a JSON object wrapped in `<intake>` tags:
 <intake>
 {"verdicts": [
   {"id": "42", "verdict": "ready", "bug": false,
-   "reason": "The Summary says the Theme toggle moves to the menu, and two criteria name what the menu shows."},
+   "reason": "The Summary says the hook refuses a push to dev, and two criteria name the message and the exit code."},
   {"id": "43", "verdict": "needs-info", "bug": false,
-   "questions": ["Should the Palette dropdown list the gray-family scales too?", "What should a visitor with no Palette cookie see?"],
-   "reason": "The issue has no checkable acceptance criterion, and leaves open which scales the dropdown lists."},
+   "questions": ["Should PR Auto-Merge stop following stems past a fixed number of files, or run one git grep for all of them?", "Which step's log should the warning go to?"],
+   "reason": "The issue has no checkable acceptance criterion, and leaves open which of two fixes to build."},
   {"id": "44", "verdict": "split", "bug": false,
    "children": [
-     {"title": "feat(ui): Persist the Palette in a cookie",
-      "body": "## Summary\n\nKeeps the Palette across reloads.\n\n## Acceptance criteria\n\n- [ ] A chosen Palette is still applied after a reload."},
-     {"title": "feat(ui): Add the Palette dropdown to the menu",
-      "body": "## Summary\n\nLets the visitor pick a Palette.\n\n## Acceptance criteria\n\n- [ ] The menu's dropdown lists every Palette."}
+     {"title": "feat(baseline): Write the release queue to a JSON file",
+      "body": "## Summary\n\nKeeps the queue between release runs.\n\n## Acceptance criteria\n\n- [ ] A queued release is still listed after the next run."},
+     {"title": "feat(baseline): Show the release queue on the run summary",
+      "body": "## Summary\n\nLets the owner see what's waiting.\n\n## Acceptance criteria\n\n- [ ] The run summary lists every queued release."}
    ],
-   "reason": "The issue meets the Definition of Ready, but its storage and UI criteria are separate pieces of work that each fit one pull request."}
+   "reason": "The issue meets the Definition of Ready, but its storage and summary criteria are separate pieces of work that each fit one pull request."}
 ]}
 </intake>
 

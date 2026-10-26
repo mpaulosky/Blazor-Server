@@ -83,7 +83,7 @@ function unquoted(quoted: string): string {
 
 // Where in a commit a match sits: its author or committer identity, its
 // message, a path it touches, or an added line (with the path and the line
-// number in the new file). Never the matched text itself (#324), so a match in
+// number in the new file). Never the matched text itself, so a match in
 // a path doesn't name the path: the path holds the match. An added line's
 // path is safe to name, since firstSecretMatch reads a commit's paths before
 // its lines, and so stops at a path that holds a match first.
@@ -103,14 +103,22 @@ export type SecretMatch = { readonly location: MatchLocation; readonly kind: Sec
 // the order a reviewer would look: its author, its committer, its message,
 // each path it touches, then each line it adds, top to bottom. Undefined
 // when nothing matches. Never reads removed lines or context (see the top of
-// this file).
+// this file). `mergedMain` is the main commit a build merged into the branch
+// after `base`, when it did: its history is left out (`^<mergedMain>`), since
+// it's main's work, already public, not the branch's. Without that, a token-
+// shaped test fixture landing on main during a build stopped the publish and
+// had the owner told to rotate a secret that never leaked. The merge
+// commit itself is still read, and --cc shows only what it changed from both
+// sides, so a secret written while resolving the merge is still caught.
 export function firstSecretMatch(
   base: string,
   commit: string,
   secrets: ReadonlyMap<string, string>,
   run: (...args: string[]) => string = git,
+  mergedMain?: string,
 ): SecretMatch | undefined {
-  for (const sha of run("rev-list", "--reverse", `${base}..${commit}`).split("\n").filter(Boolean)) {
+  const exclude = mergedMain === undefined ? [] : [`^${mergedMain}`];
+  for (const sha of run("rev-list", "--reverse", `${base}..${commit}`, ...exclude).split("\n").filter(Boolean)) {
     const [author = "", committer = "", message = ""] = run("log", "-1", "--format=%an <%ae>%x00%cn <%ce>%x00%B", sha).split("\0");
     for (const [field, text] of [["author", author], ["committer", committer], ["message", message]] as const) {
       const kind = secretKindIn(text, secrets);
@@ -142,7 +150,7 @@ export function firstSecretMatch(
 // A SecretMatch in words for the run log and the run report, such as
 // "something shaped like a gh*_ token in line 3 of src/x.ts, added by commit
 // 1a2b…". It's built from the match's location and kind alone, so it never
-// holds the matched text (#324).
+// holds the matched text.
 export function describeSecretMatch({ location, kind }: SecretMatch): string {
   const what = kind.type === "secret" ? `the sandbox's ${kind.envKey} value` : `something shaped like a ${kind.shape} token`;
   switch (location.field) {

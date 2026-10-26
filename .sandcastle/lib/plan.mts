@@ -1,11 +1,10 @@
-import { posix } from "node:path";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { z } from "zod";
-import { runRole } from "./agents.mts";
-import { hooks, OPTIONAL_ROLES, type OptionalRole } from "./config.mts";
+import { runRole, uiEnabled } from "./agents.mts";
+import { OPTIONAL_ROLES, type OptionalRole } from "./config.mts";
+import { hooks } from "./repo-config.mts";
 import type { SandcastleIssue } from "./github.mts";
-import type { OverlapHold } from "./overlap.mts";
-import { plannerPromptArgs, type UnpickedIssue } from "./prompts.mts";
+import { plannerPromptArgs } from "./prompts.mts";
 import { agentSandbox } from "./skills.mts";
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts
@@ -16,15 +15,13 @@ import { agentSandbox } from "./skills.mts";
 // `roles` is left as unknown rather than validated here: an invalid value
 // (not an array, or naming a role resolveRoles doesn't recognise) must fall
 // back to every optional role, not abort the whole plan the way a schema
-// mismatch would (see "Phase 4: Plan" in docs/plans/sandcastle-workflow.md).
-// `files` is the planner's prediction of the paths the issue will change; the
-// host defers overlapping picks on it (see lib/overlap.mts). It's optional so
-// a plan without it still parses: a pick with no files is treated as touching
-// anything.
+// mismatch would (see "Phase 4: Plan" in Blazor-Server's docs/plans/sandcastle-workflow.md).
+// `files` is left unknown for the same reason: a bad value falls back to "no
+// files" (resolveFiles), which lib/overlap.mts holds back unless no PR is
+// open and no other pick naming files is built, and it's the first such pick,
+// rather than aborting the plan.
 const planSchema = z.object({
-  issues: z.array(
-    z.object({ id: z.string(), title: z.string(), roles: z.unknown().optional(), files: z.array(z.string()).optional() }),
-  ),
+  issues: z.array(z.object({ id: z.string(), title: z.string(), roles: z.unknown().optional(), files: z.unknown().optional() })),
 });
 
 export type PlannedIssue = z.infer<typeof planSchema>["issues"][number];
@@ -34,13 +31,69 @@ export type PlannedIssue = z.infer<typeof planSchema>["issues"][number];
 // deduplicated and in build order, or every optional role when the field is
 // missing, isn't an array, or names anything resolveRoles doesn't recognise
 // (see OPTIONAL_ROLES in lib/config.mts). An empty array is valid on its own:
-// it means the planner deliberately picked none.
+// it means the planner deliberately picked none. The `ui` role counts only in
+// a repo that opted into it (see uiEnabled in lib/agents.mts): elsewhere it is
+// neither recognised nor part of "every optional role".
 export function resolveRoles(roles: unknown): OptionalRole[] {
-  const known: readonly string[] = OPTIONAL_ROLES;
+  const available = OPTIONAL_ROLES.filter((role) => role !== "ui" || uiEnabled());
+  const known: readonly string[] = available;
   if (!Array.isArray(roles) || !roles.every((role) => typeof role === "string" && known.includes(role))) {
-    return [...OPTIONAL_ROLES];
+    return [...available];
   }
-  return OPTIONAL_ROLES.filter((role) => roles.includes(role));
+  return available.filter((role) => roles.includes(role));
+}
+
+// Where the repository is checked out inside the sandbox the planner runs in.
+const SANDBOX_REPO_ROOT = "/home/agent/workspace";
+
+// C0 and C1 control characters, DEL, and Unicode's line and paragraph
+// separators. resolveFiles drops a path holding one, and lib/overlap.mts
+// escapes them in the host's log, where a line starting "::" is a workflow
+// command in Actions.
+export const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+// The paths the planner expects one issue to change, from its raw `files`
+// field, cleaned up for lib/overlap.mts: trimmed, with backslashes as
+// slashes, and empty, "." and repeated slashes' segments dropped, so "./x",
+// "x/" and "x//" are all "x". A folder is a path like any other, which
+// lib/overlap.mts treats as covering what's under it. The planner works in
+// the sandbox, so an absolute path under `repoRoot` (the sandbox's checkout)
+// is made relative to it; any other leading "/" is dropped. Entries
+// that come out empty, such as the root itself, and repeats are dropped, and
+// so is an entry with a control character or line break: it names no real
+// file the planner meant, and it would reach the host's log, where a line
+// starting "::" is a workflow command in Actions. The list is empty, meaning
+// "no files", when the field isn't an array, when an entry isn't a string,
+// or when an entry holds a glob (`*` or `?`), which can't be compared with a
+// path, or climbs above the root with "..". Other ".." segments are folded into
+// the one before, so two spellings of a file compare equal.
+export function resolveFiles(files: unknown, repoRoot: string = SANDBOX_REPO_ROOT): string[] {
+  const isPath = (file: unknown): file is string => typeof file === "string" && !/[*?]/.test(file);
+  if (!Array.isArray(files) || !files.every(isPath)) return [];
+  const segments = (path: string) => path.split("/").filter((segment) => segment !== "" && segment !== ".");
+  // Folds each ".." into the segment before it, so "src/Web/../Web/a.cs" and
+  // "src/Web/a.cs" compare equal. A path that climbs above the root names
+  // nothing the host can compare, so it is undefined.
+  const canonical = (parts: string[]): string[] | undefined => {
+    const out: string[] = [];
+    for (const part of parts) {
+      if (part !== "..") out.push(part);
+      else if (out.pop() === undefined) return undefined;
+    }
+    return out;
+  };
+  const root = segments(repoRoot.replace(/\\/g, "/"));
+  const resolved = files.map((file) => {
+    const path = file.trim().replace(/\\/g, "/");
+    if (CONTROL_CHARACTER.test(path)) return [];
+    const parts = canonical(segments(path));
+    if (parts === undefined) return undefined;
+    const underRoot = path.startsWith("/") && root.every((segment, i) => parts[i] === segment);
+    return [(underRoot ? parts.slice(root.length) : parts).join("/")];
+  });
+  if (resolved.some((entry) => entry === undefined)) return [];
+  const paths = resolved.flat() as string[];
+  return [...new Set(paths.filter((path) => path !== ""))];
 }
 
 // The planner reads the ready issues, builds a dependency graph, and selects
@@ -64,9 +117,8 @@ export async function planRound(ready: SandcastleIssue[]): Promise<PlannedIssue[
 }
 
 // The planned issues that passed the blocker gate, in the planner's order, each
-// once, with their `files` resolved (see resolveFiles). A repeated id is
-// dropped: two pipelines on one branch would race each other's sandboxes and
-// pushes.
+// once. A repeated id is dropped: two pipelines on one branch would race each
+// other's sandboxes and pushes.
 export function readyPicks(
   planned: readonly PlannedIssue[],
   ready: readonly Pick<SandcastleIssue, "number">[],
@@ -82,86 +134,5 @@ export function readyPicks(
     if (picked.has(issue.id)) return false;
     picked.add(issue.id);
     return true;
-  }).map((issue) => (issue.files === undefined ? issue : { ...issue, files: resolveFiles(issue.files) }));
-}
-
-// Where the repository is checked out inside a sandbox, so an absolute path the
-// planner read there can be made repo-relative.
-export const SANDBOX_REPO_ROOT = "/home/agent/workspace";
-
-// The planner's `files` as clean repo-relative paths the overlap check can
-// compare: an absolute path under `root` made relative, a leading `./` and
-// trailing slashes dropped, and blanks, entries with control characters and
-// paths outside `root` left out. A missing list is an empty one. The planner
-// reads the repo in a sandbox, so it can name `/home/agent/workspace/x`, which
-// as a string matches nothing an open PR changes (#425). A control character
-// is dropped rather than cleaned: the path reaches the log, where a line break
-// followed by `::` is a workflow command in GitHub Actions.
-export function resolveFiles(files: readonly string[] | undefined, root: string = SANDBOX_REPO_ROOT): string[] {
-  const base = posix.normalize(root).replace(/\/+$/, "");
-  const resolved = new Set<string>();
-  for (const entry of files ?? []) {
-    const trimmed = entry.trim();
-    if (trimmed === "" || /[\u0000-\u001f\u007f]/.test(trimmed)) continue;
-    let relative = trimmed;
-    if (trimmed.startsWith("/")) {
-      const absolute = posix.normalize(trimmed);
-      if (absolute !== base && !absolute.startsWith(`${base}/`)) continue;
-      relative = absolute.slice(base.length);
-    }
-    const path = posix.normalize(relative).replace(/^\/+|\/+$/g, "");
-    if (path === "" || path === "." || path === ".." || path.startsWith("../")) continue;
-    resolved.add(path);
-  }
-  return [...resolved];
-}
-
-// The note on a held issue in the critique's unpicked list, which
-// critique-prompt.md explains: the planner picked it, but it waits behind a
-// pick or pull request, either because they share a file or because
-// the planner named no files for it (so it may touch anything).
-export function heldNote({ behind, file }: OverlapHold): string {
-  const what = `${behind.kind === "issue" ? "pick" : "open pull request"} #${behind.number}`;
-  const why =
-    file === undefined
-      ? `it names no files, so it may touch anything ${what} changes`
-      : `it shares \`${file}\` with ${what}`;
-  return `Held back by the overlap check, waiting on ${what}: ${why}. It's still work to come.`;
-}
-
-// The ready issues the critique should treat as unpicked work: those the
-// planner left out, and the picks the overlap check holds back (`holds`: this
-// round's, and the lasting ones from earlier rounds), each with a `note` saying
-// what it waits on. A kept pick, one of `kept`, is excluded. The critique's dependency check covers an unpicked
-// ready issue, and a held issue is work still to come, so a pick that depends
-// on one can be deferred behind it (#428).
-export function unpickedReady(
-  ready: readonly SandcastleIssue[],
-  kept: readonly PlannedIssue[],
-  holds: readonly OverlapHold[],
-): UnpickedIssue[] {
-  const keptIds = new Set(kept.map((issue) => issue.id));
-  const holdsById = new Map(holds.map((hold) => [hold.id, hold]));
-  return ready
-    .filter((issue) => !keptIds.has(String(issue.number)))
-    .map((issue) => {
-      const hold = holdsById.get(issue.number);
-      return hold === undefined ? issue : { ...issue, note: heldNote(hold) };
-    });
-}
-
-// The issue each kept pick stands for, with the optional roles resolved from the
-// planner's raw `roles` and the `files` it named, so the critique sees them:
-// its prompt says each pick carries `files` (#425). Throws for a pick that
-// isn't in `ready`, which readyPicks has already ruled out.
-export function pickIssues(
-  kept: readonly PlannedIssue[],
-  ready: readonly SandcastleIssue[],
-): (SandcastleIssue & { roles: OptionalRole[]; files: string[] })[] {
-  const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
-  return kept.map((pick) => {
-    const issue = readyById.get(pick.id);
-    if (issue === undefined) throw new Error(`#${pick.id} was picked but isn't a ready issue.`);
-    return { ...issue, roles: resolveRoles(pick.roles), files: resolveFiles(pick.files) };
   });
 }

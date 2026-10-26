@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { execFileSync } from "node:child_process";
-import { COPILOT_REVIEWER, SANDCASTLE_LABELS } from "./config.mts";
+import { COPILOT_REVIEWER, LOCAL_QUEUE_LABEL, LOCAL_QUEUE_LABEL_DEFINITION, SANDCASTLE_LABELS } from "./config.mts";
 import {
   addIssueLabel,
   addPullRequestLabel,
@@ -21,7 +21,6 @@ import {
   handBack,
   hasLabel,
   headChecksOf,
-  hostCommentedWith,
   hostLogin,
   issueEvents,
   issueLabels,
@@ -34,10 +33,11 @@ import {
   openIssuesWithComment,
   openPullRequest,
   openPullRequestsForSweep,
-  pullRequestFiles,
   ownerApproved,
+  pullRequestFiles,
   pushAccess,
   removeIssueLabel,
+  replaceIssueLabel,
   replyToReviewThread,
   requestCopilotReview,
   rerunFailedChecksOnce,
@@ -439,7 +439,7 @@ describe("listSandcastleIssues", () => {
     assert.equal(lookups(), 2);
   });
 
-  // The run's queue scope (#146) decides what gh is asked for.
+  // The run's queue scope decides what gh is asked for.
   it("lists the scope's own label in a label scope", () => {
     const { calls, run } = recordingGh(["[]"]);
 
@@ -519,6 +519,21 @@ describe("ensureLabels", () => {
     for (const label of SANDCASTLE_LABELS) {
       const call = created.find((candidate) => candidate.args[2] === label.name)!;
       assert.deepEqual(call.args, ["label", "create", label.name, "--repo", "o/r", "--color", label.color, "--description", label.description]);
+    }
+  });
+
+  it("creates Sandcastle:local by default, which the move of an issue to the local queue needs", () => {
+    const { calls, run } = recordingGh(["[]"]);
+
+    ensureLabels(undefined, run, "o/r");
+
+    const created = calls.filter((call) => call.args[1] === "create").map((call) => call.args[2]);
+    assert.deepEqual(created, [...SANDCASTLE_LABELS.map((label) => label.name), LOCAL_QUEUE_LABEL]);
+  });
+
+  it("gives every label it creates by default a description GitHub accepts, at most 100 characters", () => {
+    for (const label of [...SANDCASTLE_LABELS, LOCAL_QUEUE_LABEL_DEFINITION]) {
+      assert.ok(label.description.length <= 100, `${label.name}'s description is ${label.description.length} characters`);
     }
   });
 
@@ -641,6 +656,16 @@ describe("issue labels", () => {
     assert.deepEqual(calls.map((call) => call.args), [["issue", "edit", "150", "--repo", "o/r", "--remove-label", "sandcastle:building"]]);
   });
 
+  it("replaces one label with another on an issue in one edit", () => {
+    const { calls, run } = recordingGh();
+
+    replaceIssueLabel(253, "Sandcastle", "Sandcastle:local", run, "o/r");
+
+    assert.deepEqual(calls.map((call) => call.args), [
+      ["issue", "edit", "253", "--repo", "o/r", "--add-label", "Sandcastle:local", "--remove-label", "Sandcastle"],
+    ]);
+  });
+
   it("reads an issue's labels", () => {
     const { calls, run } = recordingGh(['["Sandcastle","sandcastle:building"]\n']);
 
@@ -662,8 +687,7 @@ describe("issue labels", () => {
 
 describe("split and umbrella issues", () => {
   // GitHub allows a "blocked by" link to an issue in another repository; its
-  // number means nothing here, so only this repository's blockers are kept
-  // (#234).
+  // number means nothing here, so only this repository's blockers are kept.
   it("reads an issue's native blockers in this repository, leaving out other repositories'", () => {
     const { calls, run } = recordingGh([
       [
@@ -901,7 +925,7 @@ describe("hasLabel", () => {
   });
 });
 
-// The follow-up sweep's own login (#77), read and cached the same way
+// The follow-up sweep's own login, read and cached the same way
 // hostLogin's other callers already do (see cacheHostLogin and
 // markerComments above).
 describe("signedInHostLogin", () => {
@@ -1024,7 +1048,16 @@ describe("openPullRequestsForSweep", () => {
                         statusCheckRollup: {
                           contexts: {
                             pageInfo: { hasNextPage: false },
-                            nodes: [{ __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "SUCCESS", completedAt: "2026-10-01T00:00:00Z" }],
+                            nodes: [
+                              {
+                                __typename: "CheckRun",
+                                name: "build",
+                                status: "COMPLETED",
+                                conclusion: "SUCCESS",
+                                completedAt: "2026-10-01T00:00:00Z",
+                                checkSuite: { workflowRun: { workflow: { name: "CI" } } },
+                              },
+                            ],
                           },
                         },
                       },
@@ -1056,7 +1089,7 @@ describe("openPullRequestsForSweep", () => {
       { resolved: false, byBot: true, author: "github-advanced-security[bot]" },
       { resolved: false, byBot: false, author: "reviewer" },
     ]);
-    assert.deepEqual(pr!.checks, [{ name: "build", completed: true, green: true, completedAt: "2026-10-01T00:00:00Z" }]);
+    assert.deepEqual(pr!.checks, [{ name: "build", completed: true, green: true, completedAt: "2026-10-01T00:00:00Z", workflow: "CI" }]);
     assert.equal(pr!.truncated, false);
   });
 
@@ -1089,7 +1122,7 @@ describe("openPullRequestsForSweep", () => {
   }
 });
 
-// #78: a follow-up pass reads a PR's open review threads through one
+// A follow-up pass reads a PR's open review threads through one
 // GraphQL query, so it decides from the same shape of answer as
 // openPullRequestsForSweep's query, just for one PR's threads and comments.
 describe("reviewThreadsOf", () => {
@@ -1177,18 +1210,18 @@ describe("reviewThreadsOf", () => {
   });
 });
 
-// #79: a follow-up pass reads a PR's head checks with the GitHub Actions run
+// A follow-up pass reads a PR's head checks with the GitHub Actions run
 // behind each, so it can re-run a flaky one or read a failed one's log.
 describe("head checks and their runs", () => {
   const HEAD_OID = "a".repeat(40);
   type Context = Record<string, unknown>;
-  const checkRun = (name: string, conclusion: string, runId: number | null): Context => ({
+  const checkRun = (name: string, conclusion: string, runId: number | null, workflow?: string): Context => ({
     __typename: "CheckRun",
     name,
     status: "COMPLETED",
     conclusion,
     completedAt: "2026-10-10T09:00:00Z",
-    checkSuite: { workflowRun: runId === null ? null : { databaseId: runId } },
+    checkSuite: { workflowRun: runId === null ? null : { databaseId: runId, workflow: workflow === undefined ? null : { name: workflow } } },
   });
   const page = (contexts: Context[], options: { oid?: string; hasNextPage?: boolean } = {}) =>
     JSON.stringify({
@@ -1243,6 +1276,15 @@ describe("head checks and their runs", () => {
       ]);
     });
 
+    // The sweep leaves out Sandcastle's own check by the workflow behind it.
+    it("names the workflow behind a check run", () => {
+      const { run } = gh([checkRun("Sandcastle", "FAILURE", 12, "Sandcastle")]);
+
+      const { checks } = headChecksOf(7, run, "o/r");
+
+      assert.deepEqual(checks, [{ name: "Sandcastle", completed: true, green: false, completedAt: "2026-10-10T09:00:00Z", workflow: "Sandcastle", runId: 12 }]);
+    });
+
     it("throws when the checks are truncated, rather than deciding from part of them", () => {
       const run = (() => page([], { hasNextPage: true })) as unknown as typeof execFileSync;
 
@@ -1275,6 +1317,17 @@ describe("head checks and their runs", () => {
       );
     });
 
+    it("doesn't re-run Sandcastle's own run, only a check of that name from another workflow", () => {
+      const { calls, run } = gh([checkRun("Sandcastle", "FAILURE", 22, "CI"), checkRun("Sandcastle", "FAILURE", 23, "Sandcastle")]);
+
+      rerunFailedChecksOnce(7, ["Sandcastle"], HEAD_OID, run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "rerun", "22", "--failed", "--repo", "o/r"]],
+      );
+    });
+
     it("doesn't re-run a run already on a later attempt: its checks are reported as they stand", () => {
       const { calls, run } = gh([checkRun("Tests: A", "FAILURE", 21)], { 21: 2 });
 
@@ -1290,7 +1343,7 @@ describe("head checks and their runs", () => {
       assert.throws(() => rerunFailedChecksOnce(7, ["Tests: A"], HEAD_OID, run, "o/r"), /Tests: A/);
     });
 
-    // #79: a pass must never re-run jobs it read for a commit other than the
+    // A pass must never re-run jobs it read for a commit other than the
     // one it gated, since a push between the read and the re-run would re-run
     // the wrong commit's failures.
     it("throws, without re-running anything, when the head has moved past the gated commit", () => {
@@ -1300,7 +1353,7 @@ describe("head checks and their runs", () => {
       assert.ok(!calls.some((args) => args[0] === "run"), "nothing was re-run");
     });
 
-    // #259: a name in `names` can carry a green run from one workflow
+    // A name in `names` can carry a green run from one workflow
     // trigger and a red one from another (`push` and `pull_request`, say).
     // Only the red run should be re-run; re-running the green one too would
     // ask `gh` to re-run a run with no failed jobs.
@@ -1335,6 +1388,24 @@ describe("head checks and their runs", () => {
       assert.match(log, /##\[error\] CS8600/);
     });
 
+    // A red `Sandcastle` check from the Sandcastle workflow is its own run's.
+    it("leaves out the log of Sandcastle's own check, keeping a check of that name from another workflow", () => {
+      const { calls, run } = gh(
+        [checkRun("Sandcastle", "FAILURE", 41, "CI"), checkRun("Sandcastle", "FAILURE", 42, "Sandcastle")],
+        {},
+        { 41: "##[error] real failure", 42: "##[error] hand-back" },
+      );
+
+      const log = failedCheckLogs(7, ["Sandcastle"], HEAD_OID, run, "o/r");
+
+      assert.deepEqual(
+        calls.filter((args) => args[0] === "run"),
+        [["run", "view", "41", "--log-failed", "--repo", "o/r"]],
+      );
+      assert.match(log, /real failure/);
+      assert.doesNotMatch(log, /hand-back/);
+    });
+
     it("says a check has no Actions log rather than failing the pass", () => {
       const { run } = gh([checkRun("CodeQL", "FAILURE", null)]);
 
@@ -1347,7 +1418,7 @@ describe("head checks and their runs", () => {
       assert.throws(() => failedCheckLogs(7, ["Analyze (csharp)"], "b".repeat(40), run, "o/r"), /head moved/);
     });
 
-    // #79's follow-up review: a limit applied once to the whole joined text
+    // From a follow-up review: a limit applied once to the whole joined text
     // lets a later, longer run's log crowd an earlier run's out of it
     // entirely. Each run gets an even share instead.
     it("gives each run's log its own share of a limit, rather than letting a later run's log crowd an earlier one's out", () => {
@@ -1424,7 +1495,7 @@ describe("commentOnPullRequest", () => {
 });
 
 // Who counts as "the repository owner" for the queue's approval and
-// label-origin checks (lib/queue.mts, #146): the same admin/maintain/write
+// label-origin checks (lib/queue.mts): the same admin/maintain/write
 // permission ownerApproved already trusts a comment's author with.
 describe("pushAccess", () => {
   it("is false for a null (deleted) actor, with no gh call", () => {
@@ -1514,65 +1585,56 @@ describe("addPullRequestLabel", () => {
   });
 });
 
-// AC 4: a PR's file list is read from every page, not only the first 100 paths.
+// `gh pr view --json files` can stop at 100 paths, so a PR's files come from the REST list, paged in full.
 describe("pullRequestFiles", () => {
-  it("reads the PR's files from the paginated REST endpoint", () => {
-    const { calls, run } = recordingGh(['"a.mts"\n"src/b.cs"\n']);
+  it("reads the PR's files from the paginated REST list", () => {
+    const { calls, run } = recordingGh([`${JSON.stringify(["lib/a.mts"])}\n${JSON.stringify(["lib/b.mts"])}\n`]);
 
     const files = pullRequestFiles(7, run, "o/r");
 
-    assert.deepEqual(files, ["a.mts", "src/b.cs"]);
+    assert.deepEqual(files, ["lib/a.mts", "lib/b.mts"]);
+    assert.equal(calls.length, 1);
     assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/pulls/7/files"]);
   });
 
-  it("returns every path of a PR that changes more than 100, across pages", () => {
-    const page = (from: number, to: number) =>
-      Array.from({ length: to - from }, (_, i) => JSON.stringify(`dir/file${from + i}.txt`)).join("\n");
-    // --paginate prints each page's output in turn, with a blank line between.
-    const { run } = recordingGh([`${page(0, 100)}\n\n${page(100, 250)}\n`]);
+  it("returns every path of a PR that changes more than 100", () => {
+    const paths = Array.from({ length: 250 }, (_, i) => `src/file-${i}.mts`);
+    const { run } = recordingGh([paths.map((path) => JSON.stringify([path])).join("\n") + "\n"]);
 
-    const files = pullRequestFiles(7, run, "o/r");
-
-    assert.equal(files.length, 250);
-    assert.equal(files[249], "dir/file249.txt");
+    assert.deepEqual(pullRequestFiles(7, run, "o/r"), paths);
   });
 
-  it("returns no paths for a PR that changes nothing", () => {
+  it("keeps a path with a line break whole, as one path", () => {
+    const { run } = recordingGh([`${JSON.stringify(["odd\nname.mts"])}\n`]);
+
+    assert.deepEqual(pullRequestFiles(7, run, "o/r"), ["odd\nname.mts"]);
+  });
+
+  it("is empty for a PR that changes nothing", () => {
     const { run } = recordingGh([""]);
 
     assert.deepEqual(pullRequestFiles(7, run, "o/r"), []);
   });
 
-  it("throws when gh fails, so the caller doesn't treat the PR as touching nothing", () => {
+  it("returns a renamed file's old path as well as its new one", () => {
+    const { calls, run } = recordingGh([`${JSON.stringify(["lib/b.mts", "lib/a.mts"])}\n${JSON.stringify(["lib/c.mts"])}\n`]);
+
+    assert.deepEqual(pullRequestFiles(7, run, "o/r"), ["lib/b.mts", "lib/a.mts", "lib/c.mts"]);
+    assert.match(calls[0]!.args.join(" "), /previous_filename/);
+  });
+
+  it("throws for a list at GitHub's 3000-file cap, which may be cut short", () => {
+    const paths = Array.from({ length: 3000 }, (_, i) => `src/file-${i}.mts`);
+    const { run } = recordingGh([paths.map((path) => JSON.stringify([path])).join("\n") + "\n"]);
+
+    assert.throws(() => pullRequestFiles(7, run, "o/r"), /3000/);
+  });
+
+  it("throws when gh fails, rather than return part of the list", () => {
     const run = (() => {
-      throw new Error("gh down");
+      throw new Error("HTTP 502");
     }) as unknown as typeof execFileSync;
 
-    assert.throws(() => pullRequestFiles(7, run, "o/r"));
-  });
-});
-
-// AC 6: the overlap check finds its own earlier deferral comment by its marker.
-describe("hostCommentedWith", () => {
-  const marker = "<!-- sandcastle:overlap-deferred -->";
-  const comment = (body: string, author: string) => JSON.stringify({ body, author });
-
-  it("is true when the host posted a comment carrying the marker", () => {
-    const { calls, run } = recordingGh([[comment("hello", "other"), comment(`${marker}\nDeferred.`, "host")].join("\n")]);
-
-    assert.equal(hostCommentedWith(9, marker, run, "o/r", "host"), true);
-    assert.deepEqual(calls[0]!.args.slice(0, 3), ["api", "--paginate", "repos/o/r/issues/9/comments"]);
-  });
-
-  it("is false when only someone else pasted the marker", () => {
-    const { run } = recordingGh([comment(`${marker} pasted`, "stranger")]);
-
-    assert.equal(hostCommentedWith(9, marker, run, "o/r", "host"), false);
-  });
-
-  it("is false when no comment carries the marker", () => {
-    const { run } = recordingGh([comment("unrelated", "host")]);
-
-    assert.equal(hostCommentedWith(9, marker, run, "o/r", "host"), false);
+    assert.throws(() => pullRequestFiles(7, run, "o/r"), /HTTP 502|failed/);
   });
 });

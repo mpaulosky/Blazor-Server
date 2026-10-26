@@ -1,9 +1,24 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { OPTIONAL_ROLES } from "./config.mts";
-import { pickIssues, readyPicks, resolveFiles, resolveRoles, unpickedReady } from "./plan.mts";
-import type { SandcastleIssue } from "./github.mts";
+import { uiEnabled } from "./agents.mts";
+import { ROLE_AGENTS } from "./repo-config.mts";
+import { readyPicks, resolveFiles, resolveRoles } from "./plan.mts";
+
+// Runs `run` with the repo's `ui` role opted in or out of ROLE_AGENTS, whatever
+// lib/repo-config.mts says, then puts ROLE_AGENTS back as it was.
+async function withUiRole<T>(enabled: boolean, run: () => T | Promise<T>): Promise<T> {
+  const agents: Record<string, unknown> = ROLE_AGENTS;
+  const original = agents.ui;
+  if (enabled) agents.ui = { ...ROLE_AGENTS.backend };
+  else delete agents.ui;
+  try {
+    return await run();
+  } finally {
+    if (original === undefined) delete agents.ui;
+    else agents.ui = original;
+  }
+}
 
 describe("readyPicks", () => {
   const ready = [{ number: 4 }, { number: 5 }];
@@ -36,26 +51,35 @@ describe("readyPicks", () => {
 
     assert.deepEqual(picks[0]?.roles, ["scribe"]);
   });
+
+  it("keeps a pick's files field unchanged", () => {
+    const picks = readyPicks([{ id: "4", title: "A", files: ["lib/a.mts"] }], ready, () => {});
+
+    assert.deepEqual(picks[0]?.files, ["lib/a.mts"]);
+  });
 });
 
 // Covers "A plan with a missing or invalid roles field runs every role for
-// that issue" from issue #72: resolveRoles is what main.mts asks for that
+// that issue" from Blazor-Server#72: resolveRoles is what main.mts asks for that
 // fallback, since the plan schema itself can't reject an invalid field
 // without aborting the whole plan (see plan.mts).
 describe("resolveRoles", () => {
+  // The roles a plan without a valid `roles` field runs: the optional ones, `ui` only when the repo opted in.
+  const everyOptionalRole = () => OPTIONAL_ROLES.filter((role) => role !== "ui" || uiEnabled());
+
   it("runs every optional role when the field is missing", () => {
-    assert.deepEqual(resolveRoles(undefined), [...OPTIONAL_ROLES]);
+    assert.deepEqual(resolveRoles(undefined), everyOptionalRole());
   });
 
   it("runs every optional role when the field isn't an array", () => {
-    assert.deepEqual(resolveRoles("architect"), [...OPTIONAL_ROLES]);
-    assert.deepEqual(resolveRoles(null), [...OPTIONAL_ROLES]);
-    assert.deepEqual(resolveRoles({ architect: true }), [...OPTIONAL_ROLES]);
+    assert.deepEqual(resolveRoles("architect"), everyOptionalRole());
+    assert.deepEqual(resolveRoles(null), everyOptionalRole());
+    assert.deepEqual(resolveRoles({ architect: true }), everyOptionalRole());
   });
 
   it("runs every optional role when the array names something resolveRoles doesn't recognise", () => {
-    assert.deepEqual(resolveRoles(["architect", "backend"]), [...OPTIONAL_ROLES]);
-    assert.deepEqual(resolveRoles(["frontend"]), [...OPTIONAL_ROLES]);
+    assert.deepEqual(resolveRoles(["architect", "backend"]), everyOptionalRole());
+    assert.deepEqual(resolveRoles(["frontend"]), everyOptionalRole());
   });
 
   it("keeps only the roles the planner picked, in build order", () => {
@@ -67,166 +91,136 @@ describe("resolveRoles", () => {
     assert.deepEqual(resolveRoles([]), []);
   });
 
+  it("leaves the ui role out of every optional role, and refuses a plan that picks it, in a repo that hasn't opted in", async () => {
+    await withUiRole(false, () => {
+      const everyOtherRole = OPTIONAL_ROLES.filter((role) => role !== "ui");
+      assert.deepEqual(resolveRoles(undefined), everyOtherRole);
+      assert.deepEqual(resolveRoles(["ui"]), everyOtherRole);
+      assert.deepEqual(resolveRoles(["architect"]), ["architect"]);
+    });
+  });
+
+  it("includes the ui role, in build order, in a repo that opted in", async () => {
+    await withUiRole(true, () => {
+      assert.deepEqual(resolveRoles(undefined), ["architect", "ui", "scribe"]);
+      assert.deepEqual(resolveRoles(["scribe", "ui", "architect"]), ["architect", "ui", "scribe"]);
+    });
+  });
+
   it("drops a repeated role rather than running it twice", () => {
-    assert.deepEqual(resolveRoles(["ui", "ui"]), ["ui"]);
+    assert.deepEqual(resolveRoles(["scribe", "scribe"]), ["scribe"]);
   });
 });
 
-// AC of #421: plan-prompt.md asks the planner for each pick's `files`, the
-// paths it expects the issue to change, which the host defers overlaps on.
-describe("plan-prompt.md", () => {
-  const prompt = readFileSync(new URL("../plan-prompt.md", import.meta.url), "utf8");
-
-  it("asks the planner for a files list per pick", () => {
-    assert.match(prompt, /`files`/);
-    assert.match(prompt, /"files": \[/);
-  });
-});
-
-// AC 3: the planner's `files` are made into clean repo-relative paths.
+// resolveFiles is what main.mts asks for each pick's files. The
+// plan schema leaves the field unknown so a bad value means "no files" (the
+// pick is held behind an open PR or another pick, unless it's the first) rather than aborting the whole plan.
 describe("resolveFiles", () => {
-  const root = "/home/agent/workspace";
-
-  it("turns an absolute path under the repo root into a repo-relative one", () => {
-    assert.deepEqual(resolveFiles([`${root}/.sandcastle/lib/build.mts`], root), [".sandcastle/lib/build.mts"]);
+  it("is empty when the field is missing", () => {
+    assert.deepEqual(resolveFiles(undefined), []);
   });
 
-  it("uses the sandbox's checkout as the root by default", () => {
+  it("is empty when the field isn't an array", () => {
+    assert.deepEqual(resolveFiles("lib/a.mts"), []);
+    assert.deepEqual(resolveFiles(null), []);
+    assert.deepEqual(resolveFiles({ "lib/a.mts": true }), []);
+  });
+
+  it("folds a parent segment into the one before it, so two spellings of a file compare equal", () => {
+    assert.deepEqual(resolveFiles(["src/Web/../Web/Program.cs", "src/Web/Program.cs"]), ["src/Web/Program.cs"]);
+    assert.deepEqual(resolveFiles(["a/b/../../c.txt"]), ["c.txt"]);
+  });
+
+  it("is empty when a path climbs above the root, since it names nothing to compare", () => {
+    assert.deepEqual(resolveFiles(["../outside.txt"]), []);
+    assert.deepEqual(resolveFiles(["lib/a.mts", "a/../../b.txt"]), []);
+  });
+
+  it("is empty when any entry isn't a string", () => {
+    assert.deepEqual(resolveFiles(["lib/a.mts", 4]), []);
+    assert.deepEqual(resolveFiles([null]), []);
+  });
+
+  it("is empty when any entry holds a glob, which can't be compared", () => {
+    assert.deepEqual(resolveFiles(["lib/a.mts", "lib/*.mts"]), []);
+    assert.deepEqual(resolveFiles(["lib/?.mts"]), []);
+  });
+
+  it("keeps the paths as named, in order", () => {
+    assert.deepEqual(resolveFiles(["lib/b.mts", "lib/a.mts"]), ["lib/b.mts", "lib/a.mts"]);
+  });
+
+  it("trims entries, turns backslashes into slashes and strips leading ./ and /", () => {
+    assert.deepEqual(resolveFiles(["  lib/a.mts  ", "lib\\b.mts", "./lib/c.mts", "/lib/d.mts", "././/lib/e.mts"]), [
+      "lib/a.mts",
+      "lib/b.mts",
+      "lib/c.mts",
+      "lib/d.mts",
+      "lib/e.mts",
+    ]);
+  });
+
+  it("drops empty entries and repeats, keeping the first", () => {
+    assert.deepEqual(resolveFiles(["lib/a.mts", "", "  ", "./", "lib/b.mts", "./lib/a.mts"]), ["lib/a.mts", "lib/b.mts"]);
+  });
+
+  // A folder is a path like any other, and overlap treats it as covering what's under it.
+  it("drops a trailing slash, so a folder and the same folder with a slash are one path", () => {
+    assert.deepEqual(resolveFiles(["lib/new/", "lib/new", "lib/other//"]), ["lib/new", "lib/other"]);
+  });
+
+  it("deliberately naming none is an empty list", () => {
+    assert.deepEqual(resolveFiles([]), []);
+  });
+});
+
+// The planner works in the sandbox, where the repository is at /home/agent/workspace, and may name a path from there.
+describe("resolveFiles paths from the sandbox", () => {
+  it("turns an absolute path under the repository root into a repo-relative one", () => {
     assert.deepEqual(resolveFiles(["/home/agent/workspace/.sandcastle/lib/build.mts"]), [".sandcastle/lib/build.mts"]);
   });
 
-  it("leaves a path that is already repo-relative as it is", () => {
-    assert.deepEqual(resolveFiles(["src/UI/Program.cs"], root), ["src/UI/Program.cs"]);
+  it("treats an absolute path and the same path written relatively as one path", () => {
+    assert.deepEqual(resolveFiles(["/home/agent/workspace/lib/a.mts", "lib/a.mts", "./lib/a.mts"]), ["lib/a.mts"]);
   });
 
-  it("drops a leading ./", () => {
-    assert.deepEqual(resolveFiles(["./lib/plan.mts"], root), ["lib/plan.mts"]);
+  it("turns an absolute path to a folder under the root into a folder, without the trailing slash", () => {
+    assert.deepEqual(resolveFiles(["/home/agent/workspace/.sandcastle/lib/"]), [".sandcastle/lib"]);
   });
 
-  it("drops trailing slashes, so a folder is a bare path", () => {
-    assert.deepEqual(resolveFiles(["src/UI/", "docs//"], root), ["src/UI", "docs"]);
+  it("drops the repository root itself, which names no file", () => {
+    assert.deepEqual(resolveFiles(["/home/agent/workspace", "/home/agent/workspace/", "lib/a.mts"]), ["lib/a.mts"]);
   });
 
-  it("trims surrounding spaces", () => {
-    assert.deepEqual(resolveFiles(["  lib/plan.mts \t"], root), ["lib/plan.mts"]);
+  it("doesn't treat a path that only shares the root's prefix as under the root", () => {
+    assert.deepEqual(resolveFiles(["/home/agent/workspace-other/x.mts"]), ["home/agent/workspace-other/x.mts"]);
   });
 
-  it("drops blank entries", () => {
-    assert.deepEqual(resolveFiles(["", "   ", "a.mts"], root), ["a.mts"]);
+  it("takes the repository root as its second argument", () => {
+    assert.deepEqual(resolveFiles(["/srv/repo/lib/a.mts", "/srv/repo/"], "/srv/repo"), ["lib/a.mts"]);
   });
 
-  it("drops an entry that is only a ./ or the repo root itself", () => {
-    assert.deepEqual(resolveFiles(["./", root, `${root}/`, "a.mts"], root), ["a.mts"]);
+  it("drops ./ and trailing spaces", () => {
+    assert.deepEqual(resolveFiles(["./lib/a.mts ", " ./lib/b.mts\t"]), ["lib/a.mts", "lib/b.mts"]);
   });
 
-  it("drops an entry with a line break or other control character", () => {
+  it("drops entries that are blank, or only ./ or slashes", () => {
+    assert.deepEqual(resolveFiles(["", "   ", "./", "/", "//", "lib/a.mts"]), ["lib/a.mts"]);
+  });
+
+  it("drops an entry with a line break, keeping the other entries", () => {
+    assert.deepEqual(resolveFiles(["lib/a.mts", "lib/b.mts\n::error::injected", "lib/c\r.mts"]), ["lib/a.mts"]);
+  });
+
+  it("drops an entry with a control character, keeping the other entries", () => {
     assert.deepEqual(
-      resolveFiles(["a.mts\n::error::injected", "b\r.mts", "c\u0000.mts", "d\u001b[31m.mts", "e\u007f.mts", "ok.mts"], root),
-      ["ok.mts"],
+      resolveFiles(["lib/a.mts", "lib/\u0000b.mts", "lib/\u001b[31mc.mts", "lib/d\u007f.mts", "lib/e\u0085.mts", "lib/f.mts"]),
+      ["lib/a.mts", "lib/f.mts"],
     );
   });
 
-  it("drops an absolute path outside the repo root rather than guess at it", () => {
-    assert.deepEqual(resolveFiles(["/etc/passwd", "/home/agent/workspace-other/a.mts", "a.mts"], root), ["a.mts"]);
-  });
-
-  it("keeps each path once", () => {
-    assert.deepEqual(resolveFiles(["a.mts", `${root}/a.mts`, "./a.mts"], root), ["a.mts"]);
-  });
-
-  it("reads a missing list as an empty one", () => {
-    assert.deepEqual(resolveFiles(undefined, root), []);
+  it("is empty when every entry was dropped", () => {
+    assert.deepEqual(resolveFiles(["x\ny", ""]), []);
   });
 });
 
-describe("readyPicks files", () => {
-  it("resolves each pick's files, so the overlap check compares clean paths", () => {
-    const picks = readyPicks(
-      [{ id: "4", title: "A", files: ["/home/agent/workspace/.sandcastle/lib/build.mts", "./x.mts", ""] }],
-      [{ number: 4 }],
-      () => {},
-    );
-
-    assert.deepEqual(picks[0]!.files, [".sandcastle/lib/build.mts", "x.mts"]);
-  });
-
-  it("leaves a pick that named no files without any, so it is still treated as touching anything", () => {
-    const picks = readyPicks([{ id: "4", title: "A" }], [{ number: 4 }], () => {});
-
-    assert.equal((picks[0]!.files ?? []).length, 0);
-  });
-});
-
-// AC 5: the critique gets each pick's files. (Since #428 an overlap-held pick is
-// passed to it as unpicked, with a note; see unpickedReady below.)
-describe("pickIssues", () => {
-  const issue = (number: number): SandcastleIssue =>
-    ({ number, title: `Issue ${number}`, body: "", labels: [], comments: [] }) as unknown as SandcastleIssue;
-
-  it("gives each kept pick the files the planner named", () => {
-    const picks = pickIssues([{ id: "4", title: "A", files: ["a.mts", "b/"] }], [issue(4), issue(5)]);
-
-    assert.deepEqual(picks.map((pick) => pick.number), [4]);
-    assert.deepEqual(picks[0]!.files, ["a.mts", "b"]);
-  });
-
-  it("gives a pick that named no files an empty list", () => {
-    const picks = pickIssues([{ id: "4", title: "A" }], [issue(4)]);
-
-    assert.deepEqual(picks[0]!.files, []);
-  });
-
-  it("resolves each pick's optional roles from the planner's raw field", () => {
-    const picks = pickIssues([{ id: "4", title: "A", roles: ["scribe"] }, { id: "5", title: "B" }], [issue(4), issue(5)]);
-
-    assert.deepEqual(picks[0]!.roles, ["scribe"]);
-    assert.deepEqual(picks[1]!.roles, [...OPTIONAL_ROLES]);
-  });
-});
-
-describe("unpickedReady", () => {
-  const issue = (number: number) => ({ number, title: `Issue ${number}` }) as unknown as SandcastleIssue;
-
-  it("leaves out every pick that goes to the critique", () => {
-    const ready = [issue(1), issue(2), issue(3)];
-
-    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }, { id: "2", title: "B" }], []);
-
-    assert.deepEqual(unpicked.map((entry) => entry.number), [3]);
-  });
-
-  // #428: the critique's dependency check is the safety net for a dependency
-  // the planner missed, and a held issue is work still to come.
-  it("passes an overlap-held issue as unpicked, with a note that it's held", () => {
-    const ready = [issue(1), issue(2), issue(3)];
-
-    // #2 was planned and held behind #1 by the overlap check; #3 was never picked.
-    const unpicked = unpickedReady(ready, [{ id: "1", title: "A" }], [{ id: 2, behind: { kind: "issue", number: 1 }, file: "a.mts" }]);
-
-    assert.deepEqual(unpicked.map((entry) => entry.number), [2, 3]);
-    const [held, other] = unpicked;
-    assert.match(String(held?.note), /held/i);
-    assert.equal(other?.note, undefined, "an issue that isn't held carries no note");
-  });
-
-  it("says what a held issue shares and waits on when it shares a file", () => {
-    const [held] = unpickedReady([issue(2)], [], [{ id: 2, behind: { kind: "pr", number: 90 }, file: "src/UI/Program.cs" }]);
-
-    assert.match(String(held?.note), /src\/UI\/Program\.cs/);
-    assert.match(String(held?.note), /pull request #90/);
-  });
-
-  it("doesn't claim a shared file for a held issue that named no files", () => {
-    const [held] = unpickedReady([issue(2)], [], [{ id: 2, behind: { kind: "issue", number: 1 } }]);
-
-    assert.match(String(held?.note), /names no files/);
-    assert.match(String(held?.note), /pick #1/);
-    assert.doesNotMatch(String(held?.note), /shares/);
-  });
-
-  it("never passes a kept pick as unpicked, even when it is also named as held", () => {
-    const unpicked = unpickedReady([issue(1), issue(2)], [{ id: "1", title: "A" }], [{ id: 1, behind: { kind: "issue", number: 1 } }]);
-
-    assert.deepEqual(unpicked.map((entry) => entry.number), [2]);
-  });
-});

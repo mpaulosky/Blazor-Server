@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   BUILD_ROLES,
@@ -6,31 +7,37 @@ import {
   BudgetError,
   DEFAULT_BUDGET_MINUTES,
   GATE_FIXER_ATTEMPTS,
+  OPTIONAL_ROLES,
   QUEUE_SCOPE_USAGE,
-  ROLE_AGENTS,
   QueueScopeError,
+  ROLES,
   budgetMinutesFrom,
   queueScopeFrom,
 } from "./config.mts";
-
-const opus = "claude-opus-5-5";
-const sonnet = "claude-sonnet-5-5";
+import { roleAgent, uiEnabled } from "./agents.mts";
+import { ROLE_AGENTS } from "./repo-config.mts";
 
 describe("ROLE_AGENTS", () => {
-  it("configures every role with the spec's model, effort, iterations and timeout", () => {
-    assert.deepEqual(ROLE_AGENTS, {
-      intake: { model: sonnet, effort: "medium", maxIterations: 1, timeoutMinutes: 15 },
-      planner: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
-      critique: { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
-      architect: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
-      tester: { model: sonnet, effort: "high", maxIterations: 3, timeoutMinutes: 45 },
-      backend: { model: opus, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
-      ui: { model: sonnet, effort: "high", maxIterations: 10, timeoutMinutes: 45 },
-      scribe: { model: sonnet, effort: "medium", maxIterations: 1, timeoutMinutes: 15 },
-      reviewer: { model: opus, effort: "high", maxIterations: 1, timeoutMinutes: 15 },
-      "gate-fixer": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 20 },
-      "follow-up": { model: sonnet, effort: "high", maxIterations: 1, timeoutMinutes: 30 },
-    });
+  // lib/repo-config.mts gives each role its agent. The Owned modules index it by Role, so a role it lacks fails a run, and one
+  // it adds that ROLES lacks fails the type-check, except the opt-in `ui`, which is not in ROLES so that a
+  // repo-config.mts written before it existed still type-checks.
+  it("gives every role in ROLES an agent, and no other but the opt-in ui", () => {
+    assert.deepEqual(Object.keys(ROLE_AGENTS).filter((role) => role !== "ui").sort(), [...ROLES].sort());
+  });
+
+  it("names every role the build and the optional-role list use", () => {
+    for (const role of [...BUILD_ROLES, ...OPTIONAL_ROLES]) {
+      assert.ok(role === "ui" || ROLES.includes(role), `${role} is missing from ROLES`);
+    }
+  });
+
+  // A repo that adds a ui entry also needs the prompts the role and its planner pick read, or its first ui build fails.
+  it("has the prompts the ui role needs when the repo opted into it", { skip: !uiEnabled() && "the repo hasn't opted into the ui role" }, () => {
+    const file = (path: string) => new URL(`../${path}`, import.meta.url);
+
+    assert.ok(existsSync(file("roles/ui.md")), "roles/ui.md is missing");
+    assert.match(readFileSync(file("roles/backend.md"), "utf8"), /\{\{UI_DEVELOPER\}\}/);
+    assert.match(readFileSync(file("plan-prompt.md"), "utf8"), /^- `ui`:/m);
   });
 });
 
@@ -42,8 +49,11 @@ describe("BUILDING_LABEL_MAX_AGE_MS", () => {
   // checkpoints. build.test.mts checks buildIssue runs no other role.
   it("outlasts the longest build the role timeouts allow, with an hour for gates, sandboxes and publishing", () => {
     const checkpoints = 2;
+    // The UI developer counts even in a repo that hasn't opted in, at the backend developer's budget (the Seed's example
+    // entry), so a repo that opts in with a larger one gets the sum checked again by this test in its own config.
+    const timeout = (role: (typeof BUILD_ROLES)[number]) => (role === "ui" && !uiEnabled() ? ROLE_AGENTS.backend : roleAgent(role)).timeoutMinutes;
     const minutes =
-      BUILD_ROLES.reduce((sum, role) => sum + ROLE_AGENTS[role].timeoutMinutes, 0) +
+      BUILD_ROLES.reduce((sum, role) => sum + timeout(role), 0) +
       checkpoints * GATE_FIXER_ATTEMPTS * ROLE_AGENTS["gate-fixer"].timeoutMinutes;
     const hour = 60;
 
@@ -56,7 +66,7 @@ describe("BUILDING_LABEL_MAX_AGE_MS", () => {
 
 // A local run must never silently build the whole queue nor silently build
 // nothing: an environment that names no valid scope is a usage error, not a
-// default (#146, "A local run without SANDCASTLE_ISSUE or SANDCASTLE_LABEL
+// default ("A local run without SANDCASTLE_ISSUE or SANDCASTLE_LABEL
 // exits non-zero with a usage message and touches nothing").
 describe("queueScopeFrom", () => {
   it("throws QueueScopeError with both usage forms when neither variable is set", () => {
@@ -127,7 +137,7 @@ describe("queueScopeFrom", () => {
   });
 });
 
-// #147: no new round, and no role run, starts once this many minutes have
+// No new round, and no role run, starts once this many minutes have
 // passed since the run started.
 describe("budgetMinutesFrom", () => {
   it("defaults to DEFAULT_BUDGET_MINUTES when unset", () => {

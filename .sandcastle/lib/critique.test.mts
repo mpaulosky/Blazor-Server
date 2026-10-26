@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Blocker } from "./gate.mts";
 import type { SandcastleIssue } from "./github.mts";
-import { applyVerdicts, critiqueRound, type CritiqueGitHub, type CritiqueVerdict } from "./critique.mts";
+import { critiqueUnpicked } from "./overlap.mts";
+import { applyVerdicts, critiqueRound, deferralComment, type CritiqueGitHub, type CritiqueVerdict } from "./critique.mts";
 import { UncountedStopError } from "./errors.mts";
 import type { CritiquePromptArgs } from "./prompts.mts";
 import { OutcomeReport } from "./report.mts";
@@ -44,6 +45,28 @@ const capture = () => {
 
 const defer = (id: number, blockedBy: number | undefined, reason = "both edit lib/plan.mts"): CritiqueVerdict =>
   ({ id: String(id), verdict: "defer", ...(blockedBy === undefined ? {} : { blockedBy: String(blockedBy) }), reason });
+
+// The critique's reason is model text posted on a public issue by the host's
+// login, so it's made safe as intake's reasons are.
+describe("deferralComment", () => {
+  it("breaks mentions and cross-references in the reason", () => {
+    const body = deferralComment(4, "cc @someone: both change #12's files");
+
+    assert.doesNotMatch(body, /(^|[^\w])@someone\b/);
+    assert.doesNotMatch(body, /(^|[^\w&])#12\b/);
+  });
+
+  it("breaks a host marker the reason quotes, so markerComments can't count the comment as that marker's", () => {
+    assert.ok(!deferralComment(4, "Both touch <!-- sandcastle:build-failed --> handling.").includes("<!--"));
+  });
+
+  it("withholds a reason that looks like it holds a secret", () => {
+    const body = deferralComment(4, `Both read ghp_${"a".repeat(36)}.`);
+
+    assert.doesNotMatch(body, /ghp_/);
+    assert.match(body, /looked like it held a secret/);
+  });
+});
 
 describe("applyVerdicts", () => {
   it("links a deferred issue to its blocker, comments once, and leaves it out of the round", () => {
@@ -168,7 +191,7 @@ describe("applyVerdicts", () => {
   });
 
   it("ignores a defer that would close an existing chain into a cycle", () => {
-    // #3 is blocked by #4, which is blocked by #1, so #1 blocked by #3 would loop.
+    // Issue 3 is blocked by 4, which is blocked by 1, so 1 blocked by 3 would loop.
     const gh = github({ chains: { 3: [4], 4: [1] } });
     const { lines, log } = capture();
 
@@ -310,26 +333,79 @@ describe("critiqueRound", () => {
     assert.deepEqual(JSON.parse(args!.UNPICKED_JSON).map((i: SandcastleIssue) => i.number), [3]);
   });
 
-  // #428: a pick that depends on an overlap-held issue is deferred behind it.
-  it("defers a pick behind an overlap-held issue passed as unpicked, and runs the critique for it", async () => {
+  // Issues 1 and 2 name the same file and 2 is held behind 1; 3 depends on 2. The critique has to see 2 to
+  // defer 3 behind it, or 3 is built before the issue it depends on.
+  it("shows the critique an overlap-held issue as unpicked, with a note that it is held", async () => {
     const gh = github();
     const { log } = capture();
     let args: CritiquePromptArgs | undefined;
-    const held = { ...issue(2), note: "Held back this round by the overlap check." };
+    const ready = [1, 2, 3].map(issue);
+    const unpicked = critiqueUnpicked(ready, [{ number: 1 }, { number: 3 }], new Set([2]));
 
-    const kept = await critiqueRound(
-      { picks: [issue(1), issue(3)], inFlight: [], unpicked: [held] },
+    await critiqueRound(
+      { picks: [issue(1), issue(3)], inFlight: [], unpicked },
       async (promptArgs) => {
         args = promptArgs;
-        return [{ id: "1", verdict: "keep", reason: "no overlap" }, defer(3, 2, "needs the API #2 adds")];
+        return [{ id: "1", verdict: "keep", reason: "ok" }, { id: "3", verdict: "keep", reason: "ok" }];
       },
       gh.stub,
       log,
     );
 
-    assert.deepEqual(JSON.parse(args!.UNPICKED_JSON).map((i: SandcastleIssue) => i.number), [2]);
+    const sent = JSON.parse(args!.UNPICKED_JSON) as { number: number; heldNote?: string }[];
+    assert.deepEqual(sent.map((i) => i.number), [2]);
+    assert.match(sent[0]!.heldNote ?? "", /held/i);
+  });
+
+  it("defers a pick that depends on an overlap-held issue behind it", async () => {
+    const gh = github();
+    const { log } = capture();
+    const unpicked = critiqueUnpicked([1, 2, 3].map(issue), [{ number: 1 }, { number: 3 }], new Set([2]));
+
+    const kept = await critiqueRound(
+      { picks: [issue(1), issue(3)], inFlight: [], unpicked },
+      // Defers issue 3 only when the prompt shows 2 as held, as a critique has to see it to do so.
+      async (promptArgs) => {
+        const sent = JSON.parse(promptArgs.UNPICKED_JSON) as { number: number; heldNote?: string }[];
+        const sawHeld = sent.some((i) => i.number === 2 && typeof i.heldNote === "string");
+        return [
+          { id: "1", verdict: "keep", reason: "independent" },
+          sawHeld ? defer(3, 2, "needs the API #2 adds") : { id: "3", verdict: "keep", reason: "independent" },
+        ];
+      },
+      gh.stub,
+      log,
+      new OutcomeReport(),
+    );
+
     assert.deepEqual(kept.map((i) => i.number), [1]);
     assert.deepEqual(gh.links, [[3, 2]]);
+  });
+
+  // critique-prompt.md says each pick carries `files`; they must reach the prompt.
+  it("passes each pick's files to the critique", async () => {
+    const picks: (SandcastleIssue & { files: string[] })[] = [
+      { ...issue(1), files: ["lib/a.mts"] },
+      { ...issue(2), files: [] },
+    ];
+    const { log } = capture();
+    let args: CritiquePromptArgs | undefined;
+
+    await critiqueRound(
+      { picks, inFlight: [], unpicked: [] },
+      async (promptArgs) => {
+        args = promptArgs;
+        return [
+          { id: "1", verdict: "keep", reason: "fine" },
+          { id: "2", verdict: "keep", reason: "fine" },
+        ];
+      },
+      github().stub,
+      log,
+    );
+
+    const passed = JSON.parse(args!.PICKED_JSON) as { number: number; files: string[] }[];
+    assert.deepEqual(passed.map(({ number, files }) => [number, files]), [[1, ["lib/a.mts"]], [2, []]]);
   });
 
   it("applies the critique's verdicts to the picks", async () => {
@@ -395,7 +471,7 @@ describe("critiqueRound", () => {
     assert.deepEqual(kept.map((i) => i.number), [4]);
   });
 
-  // #147: a critique run stopped by the time budget or Claude's usage limit
+  // A critique run stopped by the time budget or Claude's usage limit
   // must end the round uncounted, rather than falling back to the first pick
   // as a failed critique does.
   it("rethrows an UncountedStopError from the run instead of returning the first pick", async () => {
