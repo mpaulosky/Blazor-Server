@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { CHECK_PATHS, GATE_COVERED_CHECKS } from "./repo-config.mts";
+import { CHECK_PATHS, GATE_COVERED_CHECKS, ROLE_AGENTS } from "./repo-config.mts";
 
 // This repo's own values in lib/repo-config.mts, pinned to the files they describe. The Owned tests take their values from the
 // config, so none of them notices a CI job that was renamed or a test project that was added.
@@ -72,4 +72,15 @@ describe("CHECK_PATHS", () => {
   it("ends a folder with a slash", () => {
     for (const path of CHECK_PATHS) assert.equal(statSync(join(root, path)).isDirectory(), path.endsWith("/"), path);
   });
+});
+
+describe("ROLE_AGENTS", () => {
+  // intake, planner and critique answer with structured output (Output.object), which one iteration produces: a second iteration of a
+  // role that already answered costs a whole round (the comment above ROLE_AGENTS in lib/repo-config.mts). reviewer, gate-fixer and
+  // follow-up are single-shot by design (docs/plans/sandcastle-workflow.md). The other roles' values are free to move.
+  for (const role of ["intake", "planner", "critique", "reviewer", "gate-fixer", "follow-up"] as const) {
+    it(`runs ${role} for one iteration`, () => {
+      assert.equal(ROLE_AGENTS[role].maxIterations, 1);
+    });
+  }
 });
