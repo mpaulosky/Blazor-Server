@@ -96,4 +96,5 @@ that build ends. Check before running `/implement-spec` or opening a branch for 
 
 Claude reviews a PR only when it has the `review:claude` label, and its review counts only where Copilot posted its quota
 note on the head. PR Auto-Merge adds the label once that note appears, so don't add it yourself, except where
-[docs/PROCESS.md](docs/PROCESS.md) says to (a push that needs a new review, or one more review past the cap).
+[docs/PROCESS.md](docs/PROCESS.md) says to (its "A ready PR is kept up to date" bullet, for a
+merge of `main` that waits for a new review).
