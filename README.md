@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.182](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.182) | 2026-10-26 | chore: Migrate Sandcastle to the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-441-chore-migrate-sandcastle-to-the-repo-ci-baseline-template.md) |
 | [v0.0.181](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.181) | 2026-10-26 | ci(sandcastle): Start a follow-up pass when Claude Review completes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-431-ci-sandcastle-start-a-follow-up-pass-when-claude-review-completes.md) |
 | [v0.0.180](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.180) | 2026-10-20 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-20-pr-434-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.179](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.179) | 2026-10-20 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-20-pr-432-chore-re-apply-the-repo-ci-baseline-template.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.175](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.175) | 2026-10-19 | fix(sandcastle): Give the sandbox the host's git identity before the follow-up pass merges main | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-420-fix-sandcastle-give-the-sandbox-the-host-s-git-identity-before-the-follow-up-pass-merges-main.md) |
 | [v0.0.174](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.174) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-417-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.173](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.173) | 2026-10-18 | chore(deps): Have Dependabot ignore claude-code-action | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-414-chore-deps-have-dependabot-ignore-claude-code-action.md) |
-| [v0.0.172](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.172) | 2026-10-18 | fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md) |
 
 <!-- RELEASES_END -->
 
