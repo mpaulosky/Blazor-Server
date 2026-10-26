@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.181">v0.0.181</a></td>
+                <td>2026-10-26</td>
+                <td>ci(sandcastle): Start a follow-up pass when Claude Review completes</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-431-ci-sandcastle-start-a-follow-up-pass-when-claude-review-completes.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.180">v0.0.180</a></td>
                 <td>2026-10-20</td>
                 <td>chore: Re-apply the repo-ci-baseline Template</td>
@@ -282,12 +288,6 @@
                 <td>fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.171">v0.0.171</a></td>
-                <td>2026-10-18</td>
-                <td>fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409)</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-26">26 Oct 2026</time><span class="post-tag">v0.0.181</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-431-ci-sandcastle-start-a-follow-up-pass-when-claude-review-completes.md">ci(sandcastle): Start a follow-up pass when Claude Review completes</a></h3>
+              <p class="post-excerpt">Sandcastle&#x27;s follow-up pass answers and resolves bot review threads, the Claude review&#x27;s included. But a Claude review didn&#x27;t start a pass: No review trigger: Claude Review posts with GITHUB_TOKEN…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/431">PR #431</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-20">20 Oct 2026</time><span class="post-tag">v0.0.180</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md">fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5</a></h3>
               <p class="post-excerpt">Sandcastle&#x27;s Sonnet roles named claude-sonnet-5, the previous Sonnet, instead of claude-sonnet-5-5. Its Opus roles and Claude Review already use claude-opus-5-5.</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/412">PR #412</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-18">18 Oct 2026</time><span class="post-tag">v0.0.171</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md">fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409)</a></h3>
-              <p class="post-excerpt">A fresh clone or worktree has no node_modules, so dotnet build failed in UI.csproj&#x27;s BuildTailwindCss target (&quot;The Tailwind CSS CLI isn&#x27;t installed in src/UI/node_modules&quot;). That failed the pre-push…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/410">PR #410</a></p>
             </article>
           </li>
         </ul>
