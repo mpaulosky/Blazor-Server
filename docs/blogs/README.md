@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-26 | [ci(sandcastle): Start a follow-up pass when Claude Review completes](2026-10-26-pr-431-ci-sandcastle-start-a-follow-up-pass-when-claude-review-completes.md) | release,automation |
 | 2026-10-20 | [chore: Re-apply the repo-ci-baseline Template](2026-10-20-pr-434-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-20 | [chore: Re-apply the repo-ci-baseline Template](2026-10-20-pr-432-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-19 | [fix(sandcastle): Let the critique see overlap-held issues, and don't fail the run on a comments read](2026-10-19-pr-429-fix-sandcastle-let-the-critique-see-overlap-held-issues-and-don-t-fail-the-run-on-a-comments-read.md) | release,automation |
