@@ -57,9 +57,9 @@ export const copyToWorktree = ["node_modules"];
 
 // The host skills the role prompts tell the agent to use, from the host
 // user's ~/.claude/skills (lib/skills.mts mounts each one read-only). None by
-// default: name a skill here only when it isn't in the worktree and you also
-// list it in a `# SKILLS` section of the tester, backend and ui prompts;
-// lib/skills.test.mts checks it.
+// default. This repo lists the six dotnet-* skills its tester, backend and ui
+// prompts name under `# SKILLS`; sandcastle.yml fetches them from dotfiles for a
+// hosted run. lib/skills.test.mts checks the prompts against this list.
 export const SANDBOX_SKILLS: readonly string[] = [
   "dotnet-tdd",
   "dotnet-add-testing",
@@ -74,7 +74,20 @@ export const SANDBOX_SKILLS: readonly string[] = [
 // their log to the follow-up role (lib/follow-up-pass.mts#isGateCovered).
 // Name the ci.yml jobs whose work scripts/gate.sh repeats, the repo's test
 // jobs included. A rename of one of those jobs must change this too.
-export const GATE_COVERED_CHECKS: readonly string[] = ["Build Solution", "Test Suite", "markdownlint", "yamllint"];
+// ci.yml names each test job "Tests: <project folder>", so a new test project
+// under tests/ needs an entry here; lib/repo-config.test.mts checks the list.
+export const GATE_COVERED_CHECKS: readonly string[] = [
+  "Build Solution",
+  "Test Suite",
+  "Tests: AppHost.Tests.Integration",
+  "Tests: Architecture.Tests",
+  "Tests: Domain.Tests.Unit",
+  "Tests: UI.Tests.E2E",
+  "Tests: UI.Tests.Integration",
+  "Tests: UI.Tests.Unit",
+  "markdownlint",
+  "yamllint",
+];
 
 // The command the host runs in the sandbox as the gate: at each checkpoint, and
 // on a PR's head in a follow-up pass. The default is the Template's
@@ -95,7 +108,22 @@ export const GATE_SCRIPT = "scripts/gate.sh";
 // whose branch changes a file under them lists it in its body for the reviewer
 // (lib/build.mts#publish). Folders end in a slash. List every place the gate
 // reads its checks from, not only where its script sits.
-export const CHECK_PATHS: readonly string[] = [".sandcastle/", "scripts/", ".github/ci/", ".github/workflows/", "package.json"];
+export const CHECK_PATHS: readonly string[] = [
+  ".sandcastle/",
+  "scripts/",
+  ".github/ci/",
+  ".github/workflows/",
+  ".github/scripts/",
+  ".github/hooks/",
+  "package.json",
+  "Directory.Build.props",
+  "Directory.Packages.props",
+  ".editorconfig",
+  "global.json",
+  ".markdownlint-cli2.jsonc",
+  ".yamllint.yml",
+  "Blazor-Server.slnx",
+];
 
 // This repository as OWNER/REPO, which the pre-push-review skill gives every gh
 // command as GH_REPO (`scripts/review.sh repo`): in a clone whose only remote is
@@ -114,6 +142,7 @@ export const NOT_OWNED_BASELINE_PATHS: readonly string[] = [
   ".github/workflows/sandcastle.yml",
   ".sandcastle/lib/code-review-skill.test.mts",
   ".sandcastle/lib/dockerfile.test.mts",
+  ".sandcastle/lib/repo-config.test.mts",
   ".sandcastle/lib/role-prompts.test.mts",
 ];
 

@@ -12,6 +12,14 @@ plan of record are in `docs/plans/sandcastle-workflow.md`; each module's header 
 `pnpm run check:sandcastle` (type-check, then every `*.test.mts`) is the check, and `scripts/gate.sh` runs it when these
 files change.
 
+## Owned and Seed files
+
+`main.mts` and every `lib/` module but `lib/repo-config.mts`, with their tests, are Owned by the Baseline Template: the next Apply overwrites
+them, so don't change them here. Write the change needed (file, before and after, and why) under **Baseline change needed** in your final
+message and the PR description, and deliver the rest of the task. The repo's own values go in `lib/repo-config.mts` (role models, hooks, skills,
+the CI jobs the gate reproduces), and its own tests, such as `lib/repo-config.test.mts` and `lib/role-prompts.test.mts`, are listed in
+`NOT_OWNED_BASELINE_PATHS` there. `.claude/rules/baseline.md` has the full lists.
+
 ## Writing the code
 
 - **Match the module you're in.** Two-space indents, double quotes, semicolons, `.mts` files that import each other with
