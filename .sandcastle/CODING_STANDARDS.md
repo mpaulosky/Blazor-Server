@@ -14,5 +14,6 @@ repeating them.
 ## Sandcastle's TypeScript
 
 `.claude/rules/sandcastle.md` holds the rules for `.sandcastle/`: `pnpm run check:sandcastle` type-checks it and runs every `*.test.mts`. `main.mts` and every `lib/` module
-but `lib/repo-config.mts`, with their tests, are owned by the Baseline Template: don't change them here. The repo's own values (role models, hooks, the CI jobs the gate
+but `lib/repo-config.mts`, with the Template's tests for them, are owned by the Baseline Template: don't change them here (`main.test.mts` and the tests listed in
+`NOT_OWNED_BASELINE_PATHS` are this repo's own). The repo's own values (role models, hooks, the CI jobs the gate
 reproduces) go in `lib/repo-config.mts`.

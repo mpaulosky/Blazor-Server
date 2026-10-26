@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { CHECK_PATHS, GATE_COVERED_CHECKS } from "./repo-config.mts";
@@ -15,7 +15,12 @@ const workflowText = readdirSync(workflows)
   .map((file) => readFileSync(join(workflows, file), "utf8"))
   .join("\n");
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const testProjects = readdirSync(join(root, "tests")).filter((dir) => existsSync(join(root, "tests", dir, `${dir}.csproj`)));
+// The projects ci.yml runs a "Tests: <folder>" job for: .github/scripts/discover_tests.py takes every tests/**/*.csproj whose IsTestProject
+// is true, which Directory.Build.props sets for a project name containing ".Tests", and names the job after the project's folder.
+const testProjects = (readdirSync(join(root, "tests"), { recursive: true }) as string[])
+  .map((entry) => entry.split("\\").join("/"))
+  .filter((entry) => entry.endsWith(".csproj") && basename(entry).includes(".Tests"))
+  .map((entry) => basename(dirname(entry)));
 
 describe("GATE_COVERED_CHECKS", () => {
   // ci.yml names each matrix job "Tests: <folder>", and the follow-up pass matches a check by its exact name.

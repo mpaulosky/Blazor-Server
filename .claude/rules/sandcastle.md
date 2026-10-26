@@ -14,11 +14,11 @@ files change.
 
 ## Owned and Seed files
 
-`main.mts` and every `lib/` module but `lib/repo-config.mts`, with their tests, are Owned by the Baseline Template: the next Apply overwrites
-them, so don't change them here. Write the change needed (file, before and after, and why) under **Baseline change needed** in your final
-message and the PR description, and deliver the rest of the task. The repo's own values go in `lib/repo-config.mts` (role models, hooks, skills,
-the CI jobs the gate reproduces), and its own tests, such as `lib/repo-config.test.mts` and `lib/role-prompts.test.mts`, are listed in
-`NOT_OWNED_BASELINE_PATHS` there. `.claude/rules/baseline.md` has the full lists.
+`main.mts` and every `lib/` module but `lib/repo-config.mts`, with the Template's tests for them, are Owned by the Baseline Template: the next Apply
+overwrites them, so don't change them here. `main.test.mts` and the tests in `NOT_OWNED_BASELINE_PATHS` are this repo's own. Write the change needed
+(file, before and after, and why) under **Baseline change needed** in your final message and the PR description, and deliver the rest of the task. The
+repo's own values go in `lib/repo-config.mts` (role models, hooks, skills, the CI jobs the gate reproduces). `.claude/rules/baseline.md` has the full
+lists.
 
 ## Writing the code
 
