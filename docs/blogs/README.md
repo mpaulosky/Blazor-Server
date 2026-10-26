@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-26 | [chore: Re-apply the repo-ci-baseline Template](2026-10-26-pr-443-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-26 | [chore: Migrate Sandcastle to the repo-ci-baseline Template](2026-10-26-pr-441-chore-migrate-sandcastle-to-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-26 | [ci(sandcastle): Start a follow-up pass when Claude Review completes](2026-10-26-pr-431-ci-sandcastle-start-a-follow-up-pass-when-claude-review-completes.md) | release,automation |
 | 2026-10-20 | [chore: Re-apply the repo-ci-baseline Template](2026-10-20-pr-434-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
