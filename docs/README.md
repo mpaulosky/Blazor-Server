@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.181](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.181) | 2026-10-26 | ci(sandcastle): Start a follow-up pass when Claude Review completes | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-431-ci-sandcastle-start-a-follow-up-pass-when-claude-review-completes.md) |
 | [v0.0.180](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.180) | 2026-10-20 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-20-pr-434-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.179](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.179) | 2026-10-20 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-20-pr-432-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.178](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.178) | 2026-10-19 | fix(sandcastle): Let the critique see overlap-held issues, and don't fail the run on a comments read | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-429-fix-sandcastle-let-the-critique-see-overlap-held-issues-and-don-t-fail-the-run-on-a-comments-read.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.174](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.174) | 2026-10-18 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-417-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.173](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.173) | 2026-10-18 | chore(deps): Have Dependabot ignore claude-code-action | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-414-chore-deps-have-dependabot-ignore-claude-code-action.md) |
 | [v0.0.172](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.172) | 2026-10-18 | fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5 | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md) |
-| [v0.0.171](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.171) | 2026-10-18 | fix(UI): Install the pnpm packages on a local build when the Tailwind CLI is missing (#409) | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-410-fix-ui-install-the-pnpm-packages-on-a-local-build-when-the-tailwind-cli-is-missing-409.md) |
 
 <!-- RELEASES_END -->
 
