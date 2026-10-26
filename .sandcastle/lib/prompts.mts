@@ -16,7 +16,7 @@ export function issuePromptArgs(issue: SandcastleIssue, branch: string) {
   return {
     TASK_ID: String(issue.number),
     ISSUE_TITLE: issue.title,
-    ISSUE_BODY: issue.body,
+    ISSUE_BODY: issue.body.trim() === "" ? "(no description)" : issue.body,
     ISSUE_COMMENTS: issue.comments.length > 0 ? issue.comments.join("\n\n---\n\n") : "(no comments)",
     BRANCH: branch,
     BASE_BRANCH,
@@ -37,7 +37,7 @@ export function gateFixerPromptArgs(issue: SandcastleIssue, branch: string, chec
 // contains main, merged main cleanly, or merging main conflicted in which
 // files (and that it must finish the merge with `git commit --no-edit`).
 // `ciLog` is the failed-job log of each red check the gate doesn't cover,
-// such as CodeQL's (#79), as CODEQL_LOG; Sandcastle refuses a placeholder
+// such as CodeQL's, as CODEQL_LOG; Sandcastle refuses a placeholder
 // with no value, so a pass with none still sends a sentence saying so.
 export function followUpPromptArgs(
   issue: SandcastleIssue,
@@ -67,18 +67,16 @@ export function architectPromptArgs(issue: SandcastleIssue, branch: string, desi
 }
 
 // The backend developer needs to know whether the UI developer runs after it
-// for this issue (see "Phase 6: Build" in docs/plans/sandcastle-workflow.md):
-// when it does, the Blazor components and pages are the UI developer's, and
-// the backend's run isn't the last developer run.
-export function backendPromptArgs(issue: SandcastleIssue, branch: string, uiRuns: boolean) {
+// for this issue: when it does, the Blazor components and pages are the UI
+// developer's, and the backend's run needn't leave every test green.
+export function backendPromptArgs(issue: SandcastleIssue, branch: string, uiRuns: boolean): PromptArgs {
   return {
     ...issuePromptArgs(issue, branch),
     UI_DEVELOPER: uiRuns
       ? "The UI developer runs after you for this issue. Leave Blazor components and pages (`.razor` files, their code-behind and their " +
         "bUnit tests) to it, and make every other test pass. If the gate is still red only on those tests when you finish, say so in your " +
         "last commit's body."
-      : "No UI developer runs for this issue, so your run is the last developer run: every test must pass by its end, Blazor components " +
-        "and pages included.",
+      : "No UI developer runs for this issue, so your run is the last developer run: every test must pass by its end.",
   };
 }
 
@@ -99,19 +97,9 @@ export function intakePromptArgs(issues: SandcastleIssue[]): { ISSUES_JSON: stri
 // PR changes.
 export type InFlightPrompt = { issue: SandcastleIssue; pr: number; branch: string; files: string[] };
 
-// A ready issue the critique reads as unpicked work. A pick the overlap check
-// held back carries a `note` saying so, which critique-prompt.md explains
-// (lib/plan.mts#unpickedReady, #428).
-export type UnpickedIssue = SandcastleIssue & { note?: string };
-
 // The round's picks, the in-flight issues and the ready issues the planner left
-// out or the overlap check held back. The critique compares the picks with
-// each other and with the rest.
-export function critiquePromptArgs(
-  picks: (SandcastleIssue & { files?: string[] })[],
-  inFlight: InFlightPrompt[],
-  unpicked: UnpickedIssue[],
-) {
+// out. The critique compares the picks with each other and with the rest.
+export function critiquePromptArgs(picks: SandcastleIssue[], inFlight: InFlightPrompt[], unpicked: SandcastleIssue[]) {
   return {
     PICKED_JSON: JSON.stringify(picks),
     IN_FLIGHT_JSON: JSON.stringify(

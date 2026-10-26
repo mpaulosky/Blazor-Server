@@ -9,13 +9,13 @@
 // need no agent: re-requesting a stale Copilot review, updating a branch
 // that's only behind main, and handing an issue back when its latest PR
 // closed without merging. A PR that needs more than that (DIRTY, a red
-// check, an unresolved bot or owner thread) is logged here and returned as a
-// PassTarget: the agent pass that fixes it lives in lib/follow-up-pass.mts
-// (#78).
+// check, an unresolved bot or owner thread the host hasn't answered) is
+// logged here and returned as a PassTarget: the agent pass that fixes it
+// lives in lib/follow-up-pass.mts.
 // ---------------------------------------------------------------------------
 
 import { discardClosedWork, isIssueBranch, type BranchRefs } from "./branches.mts";
-import { COPILOT_REREQUEST_AFTER_MS, PR_MARKER } from "./config.mts";
+import { COPILOT_REREQUEST_AFTER_MS, FOLLOW_UP_REPLY_MARKER, PR_MARKER, withoutOwnCheck } from "./config.mts";
 import {
   addPullRequestLabel,
   closedPullRequests,
@@ -27,12 +27,14 @@ import {
   openPullRequestsForSweep,
   pushAccess,
   requestCopilotReview,
+  reviewThreadsOf,
   signedInHostLogin,
   timestamp,
   updatePullRequestBranch,
   type ClosedPullRequest,
   type IssueEvent,
   type PullRequestIdentity,
+  type ReviewThread,
   type TimelineLabelEvent,
 } from "./github.mts";
 import { labelOriginFixes, loadQueue, ownerCheck, type IsOwner } from "./queue.mts";
@@ -40,7 +42,12 @@ import { outcomeReport, waitingPrReport, type OutcomeReport, type WaitingPrEntry
 
 // One check run or status on a PR's head commit, normalised from either
 // GraphQL shape (CheckRun or StatusContext) by lib/github.mts#openPullRequestsForSweep.
-export type CheckState = { name: string; completed: boolean; green: boolean; completedAt: string | null };
+// `workflow` is the name of the Actions workflow behind a check run; a status,
+// or a check run another app made, has none.
+export type CheckState = { name: string; completed: boolean; green: boolean; completedAt: string | null; workflow?: string };
+
+// Re-exported so the sweep's callers keep importing it from here.
+export { withoutOwnCheck };
 
 // An open PR with everything the sweep decides from, normalised from one
 // paginated GraphQL query (lib/github.mts#openPullRequestsForSweep).
@@ -72,7 +79,7 @@ const NEEDS_HUMAN = "sandcastle:needs-human";
 
 // The PR-level counterpart of lib/queue.mts#ISSUE_LABEL_RULES: a PR's
 // needs-human removal counts as a re-queue only when the repository owner
-// made it (#146). Nothing on a PR is trusted as an add.
+// made it. Nothing on a PR is trusted as an add.
 const PR_LABEL_RULES = { trustAdds: [], trustRemovals: [NEEDS_HUMAN] } as const;
 
 // The issue number a PR's head branch names, read from
@@ -88,7 +95,7 @@ export function issueNumberOf(headRefName: string): number | undefined {
 
 // Whether the host published `pr` itself: not a fork, into main, authored by
 // the repository owner's own login (the account the host publishes with,
-// never an organization's, see #214), carrying PR_MARKER, and on an issue
+// never an organization's), carrying PR_MARKER, and on an issue
 // branch. A collaborator's PR on a matching branch, or one of the host's own
 // from before this marker existed, is never this.
 export function isSandcastlePullRequest(pr: PullRequestIdentity, host: string): boolean {
@@ -131,42 +138,47 @@ export type SweepDecision =
 // flag one with conflicts for a later pass at once, wait while CI is still
 // running, flag one with a red check or an unresolved bot or confirmed-owner
 // thread (the same threads the follow-up role answers via threadsForRole, so
-// a pass actually runs for an owner thread rather than leaving it stranded,
-// #81), wait while Copilot's review is in flight, ask Copilot again once CI
+// a pass actually runs for an owner thread rather than leaving it stranded),
+// wait while Copilot's review is in flight, ask Copilot again once CI
 // has been done for a while with no review or pending request, update a
 // settled PR that's only behind main, or leave a clean or merge-blocked one
-// alone. `isOwner` defaults to never-owner so a caller that doesn't pass it
-// (most tests) sees every non-bot thread as a human's, as before this
-// parameter existed.
+// alone. Sandcastle's own check run counts for none of these
+// (withoutOwnCheck). `isOwner` defaults to never-owner so a caller that
+// doesn't pass it (most tests) sees every non-bot thread as a human's, as
+// before this parameter existed. `pr.threads` is the sweep's view, without
+// the threads the host has already answered (threadStanding), so a PR
+// waiting on the owner's reply moves on to the Copilot and update-branch
+// branches instead of being flagged every round.
 export function decide(pr: SweepPullRequest, now: number, isOwner: IsOwner = () => false): SweepDecision {
+  const checks = withoutOwnCheck(pr.checks);
   // GitHub runs no pull_request workflows on a PR it can't merge, so a head
   // pushed while it conflicts gets no checks: waiting on them would hide the
   // conflict for good.
   if (pr.mergeStateStatus === "DIRTY") {
-    const red = pr.checks.filter((check) => check.completed && !check.green).map((check) => `check ${check.name} is red`);
+    const red = checks.filter((check) => check.completed && !check.green).map((check) => `check ${check.name} is red`);
     return { action: "needs-pass", reasons: ["it has merge conflicts", ...red] };
   }
-  if (pr.checks.length === 0) return { action: "wait", reason: "no checks have reported" };
-  if (pr.checks.some((check) => !check.completed)) return { action: "wait", reason: "checks are still running" };
+  if (checks.length === 0) return { action: "wait", reason: "no checks have reported" };
+  if (checks.some((check) => !check.completed)) return { action: "wait", reason: "checks are still running" };
 
   // Red checks and bot/owner threads don't depend on Copilot reviewing this
   // head, so they're flagged before waiting on it: GitHub can drop the one
   // re-request (Copilot's review budget, ADR 0004), and every update-branch
   // makes a head Copilot hasn't seen, so waiting would hide them for good.
-  const reasons = pr.checks.filter((check) => !check.green).map((check) => `check ${check.name} is red`);
+  const reasons = checks.filter((check) => !check.green).map((check) => `check ${check.name} is red`);
   const botThreads = pr.threads.filter((thread) => !thread.resolved && thread.byBot).length;
   if (botThreads > 0) reasons.push(`${botThreads} unresolved bot thread(s)`);
   // A thread the repository owner opened is the follow-up role's to answer
   // (threadsForRole), not left waiting on a person forever: without this, a
   // settled PR whose only open thread is the owner's never needs a pass, so
-  // nothing ever answers it (#81's follow-up review).
+  // nothing ever answers it (a follow-up review).
   const ownerThreads = pr.threads.filter((thread) => !thread.resolved && !thread.byBot && isOwner(thread.author) === true).length;
   if (ownerThreads > 0) reasons.push(`${ownerThreads} unresolved owner thread(s)`);
   if (reasons.length > 0) return { action: "needs-pass", reasons };
 
   // A completed check with no time can't say when CI finished, so it leaves
   // ciDoneAt NaN and the PR is never re-requested on a guess.
-  const doneAt = pr.checks.map((check) => (check.completedAt === null ? NaN : timestamp(check.completedAt)));
+  const doneAt = checks.map((check) => (check.completedAt === null ? NaN : timestamp(check.completedAt)));
   const ciDoneAt = Math.max(...doneAt);
   const reviewed = pr.reviews.some((review) => isCopilot(review.author) && review.commitOid === pr.headRefOid);
   if (pr.reviewRequests.some(isCopilot)) return { action: "wait", reason: "Copilot's review is pending" };
@@ -239,7 +251,7 @@ export type FollowUpGitHub = {
   openPullRequests(): SweepPullRequest[];
   closedPullRequests(author: string): ClosedPullRequest[];
   // live: lib/queue.mts#loadQueue(), so the sweep sees only this run's
-  // scope, approved by the owner (#146).
+  // scope, approved by the owner.
   inScopeIssues(): { number: number; labels: string[] }[];
   labelTimeline(issueNumber: number): TimelineLabelEvent[];
   requestCopilotReview(pullRequestId: string): void;
@@ -253,6 +265,9 @@ export type FollowUpGitHub = {
   pullRequestEvents(number: number): IssueEvent[];
   // Puts back a PR's hand-back label someone else removed. live: gh pr edit.
   addPullRequestLabel(number: number, label: string): void;
+  // A PR's review threads in full, comments included, so the sweep can tell a
+  // thread the host has answered from one it hasn't.
+  reviewThreads(number: number): ReviewThread[];
 };
 
 export const liveFollowUpGitHub: FollowUpGitHub = {
@@ -267,10 +282,91 @@ export const liveFollowUpGitHub: FollowUpGitHub = {
   isOwner: ownerCheck(() => signedInHostLogin(), (login) => pushAccess(login)),
   pullRequestEvents: (number) => issueEvents(number),
   addPullRequestLabel: (number, label) => addPullRequestLabel(number, label),
+  // The head that comes with the threads is ignored: they don't depend on
+  // it, and the pass checks the head itself.
+  reviewThreads: (number) => reviewThreadsOf(number).threads,
 };
 
+// How a review thread stands with the follow-up pass (threadStanding): the
+// one rule the sweep and the pass share to decide whether a thread starts a
+// pass, so the sweep never flags a PR for a thread the pass won't take up.
+export type ThreadStanding = "resolved" | "answered" | "bot" | "owner" | "human" | "unknown";
+
+// How `thread` stands, checked in this order. A resolved thread is
+// "resolved". A thread whose first comment's author is a bot is "bot",
+// unless the last comment by a bot, the owner or `hostLogin` is the host's
+// own reply (by `hostLogin`, opening with FOLLOW_UP_REPLY_MARKER): then it's
+// "answered", open again only because resolving it failed (the pass summary
+// says so) or the owner unresolved it, and either way a person's now, not the
+// role's to answer twice. A thread the repository owner opened is "owner",
+// or "answered" when the last comment by the owner or the host is the host's
+// reply, so the host waits on the owner rather than answering again. Comments
+// by anyone else don't count either way, so a stranger can neither hide an
+// owner thread by quoting the marker nor reopen one by replying after the
+// host. Any other thread, including one with no author at all, is "human",
+// and one whose first author `isOwner` can't answer for is "unknown", so
+// nothing decides from partial information.
+export function threadStanding(
+  thread: Pick<ReviewThread, "resolved" | "comments">,
+  isOwner: IsOwner,
+  hostLogin: string,
+): ThreadStanding {
+  if (thread.resolved) return "resolved";
+  const hostReply = (comment: ReviewThread["comments"][number] | undefined) =>
+    comment?.author === hostLogin && comment.body.startsWith(FOLLOW_UP_REPLY_MARKER);
+  const first = thread.comments[0];
+  if (first?.byBot === true) {
+    const last = thread.comments.findLast(
+      (comment) => comment.byBot || comment.author === hostLogin || isOwner(comment.author) === true,
+    );
+    return hostReply(last) ? "answered" : "bot";
+  }
+  const owner = first === undefined ? false : isOwner(first.author);
+  if (owner === undefined) return "unknown";
+  if (!owner) return "human";
+  const last = thread.comments.findLast((comment) => comment.author === hostLogin || isOwner(comment.author) === true);
+  return hostReply(last) ? "answered" : "owner";
+}
+
+// `pr` as `decide` should see it: without the threads the host has already
+// answered (threadStanding), which the sweep's batch query can't tell apart
+// since it reads only each thread's first comment. Also counts them,
+// since a PR blocked on them waits on the owner and the run report says so.
+// Only a PR with an unresolved bot or owner thread costs a read of its threads
+// in full, whatever `decide` would say of it unfiltered: a PR whose checks are
+// still running (as after its own update from main) has to show as waiting on
+// the owner too, so the count can't depend on the decision. A DIRTY PR is
+// read the same way, for the count only: `decide` flags it whatever its
+// threads are, so a failed read there leaves it flagged with nothing counted.
+// For any other PR a failed read throws, and the sweep leaves it alone this
+// round, still listing it as waiting on its people's threads.
+function withoutAnsweredThreads(
+  pr: SweepPullRequest,
+  github: FollowUpGitHub,
+  host: string,
+): { pr: SweepPullRequest; answered: number } {
+  const mayFlag = pr.threads.some((thread) => !thread.resolved && (thread.byBot || github.isOwner(thread.author) === true));
+  if (!mayFlag) {
+    return { pr, answered: 0 };
+  }
+  let full: ReviewThread[];
+  try {
+    full = github.reviewThreads(pr.number);
+  } catch (error) {
+    if (pr.mergeStateStatus === "DIRTY") return { pr, answered: 0 };
+    throw error;
+  }
+  const open = full.filter((thread) => threadStanding(thread, github.isOwner, host) !== "answered");
+  const threads = open.map((thread) => ({
+    resolved: thread.resolved,
+    byBot: thread.comments[0]?.byBot === true,
+    author: thread.comments[0]?.author ?? null,
+  }));
+  return { pr: { ...pr, threads }, answered: full.length - open.length };
+}
+
 // What the sweep found that needs an agent: the numbers of the PRs it logged
-// as needing a follow-up pass (#147's early exit reads this, so a round with
+// as needing a follow-up pass (the early exit reads this, so a round with
 // one of these still has work), and those same PRs as PassTargets for
 // lib/follow-up-pass.mts#followUpPassPhase to run a pass on. A failed sweep
 // (see followUpPhase) returns both empty, never treated as work found.
@@ -278,14 +374,18 @@ export type SweepResult = { needsPass: number[]; passes: PassTarget[] };
 
 // Reads the host's login, the in-scope issues and the open PRs once, then
 // for each PR either skips it (sweepSkipReason) or applies `decide`, logging
-// what happened. A PR whose sandcastle:needs-human someone other than the
-// repository owner removed gets it back instead, and is left alone (#146).
+// what happened. A PR with an unresolved bot or owner thread has its threads
+// read in full first, and the ones the host has answered are left out and
+// counted for `waiting` (withoutAnsweredThreads). A PR whose
+// sandcastle:needs-human someone other than the repository owner removed gets
+// it back instead, and is left alone.
 // Each PR runs in its own try/catch, so one failure doesn't stop the rest.
 // An updated PR reaches `outcomes` as "updated", and every PR that reached
 // `decide` with unresolved threads opened by someone other than the
 // repository owner or a bot (the same test lib/follow-up-pass.mts#threadsForRole
-// uses) replaces `waiting`'s list, so the run report shows the latest sweep's
-// view. Once that's done, hands
+// uses), or that is left alone because its threads couldn't be read in full
+// while such a thread is open, replaces `waiting`'s list, so the run
+// report shows the latest sweep's view. Once that's done, hands
 // back any in-scope issue, not labelled sandcastle:needs-human and with no
 // open PR, whose latest Sandcastle PR closed without merging
 // (closedWithoutMerging), each in its own try/catch too.
@@ -303,6 +403,12 @@ export function sweepPullRequests(
   const needsPass: number[] = [];
   const passes: PassTarget[] = [];
   const waitingPrs: WaitingPrEntry[] = [];
+  // Not a bot's and not confirmed as the repository owner's: an owner thread
+  // is the follow-up role's to answer (threadsForRole, and now `decide`
+  // below), not left waiting on a person the way this count and the run
+  // report's "waiting on a person" section describe it.
+  const countHumanThreads = (threads: SweepPullRequest["threads"]) =>
+    threads.filter((thread) => !thread.resolved && !thread.byBot && github.isOwner(thread.author) !== true).length;
 
   for (const pr of openPrs) {
     try {
@@ -311,8 +417,8 @@ export function sweepPullRequests(
         log(`  · PR #${pr.number} isn't swept: ${skip}.`);
         continue;
       }
-      // A stranger's removal of the PR's hand-back label isn't a re-queue
-      // (#146): put the label back and leave the PR alone this round.
+      // A stranger's removal of the PR's hand-back label isn't a re-queue:
+      // put the label back and leave the PR alone this round.
       const origin = labelOriginFixes(pr.labels, github.pullRequestEvents(pr.number), github.isOwner, PR_LABEL_RULES);
       if (origin.unknown.length > 0) {
         log(`  · PR #${pr.number} isn't swept: couldn't check whether the repository owner removed ${NEEDS_HUMAN}.`);
@@ -324,17 +430,25 @@ export function sweepPullRequests(
         log(`  ✋ PR #${pr.number}: ${restore.reason}, so it isn't swept.`);
         continue;
       }
-      // Not a bot's and not confirmed as the repository owner's: an owner
-      // thread is the follow-up role's to answer (threadsForRole, and now
-      // `decide` below), not left waiting on a person the way this count and
-      // the run report's "waiting on a person" section describe it.
-      const humanThreads = pr.threads.filter((thread) => !thread.resolved && !thread.byBot && github.isOwner(thread.author) !== true).length;
-      if (humanThreads > 0) waitingPrs.push({ pr: pr.number, threads: humanThreads });
-      const decision = decide(pr, now, github.isOwner);
-      followUp(pr, decision, github, log, outcomes);
+      let thinned: ReturnType<typeof withoutAnsweredThreads>;
+      try {
+        thinned = withoutAnsweredThreads(pr, github, host);
+      } catch (error) {
+        // The PR is left alone this round, but its people's threads still
+        // wait on them, so it stays listed, counted from the sweep's own
+        // threads.
+        const waitingThreads = countHumanThreads(pr.threads);
+        if (waitingThreads > 0) waitingPrs.push({ pr: pr.number, threads: waitingThreads, answered: 0 });
+        throw error;
+      }
+      const { pr: swept, answered } = thinned;
+      const waitingThreads = countHumanThreads(swept.threads);
+      if (waitingThreads > 0 || answered > 0) waitingPrs.push({ pr: pr.number, threads: waitingThreads, answered });
+      const decision = decide(swept, now, github.isOwner);
+      followUp(swept, decision, github, log, outcomes);
       if (decision.action === "needs-pass") {
         needsPass.push(pr.number);
-        passes.push(passTarget(pr, decision.reasons));
+        passes.push(passTarget(swept, decision.reasons));
       }
     } catch (error) {
       log(`  ⚠ Couldn't follow up PR #${pr.number}, so it's swept again next round: ${error}`);
@@ -432,7 +546,7 @@ function followUp(
 // intake. A failure, such as GitHub's API being unavailable, is logged and
 // the sweep runs again next round: it's housekeeping, never a reason to stop
 // building. Returns { needsPass: [], passes: [] } for a failed sweep, so
-// #147's early exit never treats a sweep failure as work found.
+// the early exit never treats a sweep failure as work found.
 export function followUpPhase(
   sweep: () => SweepResult = () => sweepPullRequests(),
   warn: (message: string) => void = console.error,

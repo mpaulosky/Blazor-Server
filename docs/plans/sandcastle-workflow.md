@@ -271,7 +271,8 @@ hook linting only the last commit on a branch with no upstream) and stops at the
 
 1. `yamllint -c .yamllint.yml` on changed `*.yml` / `*.yaml` files (failing with an "install yamllint" message when it's missing; no Docker fallback);
 2. `pnpm exec markdownlint-cli2` on changed `*.md` files;
-3. the Sandcastle TypeScript check (`pnpm run check:sandcastle`: type-check plus the host's unit tests) when `.sandcastle/**`, `package.json` or the pnpm lockfile changed;
+3. the Sandcastle TypeScript check (`pnpm run check:sandcastle`: type-check plus the host's unit tests) when `.sandcastle/check.sh` finds a change under `.sandcastle/**`,
+   `package.json`, the pnpm files, or a file its tests read;
 4. `dotnet build Blazor-Server.slnx -c Release` (warnings as errors);
 5. `dotnet test --project` for each project under `tests/`, in Release.
 
@@ -307,7 +308,7 @@ the error, the branch keeps its commits, and the run summary lists the branch as
 Decided in [Which model and budget each Sandcastle role gets](https://github.com/mpaulosky/Blazor-Server/issues/64); timeouts come from the
 [trigger decision](https://github.com/mpaulosky/Blazor-Server/issues/61), with the values below set by this spec.
 
-Every role's settings live in one `ROLE_AGENTS` map in the host code, so tuning is a one-line change. Opus goes where a wrong answer costs a whole round; Sonnet goes where the gate,
+Every role's settings live in one `ROLE_AGENTS` map in `lib/repo-config.mts`, so tuning is a one-line change. Opus goes where a wrong answer costs a whole round; Sonnet goes where the gate,
 the reviewer or CI checks the output anyway.
 
 | Role | Model | Effort | maxIterations | Timeout (min) |
@@ -378,7 +379,8 @@ both Claude secrets are missing. Sandcastle passes into the sandbox only the key
 chosen key and no value; Sandcastle takes the value from the host's environment. The step before sets the runner's global git `user.name` and `user.email` to the PAT owner's
 login and no-reply address, because Sandcastle copies the host's git identity into the sandbox for the agents' commits.
 
-**Skills:** `lib/skills.mts` mounts the `dotnet-*` skills from `~/.claude/skills`, which a hosted runner doesn't have. The workflow fetches the owner's public
+**Skills:** `lib/skills.mts` mounts the skills `SANDBOX_SKILLS` (in `lib/repo-config.mts`) names, the `dotnet-*` ones, from `~/.claude/skills`, which a hosted runner doesn't have.
+The workflow fetches the owner's public
 [dotfiles](https://github.com/mpaulosky/dotfiles) repository (only `Support For New Projects/.claude/skills`, with no token) at a commit pinned in the workflow, like the actions, and
 links that folder to `~/.claude/skills` before it sets up the credential helper. So the run mounts all six skills, the fetch never sends the PAT, and a push to dotfiles changes
 nothing here until the owner moves the pin. The step fails when the pinned commit lacks one of the six.
@@ -436,7 +438,8 @@ architect design notes, follow-up pass summaries, build-failure markers and hand
 ```text
 .sandcastle/
   main.mts            round loop, early exit, time budget
-  lib/config.mts      ROLE_AGENTS, labels, limits, queue scope
+  lib/config.mts      labels, limits, queue scope (the Template's, shared by every repo)
+  lib/repo-config.mts this repo's own values: ROLE_AGENTS, hooks, SANDBOX_SKILLS, GATE_*
   lib/github.mts      gh helpers, labels, marker comments, dependency links
   lib/branches.mts    branch naming and fetching
   lib/gate.mts        blocker gate

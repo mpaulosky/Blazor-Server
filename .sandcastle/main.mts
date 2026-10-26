@@ -44,25 +44,35 @@
 //                               sandcastle:needs-human).
 //   Phase 1 (Plan):             The planner analyzes the ready issues, builds
 //                               a dependency graph, and outputs a <plan> JSON
-//                               listing unblocked issues.
-//   Phase 1a (Overlap):         The host, with no agent, defers each pick whose
-//                               predicted files share a path with a pick kept
-//                               before it or with an open PR into main, from
-//                               any author or queue (lib/overlap.mts).
-//   Phase 1b (Critique):        A second run checks whether the picks are safe
-//                               to build in parallel and defers the ones that
-//                               aren't behind a native "blocked by" link. The
-//                               host names each remaining pick's branch and
-//                               fetches it if it exists.
+//                               listing unblocked issues and the files each
+//                               one is expected to change.
+//   Phase 1b (Overlap):         With no agent involved, the host holds back
+//                               each pick whose files share a path with a pick
+//                               kept earlier in the planner's order or with
+//                               any open PR into main, and each pick that
+//                               named no files unless it's the first such
+//                               pick and no PR is open and no pick naming
+//                               files is kept (lib/overlap.mts). A hold lasts
+//                               the run only behind an open PR or a pick that
+//                               opened one; one behind a pick the critique
+//                               deferred, or whose build opened no PR, is
+//                               released.
+//   Phase 1c (Critique):        A second run checks whether the remaining
+//                               picks are safe to build in parallel and defers
+//                               the ones that aren't behind a native "blocked
+//                               by" link. The host names each remaining pick's
+//                               branch and fetches it if it exists.
 //   Phase 2 (Execute + Review): For each issue, a sandbox is created via
 //                               createSandbox(), and the issue carries
 //                               sandcastle:building until its build ends,
 //                               however it ends. The architect, when the
 //                               planner picked it, writes a design note the
 //                               host posts on the issue. The tester commits
-//                               failing tests, then the backend developer and,
-//                               when picked, the UI developer make them pass;
-//                               if any of these fails, the issue stops for the
+//                               failing tests, then the backend developer
+//                               makes them pass, then the UI developer (when
+//                               the planner picked it, in a repo that opted
+//                               in) builds the Blazor components and pages;
+//                               if any fails, the issue stops for the
 //                               round. If the branch is then ahead of main (this
 //                               run's commits or earlier ones), the host runs
 //                               scripts/gate.sh in the sandbox (checkpoint 1),
@@ -87,11 +97,11 @@
 //
 // The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
 // issues are picked up after each round. The loop stops early when a round
-// opens no pull request, but not when the overlap check or the critique
-// defers every pick.
+// opens no pull request, but not when the overlap check holds back or the
+// critique defers every pick.
 //
 // The run also stops cleanly, exiting 0, once it can't finish more work
-// (lib/limits.mts, #147): no new round or role run starts after
+// (lib/limits.mts): no new round or role run starts after
 // SANDCASTLE_BUDGET_MINUTES (default 240) have passed since it started, and
 // once a role run hits Claude's usage or rate limit no role starts; a build
 // whose roles all finished still publishes, since that costs no usage.
@@ -100,7 +110,7 @@
 // rebuilds the issue from what GitHub has.
 //
 // Every role's model, effort, iteration cap and timeout comes from ROLE_AGENTS
-// in lib/config.mts. The sandbox gets no GitHub token: the host reads GitHub
+// in lib/repo-config.mts. The sandbox gets no GitHub token: the host reads GitHub
 // with its own gh auth and passes each role what it needs through its prompt.
 //
 // Every phase reads the queue through lib/queue.mts#loadQueue, scoped to the
@@ -109,7 +119,7 @@
 // names. Within it, an issue reaches the phases only when the repository
 // owner added its queue label and nobody else has edited it since; anything
 // else is skipped and logged. An untrusted sandcastle:ready is removed, and
-// a hand-back label someone else removed is put back (#146).
+// a hand-back label someone else removed is put back.
 //
 // Usage:
 //   SANDCASTLE_ISSUE=<n> pnpm run sandcastle         (only issue #n and its PR)
@@ -124,7 +134,6 @@ import {
   budgetMinutesFrom,
   BUILDING_LABEL,
   describeQueueScope,
-  MAX_ITERATIONS,
   QueueScopeError,
   queueScopeFrom,
   type QueueScope,
@@ -138,9 +147,10 @@ import { cacheHostLogin, ensureLabels, openPullRequests, repoName } from "./lib/
 import { protectHostGit } from "./lib/host-safety.mts";
 import { intakePhase } from "./lib/intake.mts";
 import { runLimits } from "./lib/limits.mts";
-import { carriedHold, deferOverlaps, lastingHolds, pullRequestNumber, type OverlapHold } from "./lib/overlap.mts";
-import { pickIssues, planRound, unpickedReady } from "./lib/plan.mts";
+import { critiqueUnpicked, holdOverlappingPicks, lastingHolds } from "./lib/overlap.mts";
+import { planRound, resolveFiles, resolveRoles } from "./lib/plan.mts";
 import { loadQueue, startQueueRound, useQueueScope } from "./lib/queue.mts";
+import { MAX_ITERATIONS } from "./lib/repo-config.mts";
 import {
   handBackReport,
   humanThreadReport,
@@ -154,14 +164,14 @@ import {
   writeRunReport,
   type RunEnding,
 } from "./lib/report.mts";
-import { roundOutcomes, roundSummary } from "./lib/round.mts";
+import { publishedIssues, roundOutcomes, roundSummary } from "./lib/round.mts";
 import { githubTokensIn } from "./lib/sandbox-env.mts";
 import { forgetGatedHead } from "./lib/shell.mts";
 import { umbrellaPhase } from "./lib/umbrella.mts";
 import { findWork } from "./lib/work.mts";
 
 // The queue scope comes first, so a local run that names none exits with
-// the usage message before it touches git, gh or a sandbox (#146).
+// the usage message before it touches git, gh or a sandbox.
 let scope: QueueScope;
 try {
   scope = queueScopeFrom(process.env);
@@ -174,7 +184,7 @@ useQueueScope(scope);
 console.log(`Queue: ${describeQueueScope(scope)}`);
 
 // The time budget is read just as early, so a bad value exits the same way.
-// Its clock starts here, as close to the job's own start as it gets (#147).
+// Its clock starts here, as close to the job's own start as it gets.
 let budgetMinutes: number;
 try {
   budgetMinutes = budgetMinutesFrom(process.env);
@@ -242,14 +252,14 @@ try {
 
   startedUp = true;
 
-  // The picks the overlap check held back for the rest of this run: those
-  // behind a pull request, and those behind a pick that opened one (see
-  // lib/overlap.mts#lastingHolds). Neither has a "blocked by" link for the gate
-  // to hold it back with, so without this the planner would pick it again
-  // every round. A hold behind a pick that opened no PR isn't kept (#425).
-  // Each is kept with its hold, so the critique still sees a lasting hold
-  // as unpicked work to come in every later round (#428).
-  const overlapDeferred = new Map<number, OverlapHold>();
+  // The issues the overlap check held back this run, which the planner doesn't
+  // see again until the next run. A held pick gets no "blocked by" link, so
+  // the gate wouldn't hold it back: without this, a round where every pick is
+  // held would re-plan the same picks, up to MAX_ITERATIONS planner runs. Only
+  // a hold behind an open PR, or behind a pick that opened one, lasts the run
+  // (lib/overlap.mts#lastingHolds): a hold behind a pick the critique deferred
+  // or whose build opened no PR is released once that's known.
+  const heldForFiles = new Set<number>();
 
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // No new round once the budget has passed or the usage limit was hit.
@@ -314,19 +324,15 @@ try {
     // -----------------------------------------------------------------------
     // Phase 0b: Gate
     // -----------------------------------------------------------------------
-    const { ready: unblocked, blocked } = gateIssues();
+    const { ready, blocked } = gateIssues();
 
     for (const { issue, reasons } of blocked) {
       console.log(`  ⏸ #${issue.number} is held back: ${reasons.join("; ")}`);
     }
-    for (const issue of unblocked.filter((candidate) => overlapDeferred.has(candidate.number))) {
-      console.log(`  ⏸ #${issue.number} is held back: the overlap check deferred it earlier in this run`);
-    }
-    const ready = unblocked.filter((issue) => !overlapDeferred.has(issue.number));
 
     if (ready.length === 0) {
       console.log(
-        blocked.length > 0 || overlapDeferred.size > 0
+        blocked.length > 0
           ? "Every open issue is waiting on a blocker, a pull request, another run, intake or a human. Exiting."
           : `No open, owner-approved issues in the queue (${describeQueueScope(scope)}). Exiting.`,
       );
@@ -336,7 +342,14 @@ try {
     // -----------------------------------------------------------------------
     // Phase 1: Plan
     // -----------------------------------------------------------------------
-    const planned = await planRound(ready);
+    const plannable = ready.filter((issue) => !heldForFiles.has(issue.number));
+    if (plannable.length === 0) {
+      console.log(
+        "Every ready issue is held back this run: each changes a file another build or an open pull request changes. Exiting.",
+      );
+      break;
+    }
+    const planned = await planRound(plannable);
 
     if (planned.length === 0) {
       // No unblocked work — either everything is done or everything is blocked.
@@ -344,123 +357,108 @@ try {
       break;
     }
 
+    // planRound keeps only ids from the ready list, so the lookup can't miss.
+    // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
+    // planner's raw roles field, resolved to a safe list by resolveRoles
+    // (lib/plan.mts), which falls back to every optional role when it's
+    // missing or invalid. Its files come from the raw files field, resolved
+    // by resolveFiles, which gives [] ("touches anything") when it's missing
+    // or invalid.
+    const readyById = new Map(ready.map((issue) => [String(issue.number), issue]));
+    const picks = planned.map((issue) => ({
+      ...readyById.get(issue.id)!,
+      roles: resolveRoles(issue.roles),
+      files: resolveFiles(issue.files),
+    }));
+
     // -----------------------------------------------------------------------
-    // Phase 1a: Overlap
+    // Phase 1b: Overlap
     // -----------------------------------------------------------------------
-    // In code, before the critique: two builds of one file conflict once the
-    // first merges (#421). The critique still runs on what's left, for
-    // dependencies and for overlaps of modules rather than paths.
-    const { kept: unshared, holds } = deferOverlaps(planned);
-    // The picks whose builds opened a PR this round. A hold behind any other
-    // pick is released once the round ends, whichever way it ends (#425).
-    let published: ReadonlySet<number> = new Set();
-    // The PR each published pick opened, by the pick's number.
-    let publishedPrs: ReadonlyMap<number, number> = new Map();
-    try {
-      if (unshared.length === 0) {
-        console.log("The overlap check deferred every pick. Moving on to the next round.");
-        continue;
+    // See lib/overlap.mts#holdOverlappingPicks. A failed read of the open PRs
+    // ends the run red, as a failed gate read does.
+    const { kept, overlaps } = holdOverlappingPicks(picks);
+    const heldThisRound = new Set([...heldForFiles, ...overlaps.keys()]);
+
+    if (kept.length === 0) {
+      // With no pick kept, every hold is behind an open PR.
+      for (const number of lastingHolds(overlaps, new Set())) heldForFiles.add(number);
+      console.log("Every pick changes a file another pick or an open pull request changes. Moving on to the next round.");
+      continue;
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 1c: Critique
+    // -----------------------------------------------------------------------
+    // It still runs on the kept picks, for dependencies and for overlaps of
+    // modules rather than paths. The held picks are passed to it as unpicked,
+    // each with a note that it's held, so its dependency check can defer a
+    // kept pick that needs one of them.
+    // critiqueRound only filters the picks, so its SandcastleIssue[] return
+    // type is narrower than what it's given; put each kept pick's roles back
+    // by issue number rather than widen the critique's own types for a field
+    // it never reads.
+    const rolesByNumber = new Map(kept.map((issue) => [issue.number, issue.roles]));
+    const critiqued = await critiqueRound({
+      picks: kept,
+      inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
+      unpicked: critiqueUnpicked(ready, kept, heldThisRound),
+    });
+    const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
+
+    if (issues.length === 0) {
+      // Each deferral added a "blocked by" link, so the next round's gate
+      // holds those issues back and the planner picks from what's left.
+      // No kept pick opens a PR, so only the holds behind an open PR last.
+      for (const number of lastingHolds(overlaps, new Set())) heldForFiles.add(number);
+      console.log("The critique deferred every pick. Moving on to the next round.");
+      continue;
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 2: Execute + Review
+    //
+    // Promise.allSettled means one failing pipeline doesn't cancel the others.
+    // -----------------------------------------------------------------------
+    const base = fetchMain();
+    const work = prepareBranches(issues);
+
+    console.log(
+      `Planning complete. ${work.length} issue(s) to work in parallel:`,
+    );
+    for (const { issue, branch } of work) {
+      const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
+      console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
+    }
+
+    const settled = await Promise.allSettled(
+      work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
+    );
+
+    // Log any agents that threw (network error, sandbox crash, timeout, etc.).
+    // A clean stop is named in the round summary instead.
+    for (const [i, outcome] of settled.entries()) {
+      if (outcome.status === "rejected" && !(outcome.reason instanceof UncountedStopError)) {
+        console.error(
+          `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
+        );
       }
+    }
 
-      // Each pick's optional roles (lib/config.mts#OptionalRole) come from the
-      // planner's raw roles field, resolved to a safe list by resolveRoles
-      // (lib/plan.mts), which falls back to every optional role when it's
-      // missing or invalid. Its files go along, since the critique's prompt
-      // says each pick carries them (#425).
-      const picks = pickIssues(unshared, ready);
+    const summary = roundSummary(work, settled);
+    for (const line of summary.lines) {
+      console.log(line);
+    }
+    for (const entry of roundOutcomes(work, settled)) {
+      outcomeReport.record(entry);
+    }
+    for (const number of lastingHolds(overlaps, publishedIssues(work, settled))) heldForFiles.add(number);
 
-      // -----------------------------------------------------------------------
-      // Phase 1b: Critique
-      // -----------------------------------------------------------------------
-      // critiqueRound only filters the picks, so its SandcastleIssue[] return
-      // type is narrower than what it's given; put each kept pick's roles back
-      // by issue number rather than widen the critique's own types for a field
-      // it never reads.
-      const rolesByNumber = new Map(picks.map((issue) => [issue.number, issue.roles]));
-      // A pick the overlap check held back is still work to come, so it's
-      // passed as unpicked, with a note, for the critique's dependency check:
-      // a kept pick that needs it is deferred behind it (#428). That covers
-      // this round's holds and the lasting ones from earlier rounds, which
-      // `ready` no longer lists but `unblocked` does.
-      const critiqued = await critiqueRound({
-        picks,
-        inFlight: blocked.flatMap(({ issue, pr }) => (pr ? [{ issue, pr }] : [])),
-        unpicked: unpickedReady(unblocked, unshared, [...overlapDeferred.values(), ...holds]),
-      });
-      const issues = critiqued.map((issue) => ({ ...issue, roles: rolesByNumber.get(issue.number)! }));
-
-      if (issues.length === 0) {
-        // Each deferral added a "blocked by" link, so the next round's gate
-        // holds those issues back and the planner picks from what's left.
-        console.log("The critique deferred every pick. Moving on to the next round.");
-        continue;
-      }
-
-      // -----------------------------------------------------------------------
-      // Phase 2: Execute + Review
-      //
-      // Promise.allSettled means one failing pipeline doesn't cancel the others.
-      // -----------------------------------------------------------------------
-      const base = fetchMain();
-      const work = prepareBranches(issues);
-
-      console.log(
-        `Planning complete. ${work.length} issue(s) to work in parallel:`,
-      );
-      for (const { issue, branch } of work) {
-        const roles = issue.roles.length > 0 ? issue.roles.join(", ") : "none";
-        console.log(`  #${issue.number}: ${issue.title} → ${branch} (optional roles: ${roles})`);
-      }
-
-      const settled = await Promise.allSettled(
-        work.map(({ issue, branch }) => buildIssue(issue, branch, base)),
-      );
-
-      // Log any agents that threw (network error, sandbox crash, timeout, etc.).
-      // A clean stop is named in the round summary instead.
-      for (const [i, outcome] of settled.entries()) {
-        if (outcome.status === "rejected" && !(outcome.reason instanceof UncountedStopError)) {
-          console.error(
-            `  ✗ #${work[i]!.issue.number} (${work[i]!.branch}) failed: ${outcome.reason}`,
-          );
-        }
-      }
-
-      const summary = roundSummary(work, settled);
-      for (const line of summary.lines) {
-        console.log(line);
-      }
-      for (const entry of roundOutcomes(work, settled)) {
-        outcomeReport.record(entry);
-      }
-      published = new Set(
-        work.flatMap(({ issue }, i) => {
-          const outcome = settled[i];
-          return outcome?.status === "fulfilled" && outcome.value.prUrl ? [issue.number] : [];
-        }),
-      );
-
-      publishedPrs = new Map(
-        work.flatMap(({ issue }, i) => {
-          const outcome = settled[i];
-          const number =
-            outcome?.status === "fulfilled" && outcome.value.prUrl ? pullRequestNumber(outcome.value.prUrl) : undefined;
-          return number === undefined ? [] : [[issue.number, number] as const];
-        }),
-      );
-
-      if (summary.stop !== undefined) {
-        // Nothing reached a PR, so the next plan would pick the same issues and
-        // repeat the same round: stop and let a human look. Or a build stopped
-        // cleanly on the time budget or usage limit, so nothing more can start.
-        console.log(summary.stop);
-        break;
-      }
-    } finally {
-      const lasting = new Set(lastingHolds(holds, published));
-      for (const hold of holds) {
-        if (lasting.has(hold.id)) overlapDeferred.set(hold.id, carriedHold(hold, publishedPrs));
-      }
+    if (summary.stop !== undefined) {
+      // Nothing reached a PR, so the next plan would pick the same issues and
+      // repeat the same round: stop and let a human look. Or a build stopped
+      // cleanly on the time budget or usage limit, so nothing more can start.
+      console.log(summary.stop);
+      break;
     }
   }
   // A loop that ended on the time budget or the usage limit (no new round,
@@ -477,7 +475,7 @@ try {
   console.log(lines.length > 0 ? lines.join("\n") : "  (no role ran)");
 
   // Only logged and written here. Ending the run red on a hand-back is the
-  // trigger workflow's final step (#82), reading the list written to
+  // trigger workflow's final step, reading the list written to
   // .sandcastle/logs/handbacks.json below; exiting non-zero here would make a
   // local run that hands something back look like a crash.
   const handBacks = handBackReport.items();
@@ -489,7 +487,7 @@ try {
   }
 
   // Threads a follow-up pass kept from the follow-up role because someone
-  // other than the repository owner or a bot opened them (#78).
+  // other than the repository owner or a bot opened them.
   const humanThreads = humanThreadReport.items();
   if (humanThreads.length > 0) {
     console.log("\nReview threads waiting on a person:");
@@ -515,7 +513,7 @@ try {
   console.log(`\nRun report: ${REPORT_DIR}/summary.md`);
 
   // Unlike a hand-back, an intake stop means the host couldn't run a role at
-  // all, so the run ends red once the report is written (#320). A crash still
+  // all, so the run ends red once the report is written. A crash still
   // exits 1 on its uncaught error, whatever this sets.
   for (const { reason, firstError } of intakeStopReport.items()) {
     console.error(`\n✗ Intake stopped: ${reason}. First error: ${firstError}`);

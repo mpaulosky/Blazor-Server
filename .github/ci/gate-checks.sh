@@ -39,13 +39,6 @@ else
   echo -e "${GREEN}✅ No Copilot review sync changes to check.${RESET}"
 fi
 
-# branches.test.mts checks Sandcastle's branch names against the branch
-# standard, code-review-skill.test.mts checks the code-review skill, and
-# dockerfile.test.mts checks the sandbox image's linters against the versions
-# gate.sh pins, so a change to any of them reruns them.
-if changed .sandcastle package.json ':(glob)pnpm-*.yaml' scripts/check-branch-name.sh .claude/skills/code-review scripts/gate.sh; then
-  echo -e "${CYAN}🏰 Sandcastle TypeScript check...${RESET}"
-  run_clean pnpm run check:sandcastle
-else
-  echo -e "${GREEN}✅ No Sandcastle or package changes to check.${RESET}"
-fi
+# Sandcastle's type-check and tests. .sandcastle/check.sh decides, from the
+# paths it lists, whether the change needs them.
+if [[ -x .sandcastle/check.sh ]]; then run_clean .sandcastle/check.sh "$base"; fi

@@ -2,7 +2,8 @@
 
 A planner has picked the issues below to build in parallel this round, each on its own branch from `main`.
 
-The picked issues. Each one's `files` lists the paths the planner expects it to change, which may miss some:
+The picked issues. Each one's `files` lists the paths the planner expects it to change. The host has already held back every pick whose `files` share a path with another pick's
+or with any open pull request's, so no two picks below name the same file:
 
 <picked-json>
 
@@ -18,9 +19,8 @@ The in-flight issues. Each one already has an open pull request waiting for revi
 
 </in-flight-json>
 
-The ready issues the planner didn't pick this round. One with a `note` saying it's held was picked, but the host's overlap check held it back (this round, or an earlier one in the run),
-and the note says what it waits on: a pick or an open pull request that changes the same file, or, when the planner named no files for it, the first kept
-pick or open pull request. It's still open work, so it counts for the dependency check below:
+The ready issues the planner didn't pick this round. One with a `heldNote` was held back by the host, for a reason the note doesn't give.
+It won't be built this round, but it's still an open issue, so count it in the dependency check below like any other unpicked ready issue:
 
 <unpicked-json>
 
@@ -34,7 +34,9 @@ The repository is checked out in your working directory at `main`. Read it to se
 
 Check whether the picked issues are safe to build in parallel. Check only these two things:
 
-1. **Overlap.** A pick would change the same files or modules as another pick, or as an in-flight issue's pull request, so the branches would likely conflict.
+1. **Overlap.** A pick would change the same files or modules as another pick, or as an in-flight issue's pull request, so the branches would likely conflict. The shared file
+   paths in `files` were already held back, so look for what that check can't see: the same module or code reached through different files, or a file the planner likely
+   missed.
 2. **Dependency.** A pick needs an API, a type, a file or a decision that another open issue (a pick, an in-flight issue or an unpicked ready issue) will establish, so building it now
    would mean guessing at that work.
 
@@ -51,7 +53,7 @@ catches a real conflict.
 Give one verdict per picked issue, as a JSON object wrapped in `<critique>` tags:
 
 <critique>
-{"verdicts": [{"id": "42", "verdict": "keep", "reason": "Touches only the Theme feature; no other issue does."}, {"id": "43", "verdict": "defer", "blockedBy": "42", "reason": "Both change Features/Theme/ThemeService.cs."}]}
+{"verdicts": [{"id": "42", "verdict": "keep", "reason": "Only it touches claude-review.yml."}, {"id": "43", "verdict": "defer", "blockedBy": "42", "reason": "Both change pr-automerge.yml."}]}
 </critique>
 
 - `id` is the picked issue's number, as a string.

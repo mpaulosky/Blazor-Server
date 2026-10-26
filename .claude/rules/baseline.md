@@ -1,6 +1,9 @@
 ---
 paths:
   - ".github/**"
+  - ".sandcastle/**"
+  - ".claude/skills/pre-push-review/**"
+  - ".claude/agents/pre-push-reviewer.md"
   - "scripts/**"
   - "docs/PROCESS.md"
   - ".editorconfig"
@@ -22,8 +25,13 @@ owner's repositories. Each file it supplies is one of two kinds:
 
 ## Seed files: this repository's own
 
-- `.github/ci/gate-checks.sh`: checks only this repository needs, run by `scripts/gate.sh`. A new local or Sandcastle
-  check goes here.
+- `.github/ci/gate-checks.sh`: checks only this repository needs, run by `scripts/gate.sh`. A new local check goes here;
+  the Sandcastle check is configured in `.sandcastle/check.sh`, which it calls.
+- `.sandcastle/lib/repo-config.mts` (this repository's Sandcastle values), `.sandcastle/check.sh`,
+  `.sandcastle/CODING_STANDARDS.md`, `.sandcastle/Dockerfile`, `.sandcastle/plan-prompt.md`, `.sandcastle/review-prompt.md`,
+  `.sandcastle/roles/*.md`, `package.json` and `pnpm-workspace.yaml`.
+- `.sandcastle/main.test.mts` and the tests listed in `NOT_OWNED_BASELINE_PATHS` (`lib/repo-config.test.mts`,
+  `lib/role-prompts.test.mts`, `lib/dockerfile.test.mts`, `lib/code-review-skill.test.mts`) are this repository's own too.
 - `.github/ci/prepare.sh`: per-repository CI setup, run by `ci.yml`.
 - `.github/ci/coverage-threshold`, `.github/dependabot.yml`, `.github/ISSUE_TEMPLATE/*`, `LICENSE`, and
   `docs/CONTRIBUTING.md`, `docs/CODE_OF_CONDUCT.md`, `docs/REFERENCES.md`, `docs/SECURITY.md`.
@@ -39,7 +47,12 @@ Every other file the Template supplies is Owned. Under the paths this rule cover
 
 - `.github/workflows/*.yml` except `sandcastle.yml`, `.github/hooks/**`, `.github/scripts/**`, `.github/instructions/*.md` and
   `.github/pull_request_template.md`;
-- `scripts/gate.sh`, `scripts/check-branch-name.sh`, `scripts/check-pr-title.sh` and `scripts/tests/**`;
+- `scripts/gate.sh`, `scripts/check-branch-name.sh`, `scripts/check-git-hooks.sh`, `scripts/check-pr-title.sh`,
+  `scripts/review.sh` and `scripts/tests/**`;
+- `.sandcastle/main.mts`, every `.sandcastle/lib/*.mts` but `repo-config.mts` and this repository's own tests (listed in
+  `NOT_OWNED_BASELINE_PATHS`), `.sandcastle/critique-prompt.md` and `intake-prompt.md`, `.sandcastle/tsconfig.json`,
+  `.sandcastle/.env.example`, `.sandcastle/.gitignore`, `.sandcastle/.markdownlint-cli2.jsonc`, `.claude/skills/pre-push-review/**` and
+  `.claude/agents/pre-push-reviewer.md`;
 - `docs/PROCESS.md`, `.editorconfig`, `.gitignore`, `.markdownlint-cli2.jsonc`, `.yamllint.yml`, `codecov.yml`,
   `GitVersion.yml` and `global.json`.
 

@@ -353,57 +353,61 @@ describe(".sandcastle/.env.example budget", () => {
   });
 });
 
-// The host defers overlapping picks in code before the critique runs, and the
-// critique still runs on what's left, for dependencies and module overlaps
-// (#421).
-describe("main.mts's overlap wiring", () => {
-  it("runs the overlap check after the planner and before the critique", () => {
+// #248: before the critique, the host holds back picks whose planned files
+// share a path with an earlier pick or an open PR into main.
+describe("main.mts's file overlap wiring", () => {
+  it("holds overlapping picks back after planning and before the critique", () => {
     const mainMts = read(".sandcastle/main.mts");
-    const planCall = mainMts.indexOf("planRound(");
-    const overlapCall = mainMts.indexOf("deferOverlaps(");
-    const critiqueCall = mainMts.indexOf("critiqueRound(");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+    const planCall = mainMts.indexOf("planRound(", loop);
+    const holdCall = mainMts.indexOf("holdOverlappingPicks(", loop);
+    const critiqueCall = mainMts.indexOf("critiqueRound(", loop);
 
-    assert.notEqual(overlapCall, -1, "main.mts doesn't call deferOverlaps(");
-    assert.notEqual(critiqueCall, -1, "main.mts doesn't call critiqueRound(");
-    assert.ok(planCall < overlapCall && overlapCall < critiqueCall, "main.mts doesn't check overlaps between the plan and the critique");
-  });
-});
-
-// #425: a hold behind a pick that is deferred or opens no PR is released, the
-// critique gets each pick's files, and (#428) every overlap-held pick is passed
-// to it as unpicked, with a note, rather than left out.
-describe("main.mts's overlap follow-ups", () => {
-  const mainMts = read(".sandcastle/main.mts");
-
-  it("releases the holds behind picks that opened no pull request, after the build", () => {
-    const holdsCall = mainMts.indexOf("lastingHolds(");
-
-    assert.notEqual(holdsCall, -1, "main.mts doesn't call lastingHolds(");
-    assert.ok(mainMts.indexOf("critiqueRound(") < holdsCall, "main.mts decides the holds before the critique");
-    assert.ok(mainMts.indexOf("buildIssue(") < holdsCall, "main.mts decides the holds before the build");
+    assert.notEqual(holdCall, -1, "main.mts doesn't call holdOverlappingPicks(");
+    assert.ok(planCall < holdCall && holdCall < critiqueCall, "main.mts doesn't hold picks back between planning and the critique");
   });
 
-  it("builds the critique's picks with their files", () => {
-    assert.match(mainMts, /pickIssues\(/);
+  it("gives each pick the files the planner named", () => {
+    assert.match(read(".sandcastle/main.mts"), /files: resolveFiles\(/);
   });
 
-  it("computes the critique's unpicked list with unpickedReady rather than filtering ready", () => {
-    assert.match(mainMts, /unpickedReady\(/);
-    assert.doesNotMatch(mainMts, /unpicked: ready\.filter/);
+  it("gives the critique the kept picks, and the rest of the ready issues, held ones included, through critiqueUnpicked", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const critiqueCall = mainMts.indexOf("critiqueRound(", mainMts.indexOf("holdOverlappingPicks("));
+    const call = mainMts.slice(critiqueCall, mainMts.indexOf("});", critiqueCall));
+
+    assert.match(call, /picks: kept/);
+    assert.doesNotMatch(call, /picks,/);
+    assert.match(call, /unpicked: critiqueUnpicked\(ready, kept, heldThisRound\)/);
+    assert.doesNotMatch(call, /unpicked: ready\.filter/);
   });
 
-  // #428: the critique's dependency check must see the held issues.
-  it("passes the round's overlap holds to unpickedReady, so the critique sees the held issues", () => {
-    assert.match(mainMts, /unpickedReady\([^;]*\.\.\.holds\b/);
+  // #251: a hold is decided before the critique and the build, so it's released unless the pick it waits on opened a PR.
+  it("keeps a hold for the run only after it knows which picks opened a PR", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+    const lastCall = mainMts.lastIndexOf("lastingHolds(");
+
+    assert.notEqual(lastCall, -1, "main.mts doesn't call lastingHolds(");
+    assert.ok(lastCall > mainMts.indexOf("buildIssue(", loop), "main.mts decides the holds before the builds ran");
+    assert.match(mainMts, /publishedIssues\(/);
+    assert.doesNotMatch(mainMts, /for \(const issue of held\) \{\s*heldForFiles\.add/);
   });
 
-  // #428: a lasting hold behind a published pick is stored pointing at its pull request.
-  it("stores a lasting hold through carriedHold, so a later round's note names the pull request", () => {
-    assert.match(mainMts, /overlapDeferred\.set\(hold\.id, carriedHold\(hold, publishedPrs\)\)/);
+  it("keeps the holds behind an open PR when the critique defers every kept pick", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const deferred = mainMts.indexOf("The critique deferred every pick");
+    const before = mainMts.slice(mainMts.indexOf("critiqueRound(", mainMts.indexOf("holdOverlappingPicks(")), deferred);
+
+    assert.match(before, /lastingHolds\(/);
   });
 
-  // #428: a hold that lasts the run drops out of `ready` in later rounds, but not out of `unblocked`.
-  it("passes the lasting holds from earlier rounds, and every unblocked issue, to unpickedReady", () => {
-    assert.match(mainMts, /unpickedReady\(unblocked,[^;]*overlapDeferred\.values\(\)/);
+  it("doesn't plan again the issues it held back this run", () => {
+    const mainMts = read(".sandcastle/main.mts");
+    const loop = mainMts.indexOf("for (let iteration = 1;");
+
+    assert.match(mainMts, /new Set<number>\(\)/);
+    assert.match(mainMts, /heldForFiles/);
+    assert.doesNotMatch(mainMts.slice(loop), /planRound\(ready\)/);
   });
 });

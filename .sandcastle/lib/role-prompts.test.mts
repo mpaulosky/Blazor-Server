@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { SANDBOX_SKILLS } from "./skills.mts";
+import { SANDBOX_SKILLS } from "./repo-config.mts";
 
 const sandcastleFile = (path: string) => new URL(`../${path}`, import.meta.url);
 const read = (path: string) => readFileSync(sandcastleFile(path), "utf8");
@@ -68,6 +68,13 @@ describe("developer roles across stacks", () => {
 // Issue #72: the optional roles the planner picks, and the design note the
 // architect passes to the roles after it.
 describe("optional role prompts", () => {
+  it("asks the planner for a files list per pick", () => {
+    const prompt = read("plan-prompt.md");
+
+    assert.match(prompt, /`files`/);
+    assert.match(prompt, /"files": \[/);
+  });
+
   it("asks the planner for a roles field naming architect, ui and scribe", () => {
     const prompt = read("plan-prompt.md");
 

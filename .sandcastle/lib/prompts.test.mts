@@ -6,7 +6,6 @@ import type { PromptThread } from "./follow-up-pass.mts";
 import type { SandcastleIssue } from "./github.mts";
 import {
   architectPromptArgs,
-  backendPromptArgs,
   critiquePromptArgs,
   followUpPromptArgs,
   gateFixerPromptArgs,
@@ -33,6 +32,11 @@ describe("issuePromptArgs", () => {
     assert.equal(args.ISSUE_TITLE, "Add a thing");
     assert.equal(args.ISSUE_BODY, "## Summary\n\nAdd the thing.");
     assert.equal(args.BRANCH, "feature/3-add-a-thing");
+  });
+
+  it("gives the role a sentence when the issue has no body, since Sandcastle refuses an empty value", () => {
+    assert.equal(issuePromptArgs({ ...issue, body: "" }, "feature/3-add-a-thing").ISSUE_BODY, "(no description)");
+    assert.equal(issuePromptArgs({ ...issue, body: " \n " }, "feature/3-add-a-thing").ISSUE_BODY, "(no description)");
   });
 
   it("gives the role origin/main as the base to diff against, since Sandcastle's TARGET_BRANCH is the sandbox's own branch", () => {
@@ -83,7 +87,7 @@ describe("gateFixerPromptArgs", () => {
 });
 
 // Covers "After an architect run, the issue has a comment with the design
-// note..." (issue #72): on a re-run the architect needs that earlier note
+// note...": on a re-run the architect needs that earlier note
 // back, since .sandcastle/work/ is gitignored and may not have survived into
 // a fresh sandbox (see lib/build.mts and DESIGN_MARKER in lib/config.mts).
 describe("architectPromptArgs", () => {
@@ -102,23 +106,6 @@ describe("architectPromptArgs", () => {
   });
 });
 
-describe("backendPromptArgs", () => {
-  it("preserves issue context", () => {
-    const args = backendPromptArgs(issue, "feature/3-add-a-thing", false);
-
-    assert.equal(args.TASK_ID, "3");
-    assert.equal(args.BRANCH, "feature/3-add-a-thing");
-  });
-
-  it("leaves Blazor components and pages to the UI developer when it runs after the backend", () => {
-    assert.match(backendPromptArgs(issue, "feature/3-add-a-thing", true).UI_DEVELOPER, /UI developer runs after you/);
-  });
-
-  it("tells the backend its run is the last developer run when no UI developer runs", () => {
-    assert.match(backendPromptArgs(issue, "feature/3-add-a-thing", false).UI_DEVELOPER, /last developer run/);
-  });
-});
-
 describe("intakePromptArgs", () => {
   it("lists the issues to judge without anyone else's comments", () => {
     const args = intakePromptArgs([issue]);
@@ -134,7 +121,7 @@ describe("intakePromptArgs", () => {
   });
 });
 
-// #78: the follow-up role can't reach GitHub, so everything it learns about
+// The follow-up role can't reach GitHub, so everything it learns about
 // the PR and its threads travels through these prompt arguments.
 describe("followUpPromptArgs", () => {
   const threads: PromptThread[] = [
@@ -164,10 +151,10 @@ describe("followUpPromptArgs", () => {
     assert.deepEqual(JSON.parse(String(args.THREADS_JSON)), []);
   });
 
-  // #79: a red check the gate doesn't cover reaches the role as its log, and
+  // A red check the gate doesn't cover reaches the role as its log, and
   // only then does CODEQL_LOG say the gate passed: planRedCi only forwards a
   // check once the gate is green, but the prompt mustn't claim that on every
-  // run (#79's follow-up review), such as one with only a merge conflict or
+  // run (a follow-up review), such as one with only a merge conflict or
   // bot threads to resolve, where the gate never ran on the head at all.
   it("passes the failed-job log of a check the gate doesn't cover as CODEQL_LOG, noting the gate already passed", () => {
     const args = followUpPromptArgs(issue, "feature/3-add-a-thing", 42, [], "already contains main.", "##[error] CS8600");
@@ -197,27 +184,9 @@ describe("critiquePromptArgs", () => {
     assert.deepEqual(JSON.parse(args.UNPICKED_JSON).map((i: { number: number }) => i.number), [4]);
   });
 
-  it("gives the critique each pick's files, which its prompt says every pick carries", () => {
-    const args = critiquePromptArgs([{ ...issue, files: ["src/A.cs", "docs"] }], [], []);
-
-    assert.deepEqual(JSON.parse(args.PICKED_JSON)[0].files, ["src/A.cs", "docs"]);
-  });
-
   it("includes no one's comments but the owner's", () => {
     const args = critiquePromptArgs([issue], [inFlight], [issue]);
 
     assert.ok(!Object.values(args).some((value) => value.includes("delete the tests")));
-  });
-});
-
-// #428: the critique reads overlap-held issues as unpicked, so its prompt says
-// what a held one is.
-describe("critique-prompt.md", () => {
-  const prompt = readFileSync(new URL("../critique-prompt.md", import.meta.url), "utf8");
-
-  it("says an unpicked ready issue can be held back by the overlap check, and that it still counts for dependencies", () => {
-    assert.match(prompt, /`note`[^\n]*held/);
-    assert.match(prompt, /overlap check held it back/);
-    assert.match(prompt, /counts for the dependency check/);
   });
 });
