@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.182">v0.0.182</a></td>
+                <td>2026-10-26</td>
+                <td>chore: Migrate Sandcastle to the repo-ci-baseline Template</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-441-chore-migrate-sandcastle-to-the-repo-ci-baseline-template.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.181">v0.0.181</a></td>
                 <td>2026-10-26</td>
                 <td>ci(sandcastle): Start a follow-up pass when Claude Review completes</td>
@@ -282,12 +288,6 @@
                 <td>chore(deps): Have Dependabot ignore claude-code-action</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-414-chore-deps-have-dependabot-ignore-claude-code-action.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.172">v0.0.172</a></td>
-                <td>2026-10-18</td>
-                <td>fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-10-26">26 Oct 2026</time><span class="post-tag">v0.0.182</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-441-chore-migrate-sandcastle-to-the-repo-ci-baseline-template.md">chore: Migrate Sandcastle to the repo-ci-baseline Template</a></h3>
+              <p class="post-excerpt">Blazor-Server&#x27;s Sandcastle was the pipeline the Template was ported from, and it has fallen behind: the Template now carries the review before the push, the shared host-safety and gate modules, and…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/441">PR #441</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-10-26">26 Oct 2026</time><span class="post-tag">v0.0.181</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-414-chore-deps-have-dependabot-ignore-claude-code-action.md">chore(deps): Have Dependabot ignore claude-code-action</a></h3>
               <p class="post-excerpt">The repo-ci-baseline Template pins anthropics/claude-code-action to the version that claude-review.yml&#x27;s sandbox notes were checked against: the Read restrictions on symlinks, .. and .git, and…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/414">PR #414</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-18">18 Oct 2026</time><span class="post-tag">v0.0.172</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-18-pr-412-fix-sandcastle-use-claude-sonnet-5-5-not-sonnet-5.md">fix(sandcastle): Use Claude Sonnet 5.5, not Sonnet 5</a></h3>
-              <p class="post-excerpt">Sandcastle&#x27;s Sonnet roles named claude-sonnet-5, the previous Sonnet, instead of claude-sonnet-5-5. Its Opus roles and Claude Review already use claude-opus-5-5.</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/412">PR #412</a></p>
             </article>
           </li>
         </ul>
