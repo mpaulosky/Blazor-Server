@@ -28,11 +28,16 @@ owner's repositories. Each file it supplies is one of two kinds:
 - `.github/ci/coverage-threshold`, `.github/dependabot.yml`, `.github/ISSUE_TEMPLATE/*`, `LICENSE`, and
   `docs/CONTRIBUTING.md`, `docs/CODE_OF_CONDUCT.md`, `docs/REFERENCES.md`, `docs/SECURITY.md`.
 
+## Not from the Template: this repository's own
+
+- `.github/workflows/sandcastle.yml` comes with Sandcastle, not the Template, so no Apply touches it. Change it here, and
+  make the same change in the other copies (dotfiles' own, and auth0-management-app's) when it applies to them too.
+
 ## Owned files: changed in the Template
 
 Every other file the Template supplies is Owned. Under the paths this rule covers, that is:
 
-- `.github/workflows/*.yml`, `.github/hooks/**`, `.github/scripts/**`, `.github/instructions/*.md` and
+- `.github/workflows/*.yml` except `sandcastle.yml`, `.github/hooks/**`, `.github/scripts/**`, `.github/instructions/*.md` and
   `.github/pull_request_template.md`;
 - `scripts/gate.sh`, `scripts/check-branch-name.sh`, `scripts/check-pr-title.sh` and `scripts/tests/**`;
 - `docs/PROCESS.md`, `.editorconfig`, `.gitignore`, `.markdownlint-cli2.jsonc`, `.yamllint.yml`, `codecov.yml`,

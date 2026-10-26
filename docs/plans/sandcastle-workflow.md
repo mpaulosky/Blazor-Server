@@ -96,8 +96,8 @@ Decided in [How Sandcastle follows up on an open PR until it can merge](https://
 
 **Scope.** Open, non-draft, same-repo PRs into `main` whose head is `feature/{n}-…`, `fix/{n}-…` or `hotfix/{n}-…`, where `#n` is an open issue in scope. PRs labelled `sandcastle:needs-human` are
 skipped. A PR is Sandcastle's only when the repository owner opened it (the host publishes with the owner's PAT) and its body carries the `<!-- sandcastle:pr -->` marker the host
-writes when it publishes, so a collaborator's PR on a matching branch is never swept. The Copilot-review and CI-completion triggers only start a run; this check decides which PRs it
-touches.
+writes when it publishes, so a collaborator's PR on a matching branch is never swept.
+The Copilot-review, CI-completion and Claude-Review-completion triggers only start a run; this check decides which PRs it touches.
 
 **Settled.** A PR gets a pass only when every check run on its head has completed and Copilot has reviewed the head (a Copilot review with `commit.oid == headRefOid`, and Copilot not in
 `reviewRequests`). If CI has been settled for about an hour with no Copilot review and no pending request, the host re-requests one with `requestReviewsByLogin` (once per head).
@@ -387,8 +387,10 @@ Triggers:
 
 - `issues: labeled` where the label is exactly `Sandcastle`;
 - `issues` / `pull_request: unlabeled` where the label is exactly `sandcastle:needs-info` or `sandcastle:needs-human`;
-- `pull_request_review` submitted by Copilot, and `workflow_run` completed for `Build and Test Suite` (the `name:` of `ci.yml`,
-  since `workflow_run` matches workflow names, not file names), only for same-repo `feature/*` / `fix/*` / `hotfix/*` heads, so a fork never runs with secrets;
+- `pull_request_review` submitted by Copilot, and `workflow_run` completed for `Build and Test Suite` or `Claude Review` (the `name:` of `ci.yml` and of
+  `claude-review.yml`, since `workflow_run` matches workflow names, not file names), only for same-repo `feature/*` / `fix/*` / `hotfix/*` heads, so a fork never runs with
+  secrets. Claude Review is followed by its completion because it posts with `GITHUB_TOKEN`, whose review starts no `pull_request_review` run, so without it a Claude review
+  that lands after CI would wait for the next scheduled run;
 - `workflow_dispatch`, and `schedule` every 2 hours as a backstop for blockers cleared by merges and PRs that fall behind `main` (`push: main` deliberately isn't a trigger).
 
 Event triggers can't filter by label name, so every `labeled` / `unlabeled` event starts the workflow. The job's `if:` checks `github.event.label.name` against the
