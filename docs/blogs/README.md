@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-10-26 | [docs(claude): Match the review:claude exception to PROCESS.md](2026-10-26-pr-447-docs-claude-match-the-review-claude-exception-to-process-md.md) | release,automation |
 | 2026-10-26 | [fix(sandcastle): Pin the structured-output roles and scope the review:claude rule](2026-10-26-pr-445-fix-sandcastle-pin-the-structured-output-roles-and-scope-the-review-claude-rule.md) | release,automation |
 | 2026-10-26 | [chore: Re-apply the repo-ci-baseline Template](2026-10-26-pr-443-chore-re-apply-the-repo-ci-baseline-template.md) | release,automation |
 | 2026-10-26 | [chore: Migrate Sandcastle to the repo-ci-baseline Template](2026-10-26-pr-441-chore-migrate-sandcastle-to-the-repo-ci-baseline-template.md) | release,automation |
