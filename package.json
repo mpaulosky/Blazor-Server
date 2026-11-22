@@ -9,7 +9,7 @@
     "@ai-hero/sandcastle": "^0.14.0",
     "@standard-schema/spec": "^1.1.0",
     "@types/node": "^26.6.6",
-    "markdownlint-cli2": "^0.24.0",
+    "markdownlint-cli2": "^0.24.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
