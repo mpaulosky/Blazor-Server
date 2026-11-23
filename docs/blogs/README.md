@@ -4,6 +4,7 @@ This directory contains concise release-review posts for merged PR releases.
 
 | Date | Title | Tags |
 | ---- | ----- | ---- |
+| 2026-11-23 | [chore(deps): Remove the central package pins no project references](2026-11-23-pr-465-chore-deps-remove-the-central-package-pins-no-project-references.md) | release,automation |
 | 2026-11-18 | [chore(deps): Bump bunit and the OpenTelemetry instrumentation packages](2026-11-18-pr-459-chore-deps-bump-bunit-and-the-opentelemetry-instrumentation-packages.md) | release,automation |
 | 2026-10-26 | [docs(claude): Match the review:claude exception to PROCESS.md](2026-10-26-pr-447-docs-claude-match-the-review-claude-exception-to-process-md.md) | release,automation |
 | 2026-10-26 | [fix(sandcastle): Pin the structured-output roles and scope the review:claude rule](2026-10-26-pr-445-fix-sandcastle-pin-the-structured-output-roles-and-scope-the-review-claude-rule.md) | release,automation |

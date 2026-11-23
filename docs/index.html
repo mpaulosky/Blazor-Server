@@ -229,6 +229,12 @@
             </thead>
             <tbody>
               <tr>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.187">v0.0.187</a></td>
+                <td>2026-11-23</td>
+                <td>chore(deps): Remove the central package pins no project references</td>
+                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-11-23-pr-465-chore-deps-remove-the-central-package-pins-no-project-references.md">Post</a></td>
+              </tr>
+              <tr>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.186">v0.0.186</a></td>
                 <td>2026-11-18</td>
                 <td>chore(deps): Bump bunit and the OpenTelemetry instrumentation packages</td>
@@ -282,12 +288,6 @@
                 <td>fix(sandcastle): Let the critique see overlap-held issues, and don&#x27;t fail the run on a comments read</td>
                 <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-429-fix-sandcastle-let-the-critique-see-overlap-held-issues-and-don-t-fail-the-run-on-a-comments-read.md">Post</a></td>
               </tr>
-              <tr>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.177">v0.0.177</a></td>
-                <td>2026-10-19</td>
-                <td>fix(sandcastle): Fix the same-file overlap check&#x27;s review findings</td>
-                <td><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-426-fix-sandcastle-fix-the-same-file-overlap-check-s-review-findings.md">Post</a></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -298,6 +298,14 @@
         <h2>Blog posts</h2>
         <!-- BLOGS_HTML_START -->
         <ul class="post-grid">
+          <li class="post-card">
+            <article>
+              <p class="post-meta"><time datetime="2026-11-23">23 Nov 2026</time><span class="post-tag">v0.0.187</span></p>
+              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-11-23-pr-465-chore-deps-remove-the-central-package-pins-no-project-references.md">chore(deps): Remove the central package pins no project references</a></h3>
+              <p class="post-excerpt">CentralPackageTransitivePinningEnabled is on, so a PackageVersion no project references still pins that package wherever it comes in through another one. Dependabot doesn&#x27;t raise such a pin when it…</p>
+              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/465">PR #465</a></p>
+            </article>
+          </li>
           <li class="post-card">
             <article>
               <p class="post-meta"><time datetime="2026-11-18">18 Nov 2026</time><span class="post-tag">v0.0.186</span></p>
@@ -368,14 +376,6 @@
               <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-429-fix-sandcastle-let-the-critique-see-overlap-held-issues-and-don-t-fail-the-run-on-a-comments-read.md">fix(sandcastle): Let the critique see overlap-held issues, and don&#x27;t fail the run on a comments read</a></h3>
               <p class="post-excerpt">Sandcastle&#x27;s overlap check holds back a pick that changes the same file as another pick or an open pull request. Two problems came out of the review of that check (#426). First, the held issues no…</p>
               <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/429">PR #429</a></p>
-            </article>
-          </li>
-          <li class="post-card">
-            <article>
-              <p class="post-meta"><time datetime="2026-10-19">19 Oct 2026</time><span class="post-tag">v0.0.177</span></p>
-              <h3 class="post-title"><a href="https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-426-fix-sandcastle-fix-the-same-file-overlap-check-s-review-findings.md">fix(sandcastle): Fix the same-file overlap check&#x27;s review findings</a></h3>
-              <p class="post-excerpt">The same-file overlap check from #421 stops Sandcastle from building, in the same run, two issues that change the same file. It merged with six review findings still open. Because of them it could…</p>
-              <p class="post-source"><a href="https://github.com/mpaulosky/Blazor-Server/pull/426">PR #426</a></p>
             </article>
           </li>
         </ul>

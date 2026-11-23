@@ -56,6 +56,7 @@ Blue, the default, renders no attribute.
 
 | Version | Date | Title | Blog post |
 | ------- | ---- | ----- | --------- |
+| [v0.0.187](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.187) | 2026-11-23 | chore(deps): Remove the central package pins no project references | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-11-23-pr-465-chore-deps-remove-the-central-package-pins-no-project-references.md) |
 | [v0.0.186](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.186) | 2026-11-18 | chore(deps): Bump bunit and the OpenTelemetry instrumentation packages | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-11-18-pr-459-chore-deps-bump-bunit-and-the-opentelemetry-instrumentation-packages.md) |
 | [v0.0.185](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.185) | 2026-10-26 | docs(claude): Match the review:claude exception to PROCESS.md | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-447-docs-claude-match-the-review-claude-exception-to-process-md.md) |
 | [v0.0.184](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.184) | 2026-10-26 | fix(sandcastle): Pin the structured-output roles and scope the review:claude rule | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-26-pr-445-fix-sandcastle-pin-the-structured-output-roles-and-scope-the-review-claude-rule.md) |
@@ -65,7 +66,6 @@ Blue, the default, renders no attribute.
 | [v0.0.180](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.180) | 2026-10-20 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-20-pr-434-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.179](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.179) | 2026-10-20 | chore: Re-apply the repo-ci-baseline Template | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-20-pr-432-chore-re-apply-the-repo-ci-baseline-template.md) |
 | [v0.0.178](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.178) | 2026-10-19 | fix(sandcastle): Let the critique see overlap-held issues, and don't fail the run on a comments read | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-429-fix-sandcastle-let-the-critique-see-overlap-held-issues-and-don-t-fail-the-run-on-a-comments-read.md) |
-| [v0.0.177](https://github.com/mpaulosky/Blazor-Server/releases/tag/v0.0.177) | 2026-10-19 | fix(sandcastle): Fix the same-file overlap check's review findings | [Post](https://github.com/mpaulosky/Blazor-Server/blob/main/docs/blogs/2026-10-19-pr-426-fix-sandcastle-fix-the-same-file-overlap-check-s-review-findings.md) |
 
 <!-- RELEASES_END -->
 
